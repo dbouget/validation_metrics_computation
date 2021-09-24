@@ -1,0 +1,22 @@
+# use glob syntax.
+syntax: glob
+
+*.elc
+*.pyc
+*~
+.idea/
+*.xml
+os
+numpy
+*.h5
+*.csv
+*.mhd
+*.raw
+*lymphnodes*
+/venv
+*.ini
+*.sqlite3
+*.idea
+*.vscode
+/home
+/Atlases
