@@ -54,6 +54,7 @@ class InstanceSegmentationValidation:
         self.detection_candidates = []
         self.matching_results = []
         self.instance_detection_results = [0.0, 0.0, 1.0, 0.0]
+        self.tiny_objects_removal_threshold = 50  # Number of voxels
 
     def set_trace_parameters(self, output_folder, fold_number, patient, threshold):
         """
@@ -84,6 +85,12 @@ class InstanceSegmentationValidation:
         return self.matching_results
 
     def __select_candidates(self):
+        """
+        Perform a connected components analysis to identify the stand-alone objects in both the ground truth and
+        binarized prediction volumes. Objects with a number of voxels below the limit set in self.tiny_objects_removal_threshold
+        are discarded, in both instances. Safe way to handle potential noise in the ground truth, especially if a
+        third-party software (e.g. 3DSlicer) was used.
+        """
         from scipy.ndimage import measurements
         from skimage.measure import regionprops
         self.gt_labels = measurements.label(self.gt_image)[0]
@@ -93,7 +100,7 @@ class InstanceSegmentationValidation:
         # Cleaning the too small objects that are noise in the detection
         refined_image = deepcopy(self.detection_labels)
         for c in range(1, np.max(self.detection_labels) + 1):
-            if np.count_nonzero(self.detection_labels == c) < 50:
+            if np.count_nonzero(self.detection_labels == c) < self.tiny_objects_removal_threshold:
                 refined_image[refined_image == c] = 0
         refined_image[refined_image != 0] = 1
         self.detection_labels = measurements.label(refined_image)[0]
@@ -102,7 +109,7 @@ class InstanceSegmentationValidation:
         # Cleaning the too small objects that are noise in the ground truth
         refined_image = deepcopy(self.gt_labels)
         for c in range(1, np.max(self.gt_labels)+1):
-            if np.count_nonzero(self.gt_labels == c) < 50:
+            if np.count_nonzero(self.gt_labels == c) < self.tiny_objects_removal_threshold:
                 refined_image[refined_image == c] = 0
         refined_image[refined_image != 0] = 1
         self.gt_labels = measurements.label(refined_image)[0]
@@ -125,6 +132,12 @@ class InstanceSegmentationValidation:
                      dump_detection_filename)
 
     def __pair_candidates(self, study_state=False):
+        """
+        Identify matching objects between the ground truth and detection candidates generated in self.__select_candidates.
+        @TODO. Optimally, and to avoid any bias which may or may not apply, if two detection candidates overlap with the
+        same ground truth candidate, only the one with the highest Dice should be kept as the correct pair and the second
+        detection candidate should be considered as a false positive.
+        """
         for g, go in enumerate(self.gt_candidates):
             gt_object = go.slice
             gt_label_value = g + 1

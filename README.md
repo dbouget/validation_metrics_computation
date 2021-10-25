@@ -51,8 +51,14 @@ An example of its content is given below:
   > index0_AMS25_T1_sample index1_STO50_T1_sample\n  
 
 # 2. Installation
-After installing all Python dependencies as listed in the requirements.txt file,
-do the following in a terminal.
+Create a virtual environment using at least Python 3.7.0, and install all dependencies from
+the requirements.txt file.
+  > cd /path/to/validation_metrics_computation  
+  > virtualenv -p python3 venv  
+  > source venv/bin/activate  
+  > TMPDIR=$PWD/venv pip install --cache-dir=$PWD/venv -r requirements.txt (--no-deps)
+
+Then the final step is to do the following in a terminal.
   > cd /path/to/validation_metrics_computation  
   > cp blank_main_config.ini main_config.ini 
 

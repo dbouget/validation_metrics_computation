@@ -38,12 +38,14 @@ class SharedResources:
     def __parse_default_parameters(self):
         """
         Parse the user-selected configuration parameters linked to the overall behaviour.
-        :param: data_root: main folder entry-point containing the raw data (assuming a specific folder structure).
-        :param: task: identifier for the task to perform, for now validation or study
+        :param: data_root: (str) main folder entry-point containing the raw data (assuming a specific folder structure).
+        :param: task: (str) identifier for the task to perform, for now validation or study
+        :param: number_processes: (int) number of parallel processes to use to perform the different task
         :return:
         """
         self.data_root = ""
         self.task = None
+        self.number_processes = 8
 
         if self.config.has_option('Default', 'data_root'):
             if self.config['Default']['data_root'].split('#')[0].strip() != '':
@@ -52,6 +54,10 @@ class SharedResources:
         if self.config.has_option('Default', 'task'):
             if self.config['Default']['task'].split('#')[0].strip() != '':
                 self.task = self.config['Default']['task'].split('#')[0].strip()
+
+        if self.config.has_option('Default', 'number_processes'):
+            if self.config['Default']['number_processes'].split('#')[0].strip() != '':
+                self.number_processes = int(self.config['Default']['number_processes'].split('#')[0].strip())
 
     def __parse_studies_parameters(self):
         """
@@ -118,6 +124,7 @@ class SharedResources:
         self.validation_split_way = 'two-way'
         self.validation_metric_names = []
         self.validation_detection_overlap_thresholds = []
+        self.validation_gt_files_suffix = ''
         self.validation_prediction_files_suffix = ''
 
         if self.config.has_option('Validation', 'input_folder'):
@@ -149,3 +156,7 @@ class SharedResources:
         if self.config.has_option('Validation', 'prediction_files_suffix'):
             if self.config['Validation']['prediction_files_suffix'].split('#')[0].strip() != '':
                 self.validation_prediction_files_suffix = self.config['Validation']['prediction_files_suffix'].split('#')[0].strip()
+
+        if self.config.has_option('Validation', 'gt_files_suffix'):
+            if self.config['Validation']['gt_files_suffix'].split('#')[0].strip() != '':
+                self.validation_gt_files_suffix = self.config['Validation']['gt_files_suffix'].split('#')[0].strip()

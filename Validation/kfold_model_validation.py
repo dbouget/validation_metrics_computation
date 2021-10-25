@@ -5,7 +5,7 @@ import itertools
 import traceback
 
 import numpy as np
-import h5py, csv
+import csv
 import time
 import nibabel as nib
 from nibabel import four_to_three
@@ -52,7 +52,7 @@ def separate_dice_computation(args):
         if np.count_nonzero(detection) > 0:
             obj_val.run()
     except Exception as e:
-        pass
+        print(traceback.format_exc())
 
     instance_results = obj_val.instance_detection_results
     results.append([fold_number, patient_id, t, dice] + instance_results + [len(obj_val.gt_candidates),
@@ -82,6 +82,7 @@ class ModelValidation:
         self.metric_names = ['Dice', 'Inst DICE', 'Inst Recall', 'Inst Precision', 'Largest foci Dice']
         self.metric_names.extend(SharedResources.getInstance().validation_metric_names)
         self.detection_overlap_thresholds = SharedResources.getInstance().validation_detection_overlap_thresholds
+        self.gt_files_suffix = SharedResources.getInstance().validation_gt_files_suffix
         self.prediction_files_suffix = SharedResources.getInstance().validation_prediction_files_suffix
 
     def run(self):
@@ -115,7 +116,7 @@ class ModelValidation:
 
         results_per_folds = []
         for fold in range(0, self.fold_number):
-            print('Processing fold {}/{}.\n'.format(fold, self.fold_number - 1))
+            print('\nProcessing fold {}/{}.\n'.format(fold, self.fold_number - 1))
             if self.split_way == 'two-way':
                 test_set, _ = get_fold_from_file(filename=cross_validation_description_file, fold_number=fold)
             else:
@@ -154,7 +155,7 @@ class ModelValidation:
                 ground_truth_filename = None
                 for _, _, files in os.walk(os.path.dirname(ground_truth_base)):
                     for f in files:
-                        if os.path.basename(ground_truth_base) in f:
+                        if os.path.basename(ground_truth_base) in f and self.gt_files_suffix in f:
                             ground_truth_filename = os.path.join(os.path.dirname(ground_truth_base), f)
                     break
                 detection_filename = os.path.join(self.input_folder, 'predictions', str(fold_number),
@@ -166,7 +167,7 @@ class ModelValidation:
                     continue
 
                 ground_truth_ni = nib.load(ground_truth_filename)
-                if len(ground_truth_ni.get_shape()) == 4:
+                if len(ground_truth_ni.shape) == 4:
                     ground_truth_ni = nib.four_to_three(ground_truth_ni)[0]
 
                 if file_stats.st_size == 0:
@@ -174,13 +175,13 @@ class ModelValidation:
                              detection_filename)
 
                 detection_ni = nib.load(detection_filename)
-                if detection_ni.get_shape() != ground_truth_ni.get_shape():
+                if detection_ni.shape != ground_truth_ni.shape:
                     continue
 
                 gt = ground_truth_ni.get_data()
                 gt[gt >= 1] = 1
 
-                pool = multiprocessing.Pool(processes=8)
+                pool = multiprocessing.Pool(processes=SharedResources.getInstance().number_processes)
                 thr_range = np.arange(0.1, 1.1, 0.1)
                 pat_results = pool.map(separate_dice_computation, zip(thr_range,
                                                                       itertools.repeat(fold_number),

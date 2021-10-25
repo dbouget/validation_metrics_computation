@@ -1,6 +1,7 @@
 import os
 import traceback
-
+import itertools
+import multiprocessing
 from copy import deepcopy
 import pandas as pd
 import nibabel as nib
@@ -10,6 +11,7 @@ from medpy.metric.binary import hd95, volume_correlation, assd, ravd, obj_assd
 from sklearn.metrics import mutual_info_score, jaccard_score, normalized_mutual_info_score, adjusted_rand_score,\
     roc_auc_score, matthews_corrcoef, cohen_kappa_score
 from Utils.io_converters import get_fold_from_file
+from Utils.resources import SharedResources
 
 
 def compute_extra_metrics(data_root, study_folder, nb_folds, split_way, optimal_threshold, metrics: list = [],
@@ -53,7 +55,7 @@ def compute_extra_metrics(data_root, study_folder, nb_folds, split_way, optimal_
             test_set, _ = get_fold_from_file(filename=cross_validation_file, fold_number=fold)
         else:
             val_set, test_set = get_fold_from_file(filename=cross_validation_file, fold_number=fold)
-        print('Computing metrics for fold {}/{}.\n'.format(fold, nb_folds-1))
+        print('\nComputing metrics for fold {}/{}.\n'.format(fold, nb_folds-1))
         for i, patient in enumerate(tqdm(test_set)):
             try:
                 # @TODO. Hard-coded, have to decide on naming convention....
@@ -93,11 +95,11 @@ def compute_extra_metrics(data_root, study_folder, nb_folds, split_way, optimal_
                     continue
 
                 ground_truth_ni = nib.load(ground_truth_filename)
-                if len(ground_truth_ni.get_shape()) == 4:
+                if len(ground_truth_ni.shape) == 4:
                     ground_truth_ni = nib.four_to_three(ground_truth_ni)[0]
                 detection_ni = nib.load(detection_filename)
 
-                if detection_ni.get_shape() != ground_truth_ni.get_shape():
+                if detection_ni.shape != ground_truth_ni.shape:
                     continue
 
                 gt = ground_truth_ni.get_data()
@@ -117,17 +119,16 @@ def compute_extra_metrics(data_root, study_folder, nb_folds, split_way, optimal_
                 tn_array[(gt == 0) & (detection == 0)] = 1
                 fn_array[(gt == 1) & (detection == 0)] = 1
 
-                # @TODO. Sometimes unstable: will crash if the image is too large...
-                if False:
+                # N-B: Sometimes unstable: it will crash if the image is too large... If so, just uncomment/comment the
+                # two following lines to perform the task without multiprocessing.
+                # if False:
+                if SharedResources.getInstance().number_processes > 1:
                     metric_values = []
                     for metric in metrics:
-                        if brats_external:
-                            metric_value = results_df.loc[(results_df['UID'] == int(uid)) & (results_df['Fold'] == fold)][metric].values[0]
-                        else:
-                            metric_value = results_df.loc[results_df['UID'] == int(uid)][metric].values[0]
+                        metric_value = results_df.loc[results_df['UID'] == int(uid)][metric].values[0]
                         metric_values.append(metric_value)
 
-                    pool = multiprocessing.Pool(processes=6)
+                    pool = multiprocessing.Pool(processes=SharedResources.getInstance().number_processes)
                     pat_results = pool.map(parallel_metric_computation, zip(metrics, metric_values, itertools.repeat(gt),
                                                                             itertools.repeat(detection),
                                                                             itertools.repeat(detection_ni.header.get_zooms()),
