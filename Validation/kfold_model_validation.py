@@ -52,6 +52,7 @@ def separate_dice_computation(args):
         if np.count_nonzero(detection) > 0:
             obj_val.run()
     except Exception as e:
+        print('Issue computing instance segmentation parameters for patient {}'.format(patient_id))
         print(traceback.format_exc())
 
     instance_results = obj_val.instance_detection_results
@@ -91,6 +92,7 @@ class ModelValidation:
                                                                                               detection_overlap_thresholds=self.detection_overlap_thresholds)
         compute_extra_metrics(self.data_root, self.input_folder, nb_folds=self.fold_number, split_way=self.split_way,
                               optimal_threshold=optimal_threshold, metrics=self.metric_names[5:],
+                              gt_files_suffix=self.gt_files_suffix,
                               prediction_files_suffix=self.prediction_files_suffix)
         compute_overall_metrics_correlation(self.input_folder, best_threshold=optimal_threshold)
 
@@ -126,6 +128,7 @@ class ModelValidation:
 
     def __generate_dice_scores_for_fold(self, data_list, fold_number):
         for i, patient in enumerate(tqdm(data_list)):
+            uid = None
             try:
                 # @TODO. Hard-coded, have to decide on naming convention....
                 # start = time.time()

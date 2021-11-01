@@ -15,7 +15,7 @@ from Utils.resources import SharedResources
 
 
 def compute_extra_metrics(data_root, study_folder, nb_folds, split_way, optimal_threshold, metrics: list = [],
-                          prediction_files_suffix=''):
+                          gt_files_suffix='', prediction_files_suffix=''):
     """
     Compute a bunch of metrics for the current validation study, assuming a binary case for now. All the computed
     results will be stored inside a specific extra_metrics_results_per_patient.csv and then merged with the main
@@ -57,6 +57,7 @@ def compute_extra_metrics(data_root, study_folder, nb_folds, split_way, optimal_
             val_set, test_set = get_fold_from_file(filename=cross_validation_file, fold_number=fold)
         print('\nComputing metrics for fold {}/{}.\n'.format(fold, nb_folds-1))
         for i, patient in enumerate(tqdm(test_set)):
+            uid = None
             try:
                 # @TODO. Hard-coded, have to decide on naming convention....
                 uid = patient.split('_')[1]
@@ -84,7 +85,7 @@ def compute_extra_metrics(data_root, study_folder, nb_folds, split_way, optimal_
                 ground_truth_filename = None
                 for _, _, files in os.walk(os.path.dirname(ground_truth_base)):
                     for f in files:
-                        if os.path.basename(ground_truth_base) in f:
+                        if os.path.basename(ground_truth_base) in f and gt_files_suffix in f:
                             ground_truth_filename = os.path.join(os.path.dirname(ground_truth_base), f)
                     break
                 detection_filename = os.path.join(study_folder, 'predictions', str(fold), sub_folder_index + '_' + uid,
@@ -138,73 +139,78 @@ def compute_extra_metrics(data_root, study_folder, nb_folds, split_way, optimal_
                     pool.close()
                     pool.join()
 
+                    # @TODO. Haven't verified if the following is still working.
                     for res in pat_results:
                         results_df.loc[results_df['UID'] == int(uid), res[0]] = res[1]
                 else:
                     for metric in metrics:
-                        metric_value = results_df.loc[results_df['UID'] == int(uid)][metric].values[0]
-                        if metric_value == metric_value and metric_value is not None:
-                            continue
+                        try:
+                            metric_value = results_df.loc[results_df['UID'] == int(uid)][metric].values[0]
+                            if metric_value == metric_value and metric_value is not None:
+                                continue
 
-                        if metric == 'VS':
-                            metric_value = 1 - ((abs(np.sum(fn_array) - np.sum(fp_array)))
-                                                / ((2 * np.sum(tp_array)) + np.sum(fp_array) + np.sum(fn_array)))
-                        elif metric == 'GCE':
-                            param11 = (np.sum(fn_array) * (np.sum(fn_array) + (2 * np.sum(tp_array)))) / (np.sum(tp_array) + np.sum(fn_array))
-                            param12 = (np.sum(fp_array) * (np.sum(fp_array) + (2 * np.sum(tn_array)))) / (np.sum(tn_array) + np.sum(fp_array))
-                            param21 = (np.sum(fp_array) * (np.sum(fp_array) + (2 * np.sum(tp_array)))) / (np.sum(tp_array) + np.sum(fp_array))
-                            param22 = (np.sum(fn_array) * (np.sum(fn_array) + (2 * np.sum(tn_array)))) / (np.sum(tn_array) + np.sum(fn_array))
-                            metric_value = (1/np.prod(ground_truth_ni.header.get_zooms())) * min(param11+param12, param21+param22)
-                        elif metric == 'MI':
-                            metric_value = normalized_mutual_info_score(gt.flatten(), detection.flatten())
-                        elif metric == 'ARI':
-                            metric_value = adjusted_rand_score(gt.flatten(), detection.flatten())
-                        elif metric == 'Jaccard':
-                            metric_value = jaccard_score(gt.flatten(), detection.flatten())
-                        elif metric == 'IOU':
-                            intersection = (gt == 1) & (detection == 1)
-                            union = (gt == 1) | (detection == 1)
-                            metric_value = np.count_nonzero(intersection) / (np.count_nonzero(union) + 1e-5)
-                        elif metric == 'TPR':
-                            metric_value = np.sum(tp_array) / (np.sum(tp_array) + np.sum(fn_array) + 1e-5)
-                        elif metric == 'TNR':
-                            metric_value = np.sum(tn_array) / (np.sum(tn_array) + np.sum(fp_array) + 1e-5)
-                        elif metric == 'FPR':
-                            metric_value = np.sum(fp_array) / (np.sum(fp_array) + np.sum(tn_array) + 1e-5)
-                        elif metric == 'FNR':
-                            metric_value = np.sum(fn_array) / (np.sum(fn_array) + np.sum(tp_array) + 1e-5)
-                        elif metric == 'PPV':
-                            metric_value = np.sum(tp_array) / (np.sum(tp_array) + np.sum(fp_array) + 1e-5)
-                        elif metric == 'AUC':
-                            metric_value = roc_auc_score(gt.flatten(), detection.flatten())
-                        elif metric == 'MCC':
-                            metric_value = matthews_corrcoef(gt.flatten(), detection.flatten())
-                        elif metric == 'CKS':
-                            metric_value = cohen_kappa_score(gt.flatten(), detection.flatten())
-                        elif metric == 'HD95':
-                            metric_value = -1.
-                            if np.max(detection) == 1:  # Computation does not work if no binary object in the array
-                                metric_value = hd95(detection, gt, voxelspacing=detection_ni.header.get_zooms(), connectivity=1)
-                        elif metric == 'ASSD':
-                            metric_value = -1.
-                            if np.max(detection) == 1:  # Computation does not work if no binary object in the array
-                                metric_value = assd(detection, gt, voxelspacing=detection_ni.header.get_zooms(), connectivity=1)
-                        elif metric == 'OASSD':
-                            metric_value = -1.
-                            if np.max(detection) == 1:  # Computation does not work if no binary object in the array
-                                metric_value = obj_assd(detection, gt, voxelspacing=detection_ni.header.get_zooms(), connectivity=1)
-                        elif metric == 'RAVD':
-                            metric_value = -1.
-                            if np.max(detection) == 1:  # Computation does not work if no binary object in the array
-                                metric_value = ravd(detection, gt)
-                        elif metric == 'VC':
-                            metric_value = -1.
-                            if np.max(detection) == 1:  # Computation does not work if no binary object in the array
-                                metric_value, pval = volume_correlation(detection, gt)
+                            if metric == 'VS':
+                                metric_value = 1 - ((abs(np.sum(fn_array) - np.sum(fp_array)))
+                                                    / ((2 * np.sum(tp_array)) + np.sum(fp_array) + np.sum(fn_array)))
+                            elif metric == 'GCE':
+                                param11 = (np.sum(fn_array) * (np.sum(fn_array) + (2 * np.sum(tp_array)))) / (np.sum(tp_array) + np.sum(fn_array))
+                                param12 = (np.sum(fp_array) * (np.sum(fp_array) + (2 * np.sum(tn_array)))) / (np.sum(tn_array) + np.sum(fp_array))
+                                param21 = (np.sum(fp_array) * (np.sum(fp_array) + (2 * np.sum(tp_array)))) / (np.sum(tp_array) + np.sum(fp_array))
+                                param22 = (np.sum(fn_array) * (np.sum(fn_array) + (2 * np.sum(tn_array)))) / (np.sum(tn_array) + np.sum(fn_array))
+                                metric_value = (1/np.prod(ground_truth_ni.header.get_zooms())) * min(param11+param12, param21+param22)
+                            elif metric == 'MI':
+                                metric_value = normalized_mutual_info_score(gt.flatten(), detection.flatten())
+                            elif metric == 'ARI':
+                                metric_value = adjusted_rand_score(gt.flatten(), detection.flatten())
+                            elif metric == 'Jaccard':
+                                metric_value = jaccard_score(gt.flatten(), detection.flatten())
+                            elif metric == 'IOU':
+                                intersection = (gt == 1) & (detection == 1)
+                                union = (gt == 1) | (detection == 1)
+                                metric_value = np.count_nonzero(intersection) / (np.count_nonzero(union) + 1e-5)
+                            elif metric == 'TPR':
+                                metric_value = np.sum(tp_array) / (np.sum(tp_array) + np.sum(fn_array) + 1e-5)
+                            elif metric == 'TNR':
+                                metric_value = np.sum(tn_array) / (np.sum(tn_array) + np.sum(fp_array) + 1e-5)
+                            elif metric == 'FPR':
+                                metric_value = np.sum(fp_array) / (np.sum(fp_array) + np.sum(tn_array) + 1e-5)
+                            elif metric == 'FNR':
+                                metric_value = np.sum(fn_array) / (np.sum(fn_array) + np.sum(tp_array) + 1e-5)
+                            elif metric == 'PPV':
+                                metric_value = np.sum(tp_array) / (np.sum(tp_array) + np.sum(fp_array) + 1e-5)
+                            elif metric == 'AUC':
+                                metric_value = roc_auc_score(gt.flatten(), detection.flatten())
+                            elif metric == 'MCC':
+                                metric_value = matthews_corrcoef(gt.flatten(), detection.flatten())
+                            elif metric == 'CKS':
+                                metric_value = cohen_kappa_score(gt.flatten(), detection.flatten())
+                            elif metric == 'HD95':
+                                metric_value = -1.
+                                if np.max(detection) == 1:  # Computation does not work if no binary object in the array
+                                    metric_value = hd95(detection, gt, voxelspacing=detection_ni.header.get_zooms(), connectivity=1)
+                            elif metric == 'ASSD':
+                                metric_value = -1.
+                                if np.max(detection) == 1:  # Computation does not work if no binary object in the array
+                                    metric_value = assd(detection, gt, voxelspacing=detection_ni.header.get_zooms(), connectivity=1)
+                            elif metric == 'OASSD':
+                                metric_value = -1.
+                                if np.max(detection) == 1:  # Computation does not work if no binary object in the array
+                                    metric_value = obj_assd(detection, gt, voxelspacing=detection_ni.header.get_zooms(), connectivity=1)
+                            elif metric == 'RAVD':
+                                metric_value = -1.
+                                if np.max(detection) == 1:  # Computation does not work if no binary object in the array
+                                    metric_value = ravd(detection, gt)
+                            elif metric == 'VC':
+                                metric_value = -1.
+                                if np.max(detection) == 1:  # Computation does not work if no binary object in the array
+                                    metric_value, pval = volume_correlation(detection, gt)
 
-                        results_df.at[results_df.loc[results_df['UID'] == int(uid)].index.values[0], metric] = metric_value
+                            results_df.at[results_df.loc[results_df['UID'] == int(uid)].index.values[0], metric] = metric_value
+                        except Exception as e:
+                            print('Issue computing metric {} for patient {}'.format(metric, uid))
                 results_df.to_csv(output_filename, index=False)
             except Exception as e:
+                print('Global issue computing metrics for patient {}'.format(uid))
                 print(traceback.format_exc())
                 continue
 

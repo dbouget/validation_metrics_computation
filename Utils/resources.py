@@ -145,7 +145,7 @@ class SharedResources:
 
         if self.config.has_option('Validation', 'extra_metrics'):
             if self.config['Validation']['extra_metrics'].split('#')[0].strip() != '':
-                self.validation_metric_names = self.config['Validation']['extra_metrics'].split('#')[0].strip().split(',')
+                self.validation_metric_names = [x.strip() for x in self.config['Validation']['extra_metrics'].split('#')[0].strip().split(',')]
 
         if self.config.has_option('Validation', 'detection_overlap_thresholds'):
             if self.config['Validation']['detection_overlap_thresholds'].split('#')[0].strip() != '':
