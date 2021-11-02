@@ -6,6 +6,7 @@ import h5py
 import math
 import nibabel as nib
 from copy import deepcopy
+from Utils.resources import SharedResources
 
 
 def box_overlap(box1, box2):
@@ -54,7 +55,7 @@ class InstanceSegmentationValidation:
         self.detection_candidates = []
         self.matching_results = []
         self.instance_detection_results = [0.0, 0.0, 1.0, 0.0]
-        self.tiny_objects_removal_threshold = 50  # Number of voxels
+        self.tiny_objects_removal_threshold = SharedResources.getInstance().validation_tiny_objects_removal_threshold
 
     def set_trace_parameters(self, output_folder, fold_number, patient, threshold):
         """
@@ -93,29 +94,29 @@ class InstanceSegmentationValidation:
         """
         from scipy.ndimage import measurements
         from skimage.measure import regionprops
+
+        # Cleaning the too small objects that might be noise in the ground truth
         self.gt_labels = measurements.label(self.gt_image)[0]
-        self.detection_labels = measurements.label(self.detection_image)[0]
-
-        # print('Found {} objects.'.format(np.max(self.detection_labels)))
-        # Cleaning the too small objects that are noise in the detection
-        refined_image = deepcopy(self.detection_labels)
-        for c in range(1, np.max(self.detection_labels) + 1):
-            if np.count_nonzero(self.detection_labels == c) < self.tiny_objects_removal_threshold:
-                refined_image[refined_image == c] = 0
-        refined_image[refined_image != 0] = 1
-        self.detection_labels = measurements.label(refined_image)[0]
-        # print('Found {} objects after cleaning up.'.format(np.max(self.detection_labels)))
-
-        # Cleaning the too small objects that are noise in the ground truth
         refined_image = deepcopy(self.gt_labels)
         for c in range(1, np.max(self.gt_labels)+1):
             if np.count_nonzero(self.gt_labels == c) < self.tiny_objects_removal_threshold:
                 refined_image[refined_image == c] = 0
         refined_image[refined_image != 0] = 1
         self.gt_labels = measurements.label(refined_image)[0]
-
         self.gt_candidates = regionprops(self.gt_labels)
-        self.detection_candidates = regionprops(self.detection_labels)
+
+        # Cleaning the too small objects that might be noise in the detection
+        if np.count_nonzero(self.detection_image) > 0:
+            self.detection_labels = measurements.label(self.detection_image)[0]
+            # print('Found {} objects.'.format(np.max(self.detection_labels)))
+            refined_image = deepcopy(self.detection_labels)
+            for c in range(1, np.max(self.detection_labels) + 1):
+                if np.count_nonzero(self.detection_labels == c) < self.tiny_objects_removal_threshold:
+                    refined_image[refined_image == c] = 0
+            refined_image[refined_image != 0] = 1
+            self.detection_labels = measurements.label(refined_image)[0]
+            # print('Found {} objects after cleaning up.'.format(np.max(self.detection_labels)))
+            self.detection_candidates = regionprops(self.detection_labels)
 
         if self.dump_trace:
             dump_gt_filename = os.path.join(self.output_folder, str(self.fold_number), '1_' +

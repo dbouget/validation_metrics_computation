@@ -49,8 +49,7 @@ def separate_dice_computation(args):
     try:
         # obj_val.set_trace_parameters(self.output_folder, fold_number, patient, t)
         obj_val.spacing = detection_ni.header.get_zooms()
-        if np.count_nonzero(detection) > 0:
-            obj_val.run()
+        obj_val.run()
     except Exception as e:
         print('Issue computing instance segmentation parameters for patient {}'.format(patient_id))
         print(traceback.format_exc())

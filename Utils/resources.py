@@ -126,6 +126,7 @@ class SharedResources:
         self.validation_detection_overlap_thresholds = []
         self.validation_gt_files_suffix = ''
         self.validation_prediction_files_suffix = ''
+        self.validation_tiny_objects_removal_threshold = 50
 
         if self.config.has_option('Validation', 'input_folder'):
             if self.config['Validation']['input_folder'].split('#')[0].strip() != '':
@@ -160,3 +161,7 @@ class SharedResources:
         if self.config.has_option('Validation', 'gt_files_suffix'):
             if self.config['Validation']['gt_files_suffix'].split('#')[0].strip() != '':
                 self.validation_gt_files_suffix = self.config['Validation']['gt_files_suffix'].split('#')[0].strip()
+
+        if self.config.has_option('Validation', 'tiny_objects_removal_threshold'):
+            if self.config['Validation']['tiny_objects_removal_threshold'].split('#')[0].strip() != '':
+                self.validation_tiny_objects_removal_threshold = int(self.config['Validation']['tiny_objects_removal_threshold'].split('#')[0].strip())
