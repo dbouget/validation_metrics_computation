@@ -232,9 +232,9 @@ def compute_fold_average(folder, data=None, best_threshold=0.5, best_overlap=0.0
                 std = positives['Dice'].astype('float32').std()
                 fold_average.extend([avg, std])
             elif m == 'Dice-N':
-                positives = fold_results.loc[(fold_results['Threshold'] == best_threshold) & (fold_results['#GT'] == 0)]
-                avg = positives['Dice'].astype('float32').mean()
-                std = positives['Dice'].astype('float32').std()
+                negatives = fold_results.loc[(fold_results['Threshold'] == best_threshold) & (fold_results['#GT'] == 0)]
+                avg = negatives['Dice'].astype('float32').mean()
+                std = negatives['Dice'].astype('float32').std()
                 fold_average.extend([avg, std])
 
         metrics_per_fold.append(fold_average)
