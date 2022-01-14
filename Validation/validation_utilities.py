@@ -42,7 +42,18 @@ def best_segmentation_probability_threshold_analysis(folder, detection_overlap_t
             mean = np.ma.masked_array(dices, [x < obj for x in dices]).mean()
             detection = [x > obj for x in dices]
             found = np.count_nonzero(detection)
-            recall = found / len(dices)
+
+            gt = all_dices['#GT'].values[thr::nb_thresh]
+            relevant = np.count_nonzero(gt)
+            recall = found / relevant
+            #recall = found / len(dices)
+            #
+            # det = all_dices['#Det'].values[thr::nb_thresh]
+            # selected = np.count_nonzero(det)
+            # if selected > 0:
+            #     precision = found / selected
+            # else:
+            #     precision = 1
             all_for_thresh = all_dices.values[thr::nb_thresh]
             precisions = []
             # The proper overall precision computation can be debated?
@@ -52,6 +63,7 @@ def best_segmentation_probability_threshold_analysis(folder, detection_overlap_t
                     precisions.append(tmp['Inst Precision'].values[0])
 
             precision = np.mean(precisions)
+
             F1 = 2 * ((precision * recall) / (precision + recall))
             recall_precision_results.append([obj, thresholds[thr], mean, found, len(dices), recall, precision, F1])
             study_writer.writerow([obj, thresholds[thr], mean, found, len(dices), recall, precision, F1])
@@ -140,7 +152,7 @@ def compute_fold_average(folder, data=None, best_threshold=0.5, best_overlap=0.0
     else:
         results = deepcopy(data)
 
-    metric_names = ['Dice', 'Dice-TP']
+    metric_names = ['Dice', 'Dice-TP', 'Dice-P', 'Dice-N']
     if metrics is not None:
         metric_names.extend(metrics)
         # 'Inst DICE', 'Inst Recall', 'Inst Precision', 'VS', 'IOU', 'MI', 'ARI', 'Jaccard', 'TPR',
@@ -149,9 +161,10 @@ def compute_fold_average(folder, data=None, best_threshold=0.5, best_overlap=0.0
     nb_folds = len(unique_folds)
     metrics_per_fold = []
     fold_average_columns = ['Fold', '# samples', 'Patient-wise recall', 'Patient-wise precision', 'Patient-wise F1',
-                            'FPPP', 'Object-wise recall', 'Object-wise precision', 'Object-wise F1']
+                            'FPPP', 'Object-wise recall', 'Object-wise precision', 'Object-wise F1',
+                            'Global recall', 'Global precision', 'Global F1', 'Accuracy', 'Balanced accuracy']
     for m in metric_names:
-        if m in results.columns.values or m == 'Dice-TP':
+        if m in results.columns.values or 'Dice' in m:
             fold_average_columns.extend([m + '_mean', m + '_std'])
 
     # Regarding the overlap threshold, should the patient discarded for recall be
@@ -165,7 +178,8 @@ def compute_fold_average(folder, data=None, best_threshold=0.5, best_overlap=0.0
             continue
 
         nb_missed_tumors = len(fold_results.loc[(fold_results['Threshold'] == best_threshold) & (fold_results['Dice'] < best_overlap)])
-        patient_wise_recall = 1 - (nb_missed_tumors / len(fold_results.loc[(fold_results['Threshold'] == best_threshold)]))#1 - (nb_missed_tumors/len(all_for_thresh))
+        nb_tumors = len(fold_results.loc[(fold_results['Threshold'] == best_threshold) & (fold_results['#GT'] > 0)])
+        patient_wise_recall = 1 - (nb_missed_tumors / nb_tumors) #1 - (nb_missed_tumors/len(all_for_thresh))
         patient_wise_precision = fold_results.loc[(fold_results['Threshold'] == best_threshold) &
                                                  (fold_results['#Det'] > 0)]['Inst Precision'].mean() # all_for_thresh.loc[all_for_thresh['#Det'] > 0]['Inst Precision'].mean()
         fppp = np.subtract(fold_results.loc[(fold_results['Threshold'] == best_threshold)]['#Det'].values,
@@ -182,8 +196,20 @@ def compute_fold_average(folder, data=None, best_threshold=0.5, best_overlap=0.0
         patient_wise_F1 = 2 * ((patient_wise_precision * patient_wise_recall) / (patient_wise_precision + patient_wise_recall))
         object_wise_F1 = 2 * ((object_wise_precision * object_wise_recall) / (object_wise_precision + object_wise_recall))
 
+        true_positives = len(fold_results.loc[(fold_results['Threshold'] == best_threshold) & (fold_results['#Det'] > 0) & (fold_results['#GT'] > 0)])
+        false_negatives = len(fold_results.loc[(fold_results['Threshold'] == best_threshold) & (fold_results['#Det'] == 0) & (fold_results['#GT'] > 0)])
+        false_positives = len(fold_results.loc[(fold_results['Threshold'] == best_threshold) & (fold_results['#Det'] > 0) & (fold_results['#GT'] == 0)])
+        true_negatives = len(fold_results.loc[(fold_results['Threshold'] == best_threshold) & (fold_results['#Det'] == 0) & (fold_results['#GT'] == 0)])
+        global_recall = true_positives / (true_positives + false_negatives)
+        global_precision = true_positives / (true_positives + false_positives)
+        global_F1 = 2 * ((global_recall * global_precision) / (global_precision + global_recall))
+        accuracy = (true_positives + true_negatives ) / (true_negatives + true_positives + false_negatives + false_positives)
+        true_negative_rate = true_negatives / (true_negatives + false_negatives)
+        balanced_accuracy = (global_recall + true_negative_rate) / 2
+
         fold_average = [f, len(np.unique(fold_results['Patient'].values)), patient_wise_recall, patient_wise_precision,
-                        patient_wise_F1, fppp, object_wise_recall, object_wise_precision, object_wise_F1]
+                        patient_wise_F1, fppp, object_wise_recall, object_wise_precision, object_wise_F1,
+                        global_recall, global_precision, global_F1, accuracy, balanced_accuracy]
         for m in metric_names:
             if m in fold_results.columns.values:
                 if m == 'HD95':
@@ -196,9 +222,21 @@ def compute_fold_average(folder, data=None, best_threshold=0.5, best_overlap=0.0
                     std = fold_results.loc[(fold_results['Threshold'] == best_threshold)][m].dropna().astype('float32').std(ddof=0)
                 fold_average.extend([avg, std])
             elif m == 'Dice-TP':
-                avg = all_for_thresh['Dice'].astype('float32').mean()
-                std = all_for_thresh['Dice'].astype('float32').std(ddof=0)
+                true_positives = fold_results.loc[(fold_results['Threshold'] == best_threshold) & (fold_results['Dice'] >= best_overlap) & (fold_results['#GT'] > 0)]
+                avg = true_positives['Dice'].astype('float32').mean()
+                std = true_positives['Dice'].astype('float32').std(ddof=0)
                 fold_average.extend([avg, std])
+            elif m == 'Dice-P':
+                positives = fold_results.loc[(fold_results['Threshold'] == best_threshold) & (fold_results['#GT'] > 0)]
+                avg = positives['Dice'].astype('float32').mean()
+                std = positives['Dice'].astype('float32').std()
+                fold_average.extend([avg, std])
+            elif m == 'Dice-N':
+                positives = fold_results.loc[(fold_results['Threshold'] == best_threshold) & (fold_results['#GT'] == 0)]
+                avg = positives['Dice'].astype('float32').mean()
+                std = positives['Dice'].astype('float32').std()
+                fold_average.extend([avg, std])
+
         metrics_per_fold.append(fold_average)
 
     metrics_per_fold_df = pd.DataFrame(data=metrics_per_fold, columns=fold_average_columns)
@@ -210,7 +248,8 @@ def compute_fold_average(folder, data=None, best_threshold=0.5, best_overlap=0.0
     total_samples = metrics_per_fold_df['# samples'].sum()
     fold_averaged_results = [total_samples]
     fixed_metrics = ['Patient-wise recall', 'Patient-wise precision', 'Patient-wise F1', 'FPPP', 'Object-wise recall',
-                     'Object-wise precision', 'Object-wise F1', 'Dice-TP_mean']
+                     'Object-wise precision', 'Object-wise F1', 'Global recall', 'Global precision', 'Global F1',
+                     'Accuracy', 'Balanced accuracy', 'Dice-TP_mean', 'Dice-P_mean', 'Dice-N_mean']
     fold_averaged_results_df_columns = ['Fold']
     for fm in fixed_metrics:
         mean_final = 0

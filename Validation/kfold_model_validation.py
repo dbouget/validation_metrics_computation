@@ -17,12 +17,12 @@ from tqdm import tqdm
 from Validation.instance_segmentation_validation import *
 from Utils.resources import SharedResources
 from Utils.io_converters import get_fold_from_file
-from Validation.validation_utilities import best_segmentation_probability_threshold_analysis
+from Validation.validation_utilities import best_segmentation_probability_threshold_analysis, compute_fold_average
 from Validation.extra_metrics_computation import compute_extra_metrics, compute_overall_metrics_correlation
 
 
-def compute_dice(volume1, volume2):
-    dice = np.sum(volume1[volume2 == 1]) * 2.0 / (np.sum(volume1) + np.sum(volume2))
+def compute_dice(volume1, volume2, epsilon=0.1):
+    dice = (np.sum(volume1[volume2 == 1]) * 2.0 + epsilon) / (np.sum(volume1) + np.sum(volume2) + epsilon)
     return dice
 
 
@@ -82,6 +82,7 @@ class ModelValidation:
         self.metric_names = ['Dice', 'Inst DICE', 'Inst Recall', 'Inst Precision', 'Largest foci Dice']
         self.metric_names.extend(SharedResources.getInstance().validation_metric_names)
         self.detection_overlap_thresholds = SharedResources.getInstance().validation_detection_overlap_thresholds
+        print("Detection overlap: ", self.detection_overlap_thresholds)
         self.gt_files_suffix = SharedResources.getInstance().validation_gt_files_suffix
         self.prediction_files_suffix = SharedResources.getInstance().validation_prediction_files_suffix
 
@@ -89,6 +90,8 @@ class ModelValidation:
         self.__generate_dice_scores()
         optimal_overlap, optimal_threshold = best_segmentation_probability_threshold_analysis(self.input_folder,
                                                                                               detection_overlap_thresholds=self.detection_overlap_thresholds)
+
+        compute_fold_average(self.input_folder, best_threshold=optimal_threshold, best_overlap=optimal_overlap)
         compute_extra_metrics(self.data_root, self.input_folder, nb_folds=self.fold_number, split_way=self.split_way,
                               optimal_threshold=optimal_threshold, metrics=self.metric_names[5:],
                               gt_files_suffix=self.gt_files_suffix,
@@ -164,10 +167,10 @@ class ModelValidation:
                                                   sub_folder_index + '_' + uid,
                                                   os.path.basename(patient_image_filename).split('.')[0] +
                                                   '-' + self.prediction_files_suffix)
-                file_stats = os.stat(detection_filename)
                 if not os.path.exists(detection_filename):
                     continue
 
+                file_stats = os.stat(detection_filename)
                 ground_truth_ni = nib.load(ground_truth_filename)
                 if len(ground_truth_ni.shape) == 4:
                     ground_truth_ni = nib.four_to_three(ground_truth_ni)[0]
