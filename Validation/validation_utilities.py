@@ -171,35 +171,35 @@ def compute_fold_average(folder, data=None, best_threshold=0.5, best_overlap=0.0
     # used for other metrics computation?
     for f in unique_folds:
         fold_results = results.loc[results['Fold'] == f]
-        all_for_thresh = fold_results.loc[(fold_results['Threshold'] == best_threshold) & (fold_results['Dice'] >= best_overlap)] #fold_results.loc[fold_results['Threshold'] == best_threshold]
+        thresh_index = (np.round(fold_results['Threshold'], 1) == best_threshold)
+        all_for_thresh = fold_results.loc[thresh_index] #fold_results.loc[fold_results['Threshold'] == best_threshold]
         if len(all_for_thresh) == 0: # Empty fold? Can indicate something went wrong, or was not computed properly beforehand
-            fold_average = [f, 0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+            fold_average = [f, 0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
             metrics_per_fold.append(fold_average)
             continue
 
-        nb_missed_tumors = len(fold_results.loc[(fold_results['Threshold'] == best_threshold) & (fold_results['Dice'] < best_overlap)])
-        nb_tumors = len(fold_results.loc[(fold_results['Threshold'] == best_threshold) & (fold_results['#GT'] > 0)])
+        nb_missed_tumors = len(fold_results.loc[thresh_index & (fold_results['Dice'] < best_overlap)])
+        nb_tumors = len(fold_results.loc[thresh_index & (fold_results['#GT'] > 0)])
         patient_wise_recall = 1 - (nb_missed_tumors / nb_tumors) #1 - (nb_missed_tumors/len(all_for_thresh))
-        patient_wise_precision = fold_results.loc[(fold_results['Threshold'] == best_threshold) &
-                                                 (fold_results['#Det'] > 0)]['Inst Precision'].mean() # all_for_thresh.loc[all_for_thresh['#Det'] > 0]['Inst Precision'].mean()
-        fppp = np.subtract(fold_results.loc[(fold_results['Threshold'] == best_threshold)]['#Det'].values,
-                           np.multiply(fold_results.loc[(fold_results['Threshold'] == best_threshold)]['Inst Precision'].values,
-                                       fold_results.loc[(fold_results['Threshold'] == best_threshold)]['#Det'].values)).mean()
-        objects_total = fold_results.loc[(fold_results['Threshold'] == best_threshold)]['#GT'].values.sum()
-        objects_found = np.multiply(fold_results.loc[(fold_results['Threshold'] == best_threshold)]['Inst Recall'].values,
-                                    fold_results.loc[(fold_results['Threshold'] == best_threshold)]['#GT'].values).sum()
+        patient_wise_precision = fold_results.loc[thresh_index & (fold_results['#Det'] > 0)]['Inst Precision'].mean() # all_for_thresh.loc[all_for_thresh['#Det'] > 0]['Inst Precision'].mean()
+        fppp = np.subtract(all_for_thresh['#Det'].values,
+                           np.multiply(all_for_thresh['Inst Precision'].values,
+                                       all_for_thresh['#Det'].values)).mean()
+        objects_total = all_for_thresh['#GT'].values.sum()
+        objects_found = np.multiply(all_for_thresh['Inst Recall'].values, all_for_thresh['#GT'].values).sum()
         object_wise_recall = objects_found / objects_total
-        objects_false_positive_total = np.subtract(fold_results.loc[(fold_results['Threshold'] == best_threshold)]['#Det'].values,
-                                        np.multiply(fold_results.loc[(fold_results['Threshold'] == best_threshold)]['Inst Precision'].values,
-                                                    fold_results.loc[(fold_results['Threshold'] == best_threshold)]['#Det'].values)).sum()
-        object_wise_precision = 1 - (objects_false_positive_total / fold_results.loc[(fold_results['Threshold'] == best_threshold)]['#Det'].sum())
+        objects_false_positive_total = np.subtract(all_for_thresh['#Det'].values,
+                                        np.multiply(all_for_thresh['Inst Precision'].values,
+                                                    all_for_thresh['#Det'].values)).sum()
+        object_wise_precision = 1 - (objects_false_positive_total / all_for_thresh['#Det'].sum())
         patient_wise_F1 = 2 * ((patient_wise_precision * patient_wise_recall) / (patient_wise_precision + patient_wise_recall))
         object_wise_F1 = 2 * ((object_wise_precision * object_wise_recall) / (object_wise_precision + object_wise_recall))
 
-        true_positives = len(fold_results.loc[(fold_results['Threshold'] == best_threshold) & (fold_results['#Det'] > 0) & (fold_results['#GT'] > 0)])
-        false_negatives = len(fold_results.loc[(fold_results['Threshold'] == best_threshold) & (fold_results['#Det'] == 0) & (fold_results['#GT'] > 0)])
-        false_positives = len(fold_results.loc[(fold_results['Threshold'] == best_threshold) & (fold_results['#Det'] > 0) & (fold_results['#GT'] == 0)])
-        true_negatives = len(fold_results.loc[(fold_results['Threshold'] == best_threshold) & (fold_results['#Det'] == 0) & (fold_results['#GT'] == 0)])
+        true_positives = len(all_for_thresh.loc[(all_for_thresh['#Det'] > 0) & (all_for_thresh['#GT'] > 0)])
+        false_negatives = len(all_for_thresh.loc[(all_for_thresh['#Det'] == 0) & (all_for_thresh['#GT'] > 0)])
+        false_positives = len(all_for_thresh.loc[(all_for_thresh['#Det'] > 0) & (all_for_thresh['#GT'] == 0)])
+        true_negatives = len(all_for_thresh.loc[(all_for_thresh['#Det'] == 0) & (all_for_thresh['#GT'] == 0)])
+
         global_recall = true_positives / (true_positives + false_negatives)
         global_precision = true_positives / (true_positives + false_positives)
         global_F1 = 2 * ((global_recall * global_precision) / (global_precision + global_recall))
@@ -215,24 +215,25 @@ def compute_fold_average(folder, data=None, best_threshold=0.5, best_overlap=0.0
                 if m == 'HD95':
                     # avg = all_for_thresh[all_for_thresh[m] != -1.0][m].dropna().astype('float32').mean()
                     # std = all_for_thresh[all_for_thresh[m] != -1.0][m].dropna().astype('float32').std(ddof=0)
-                    avg = fold_results.loc[(fold_results['Threshold'] == best_threshold)][fold_results.loc[(fold_results['Threshold'] == best_threshold)][m] != -1.0][m].dropna().astype('float32').mean()
-                    std = fold_results.loc[(fold_results['Threshold'] == best_threshold)][fold_results.loc[(fold_results['Threshold'] == best_threshold)][m] != -1.0][m].dropna().astype('float32').std(ddof=0)
+                    avg = fold_results.loc[thresh_index][fold_results.loc[thresh_index][m] != -1.0][m].dropna().astype('float32').mean()
+                    std = fold_results.loc[thresh_index][fold_results.loc[thresh_index][m] != -1.0][m].dropna().astype('float32').std(ddof=0)
                 else:
-                    avg = fold_results.loc[(fold_results['Threshold'] == best_threshold)][m].dropna().astype('float32').mean()
-                    std = fold_results.loc[(fold_results['Threshold'] == best_threshold)][m].dropna().astype('float32').std(ddof=0)
+                    avg = all_for_thresh[m].dropna().astype('float32').mean()
+                    std = all_for_thresh[m].dropna().astype('float32').std(ddof=0)
                 fold_average.extend([avg, std])
             elif m == 'Dice-TP':
-                true_positives = fold_results.loc[(fold_results['Threshold'] == best_threshold) & (fold_results['Dice'] >= best_overlap) & (fold_results['#GT'] > 0)]
+                true_positives = all_for_thresh.loc[(all_for_thresh['Dice'] >= best_overlap) &
+                                                    (all_for_thresh['#GT'] > 0)]
                 avg = true_positives['Dice'].astype('float32').mean()
                 std = true_positives['Dice'].astype('float32').std(ddof=0)
                 fold_average.extend([avg, std])
             elif m == 'Dice-P':
-                positives = fold_results.loc[(fold_results['Threshold'] == best_threshold) & (fold_results['#GT'] > 0)]
+                positives = all_for_thresh.loc[(all_for_thresh['#GT'] > 0)]
                 avg = positives['Dice'].astype('float32').mean()
                 std = positives['Dice'].astype('float32').std()
                 fold_average.extend([avg, std])
             elif m == 'Dice-N':
-                negatives = fold_results.loc[(fold_results['Threshold'] == best_threshold) & (fold_results['#GT'] == 0)]
+                negatives = all_for_thresh.loc[(all_for_thresh['#GT'] == 0)]
                 avg = negatives['Dice'].astype('float32').mean()
                 std = negatives['Dice'].astype('float32').std()
                 fold_average.extend([avg, std])
