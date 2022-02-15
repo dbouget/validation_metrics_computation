@@ -106,7 +106,7 @@ class HGGPreopSegmentationStudy:
             if True in [x not in list(results.columns) for x in list(self.extra_patient_parameters.columns)]:
                 optimal_results_per_patient['Patient'] = optimal_results_per_patient.Patient.astype(str)
                 optimal_results_per_patient = pd.merge(optimal_results_per_patient, self.extra_patient_parameters,
-                                                       on="Patient", how='outer')
+                                                       on="Patient", how='left') #how='outer'
 
             folder = os.path.join(self.input_folder, 'Validation', metric2 + '-Wise')
             os.makedirs(folder, exist_ok=True)

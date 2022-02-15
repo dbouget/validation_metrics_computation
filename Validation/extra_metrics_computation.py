@@ -64,6 +64,7 @@ def compute_extra_metrics(data_root, study_folder, nb_folds, split_way, optimal_
                 sub_folder_index = patient.split('_')[0]
                 patient_extended = '_'.join(patient.split('_')[1:-1]).strip()
 
+                # @TODO. Stick to integer patient unique ids or be more generic with str?
                 if len(results_df.loc[results_df['UID'] == int(uid)]) == 0:
                     buff_array = np.full((1, results_df.shape[1]), None)
                     buff_array[0, 0] = fold

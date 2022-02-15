@@ -32,7 +32,7 @@ def separate_dice_computation(args):
     :param args: list of arguments split from the lists given to the multiprocessing.Pool call.
     :return: list with the computed results for the current patient, at the given probability threshold.
     """
-    t = args[0]
+    t = np.round(args[0], 2)
     fold_number = args[1]
     gt = args[2]
     detection_ni = args[3]
@@ -186,17 +186,23 @@ class ModelValidation:
                 gt = ground_truth_ni.get_data()
                 gt[gt >= 1] = 1
 
-                pool = multiprocessing.Pool(processes=SharedResources.getInstance().number_processes)
+                pat_results = []
                 thr_range = np.arange(0.1, 1.1, 0.1)
-                pat_results = pool.map(separate_dice_computation, zip(thr_range,
-                                                                      itertools.repeat(fold_number),
-                                                                      itertools.repeat(gt),
-                                                                      itertools.repeat(detection_ni),
-                                                                      itertools.repeat(uid)
-                                                                      )
-                                       )
-                pool.close()
-                pool.join()
+                if SharedResources.getInstance().number_processes > 1:
+                    pool = multiprocessing.Pool(processes=SharedResources.getInstance().number_processes)
+                    pat_results = pool.map(separate_dice_computation, zip(thr_range,
+                                                                          itertools.repeat(fold_number),
+                                                                          itertools.repeat(gt),
+                                                                          itertools.repeat(detection_ni),
+                                                                          itertools.repeat(uid)
+                                                                          )
+                                           )
+                    pool.close()
+                    pool.join()
+                else:
+                    for thr_value in thr_range:
+                        thr_res = separate_dice_computation([thr_value, fold_number, gt, detection_ni, uid])
+                        pat_results.append(thr_res)
 
                 for ind, th in enumerate(thr_range):
                     sub_df = self.results_df.loc[(self.results_df['Patient'] == uid) & (self.results_df['Fold'] == fold_number) & (self.results_df['Threshold'] == th)]
