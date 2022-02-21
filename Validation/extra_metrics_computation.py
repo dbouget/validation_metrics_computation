@@ -207,9 +207,10 @@ def compute_extra_metrics(data_root, study_folder, nb_folds, split_way, optimal_
                                     metric_value, pval = volume_correlation(detection, gt)
 
                             results_df.at[results_df.loc[results_df['UID'] == int(uid)].index.values[0], metric] = metric_value
+                            results_df.to_csv(output_filename, index=False)
                         except Exception as e:
                             print('Issue computing metric {} for patient {}'.format(metric, uid))
-                results_df.to_csv(output_filename, index=False)
+                            print(traceback.format_exc())
             except Exception as e:
                 print('Global issue computing metrics for patient {}'.format(uid))
                 print(traceback.format_exc())

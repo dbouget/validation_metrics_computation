@@ -204,7 +204,7 @@ def compute_fold_average(folder, data=None, best_threshold=0.5, best_overlap=0.0
         global_precision = true_positives / (true_positives + false_positives)
         global_F1 = 2 * ((global_recall * global_precision) / (global_precision + global_recall))
         accuracy = (true_positives + true_negatives ) / (true_negatives + true_positives + false_negatives + false_positives)
-        true_negative_rate = true_negatives / (true_negatives + false_negatives)
+        true_negative_rate = 1 if (true_negatives + false_negatives) == 0 else true_negatives / (true_negatives + false_negatives)
         balanced_accuracy = (global_recall + true_negative_rate) / 2
 
         fold_average = [f, len(np.unique(fold_results['Patient'].values)), patient_wise_recall, patient_wise_precision,

@@ -109,9 +109,10 @@ class ModelValidation:
         cross_validation_description_file = os.path.join(self.input_folder, 'cross_validation_folds.txt')
         self.results_df = []
         self.dice_output_filename = os.path.join(self.output_folder, 'all_dice_scores.csv')
+        self.results_df_base_columns = ['Fold', 'Patient', 'Threshold', 'Dice', 'Inst DICE', 'Inst Recall',
+                                                    'Inst Precision', 'Largest foci Dice', '#GT', '#Det']
         if not os.path.exists(self.dice_output_filename):
-            self.results_df = pd.DataFrame(columns=['Fold', 'Patient', 'Threshold', 'Dice', 'Inst DICE', 'Inst Recall',
-                                                    'Inst Precision', 'Largest foci Dice', '#GT', '#Det'])
+            self.results_df = pd.DataFrame(columns=self.results_df_base_columns)
         else:
             self.results_df = pd.read_csv(self.dice_output_filename)
             if self.results_df.columns[0] != 'Fold':
@@ -206,9 +207,9 @@ class ModelValidation:
 
                 for ind, th in enumerate(thr_range):
                     sub_df = self.results_df.loc[(self.results_df['Patient'] == uid) & (self.results_df['Fold'] == fold_number) & (self.results_df['Threshold'] == th)]
-                    ind_values = np.asarray(pat_results).reshape((len(thr_range), len(self.results_df.columns)))[ind, :]
-                    buff_df = pd.DataFrame(ind_values.reshape(1, len(self.results_df.columns)),
-                                           columns=list(self.results_df.columns))
+                    ind_values = np.asarray(pat_results).reshape((len(thr_range), len(self.results_df_base_columns)))[ind, :]
+                    buff_df = pd.DataFrame(ind_values.reshape(1, len(self.results_df_base_columns)),
+                                           columns=list(self.results_df_base_columns))
                     if len(sub_df) == 0:
                         self.results_df = self.results_df.append(buff_df, ignore_index=True)
                     else:
