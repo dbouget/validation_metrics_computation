@@ -21,7 +21,14 @@ from Validation.validation_utilities import best_segmentation_probability_thresh
 from Validation.extra_metrics_computation import compute_extra_metrics, compute_overall_metrics_correlation
 
 
-def compute_dice(volume1, volume2, epsilon=0.1):
+def compute_dice(volume1, volume2):
+    dice = 0.
+    if np.sum(volume1[volume2 == 1]) != 0:
+        dice = (np.sum(volume1[volume2 == 1]) * 2.0) / (np.sum(volume1) + np.sum(volume2))
+    return dice
+
+
+def compute_dice_uncertain(volume1, volume2, epsilon=0.1):
     dice = (np.sum(volume1[volume2 == 1]) * 2.0 + epsilon) / (np.sum(volume1) + np.sum(volume2) + epsilon)
     return dice
 

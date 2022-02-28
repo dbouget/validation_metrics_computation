@@ -5,6 +5,7 @@ import numpy as np
 import math
 from copy import deepcopy
 import matplotlib.pyplot as plt
+from Utils.latex_converter import *
 
 
 def best_segmentation_probability_threshold_analysis(folder, detection_overlap_thresholds=None):
@@ -39,8 +40,8 @@ def best_segmentation_probability_threshold_analysis(folder, detection_overlap_t
         for thr in range(nb_thresh):
             dices = all_dices['Dice'].values[thr::nb_thresh]
             # using x <= obj brings up results since more leniant
-            mean = np.ma.masked_array(dices, [x < obj for x in dices]).mean()
-            detection = [x > obj for x in dices]
+            mean = np.ma.masked_array(dices, [np.round(x, 3) < obj for x in dices]).mean()
+            detection = [np.round(x, 3) > obj for x in dices]
             found = np.count_nonzero(detection)
 
             gt = all_dices['#GT'].values[thr::nb_thresh]
@@ -59,7 +60,7 @@ def best_segmentation_probability_threshold_analysis(folder, detection_overlap_t
             # The proper overall precision computation can be debated?
             for x, xval in enumerate(all_for_thresh):
                 tmp = pd.DataFrame(xval.reshape((1, len(xval))), columns=all_dices.columns)
-                if tmp['Dice'].values[0] > obj and tmp['#GT'].values[0] > 0:
+                if np.round(tmp['Dice'].values[0], 3) > obj and tmp['#GT'].values[0] > 0:
                     precisions.append(tmp['Inst Precision'].values[0])
 
             precision = np.mean(precisions)
@@ -152,6 +153,9 @@ def compute_fold_average(folder, data=None, best_threshold=0.5, best_overlap=0.0
     else:
         results = deepcopy(data)
 
+    results.replace('inf', np.nan, inplace=True)
+    results.replace('', np.nan, inplace=True)
+    results.replace(' ', np.nan, inplace=True)
     metric_names = ['Dice', 'Dice-TP', 'Dice-P', 'Dice-N']
     if metrics is not None:
         metric_names.extend(metrics)
@@ -212,7 +216,7 @@ def compute_fold_average(folder, data=None, best_threshold=0.5, best_overlap=0.0
                         global_recall, global_precision, global_F1, accuracy, balanced_accuracy]
         for m in metric_names:
             if m in fold_results.columns.values:
-                if m == 'HD95':
+                if m in ['HD95', 'ASSD', 'RAVD', 'VC', 'OASSD']:
                     # avg = all_for_thresh[all_for_thresh[m] != -1.0][m].dropna().astype('float32').mean()
                     # std = all_for_thresh[all_for_thresh[m] != -1.0][m].dropna().astype('float32').std(ddof=0)
                     avg = fold_results.loc[thresh_index][fold_results.loc[thresh_index][m] != -1.0][m].dropna().astype('float32').mean()
@@ -244,14 +248,16 @@ def compute_fold_average(folder, data=None, best_threshold=0.5, best_overlap=0.0
     study_filename = os.path.join(folder, 'Validation', 'folds_metrics_average.csv') if suffix == '' else os.path.join(folder, 'Validation', 'folds_metrics_average_' + suffix + '.csv')
     metrics_per_fold_df.to_csv(study_filename)
     export_df_to_latex(folder, data=metrics_per_fold_df, suffix='folds_metrics_average' + suffix)
+    export_df_to_latex_paper(folder, data=metrics_per_fold_df, suffix='folds_metrics_average' + suffix)
 
-    # Averaging the results from the different folds, taking into account the sample size for each fold
+    ####### Averaging the results from the different folds ###########
     total_samples = metrics_per_fold_df['# samples'].sum()
     fold_averaged_results = [total_samples]
     fixed_metrics = ['Patient-wise recall', 'Patient-wise precision', 'Patient-wise F1', 'FPPP', 'Object-wise recall',
                      'Object-wise precision', 'Object-wise F1', 'Global recall', 'Global precision', 'Global F1',
-                     'Accuracy', 'Balanced accuracy', 'Dice-TP_mean', 'Dice-P_mean', 'Dice-N_mean']
+                     'Accuracy', 'Balanced accuracy'] #, 'Dice-TP_mean', 'Dice-P_mean', 'Dice-N_mean'
     fold_averaged_results_df_columns = ['Fold']
+    # Performing classical averaging first on the relevant metrics
     for fm in fixed_metrics:
         mean_final = 0
         std_final = metrics_per_fold_df[fm].values.std()
@@ -262,8 +268,9 @@ def compute_fold_average(folder, data=None, best_threshold=0.5, best_overlap=0.0
         fold_averaged_results.extend([mean_final, std_final])
         fold_averaged_results_df_columns.extend([fm + '_mean', fm + '_std'])
 
+    # Performing pooled estimates (taking into account the sample size for each fold) when relevant
     for m in metric_names:
-        if m in results.columns.values:
+        if m in [x.split('_')[0] for x in metrics_per_fold_df.columns.values]:
             mean_final = 0
             std_final = 0
             for f in unique_folds:
@@ -271,7 +278,6 @@ def compute_fold_average(folder, data=None, best_threshold=0.5, best_overlap=0.0
                 mean_final = mean_final + (fold_val[m + '_mean'].values[0] * fold_val['# samples'].values[0])
                 std_final = std_final + ((fold_val['# samples'].values[0] - 1) * math.pow(fold_val[m + '_std'].values[0], 2) + (fold_val['# samples'].values[0]) * math.pow(fold_val[m + '_mean'].values[0], 2))
             mean_final = mean_final / total_samples
-            #std_final = std_final / total_samples
             std_final = math.sqrt((1 / (total_samples - 1)) * (std_final - (total_samples * math.pow(mean_final, 2))))
             fold_averaged_results.extend([mean_final, std_final])
             fold_averaged_results_df_columns.extend([m + '_mean', m + '_std'])
@@ -281,56 +287,5 @@ def compute_fold_average(folder, data=None, best_threshold=0.5, best_overlap=0.0
     output_filename = os.path.join(folder, 'Validation', 'overall_metrics_average.csv') if suffix == '' else os.path.join(folder, 'Validation', 'overall_metrics_average_' + suffix + '.csv')
     fold_averaged_results_df.to_csv(output_filename, index=False)
     export_mean_std_df_to_latex(folder, data=fold_averaged_results_df, suffix='overall_metrics_average' + suffix)
+    export_mean_std_df_to_latex_paper(folder, data=fold_averaged_results_df, suffix='overall_metrics_average' + suffix)
 
-
-def export_df_to_latex(folder, data, suffix=''):
-    matrix_filename = os.path.join(folder, 'Validation', 'df_latex.txt') if suffix == '' else os.path.join(folder, 'Validation',
-                                                                                                       'df_' + suffix + '_latex.txt')
-    columns = data.columns.values
-    pfile = open(matrix_filename, 'w')
-    pfile.write('\\begin{table}[h]\n')
-    pfile.write('\\adjustbox{max width=\\textwidth}{\n')
-    pfile.write('\\begin{tabular}{l'+('r' * int(len(columns) / 2)) + '}\n')
-    pfile.write('\\toprule\n')
-    header_line = '{}'
-    for elem in columns:
-        header_line = header_line + ' & ' + elem
-    pfile.write(header_line + '\\tabularnewline\n')
-    for index, row in data.iterrows():
-        line = str(int(row[columns[0]])) + ' & ' + str(int(row[columns[1]]))
-        for c in range(2, len(columns), 1):
-            value = row[columns[c]]
-            line = line + ' & $' + str(np.round(value * 100., 2)) + '$'
-        pfile.write(line + '\\tabularnewline\n')
-    pfile.write('\\bottomrule\n')
-    pfile.write('\\end{tabular}\n')
-    pfile.write('}\n')
-    pfile.write('\\end{table}')
-    pfile.close()
-
-
-def export_mean_std_df_to_latex(folder, data, suffix=''):
-    matrix_filename = os.path.join(folder, 'Validation', 'mean_std_df_latex.txt') if suffix == '' else os.path.join(folder, 'Validation',
-                                                                                                       'mean_std_df_' + suffix + '_latex.txt')
-    columns = data.columns.values[1:]
-    pfile = open(matrix_filename, 'w')
-    pfile.write('\\begin{table}[h]\n')
-    pfile.write('\\adjustbox{max width=\\textwidth}{\n')
-    pfile.write('\\begin{tabular}{l'+('r' * int(len(columns) / 2)) + '}\n')
-    pfile.write('\\toprule\n')
-    header_line = '{}'
-    for elem in columns[::2]:
-        header_line = header_line + ' & ' + elem.split('_')[0]
-    pfile.write(header_line + '\\tabularnewline\n')
-    for index, row in data.iterrows():
-        line = ''
-        for c in range(0, len(columns), 2):
-            mean_value = row[columns[c]]
-            std_value = row[columns[c+1]]
-            line = line + ' & $' + str(np.round(mean_value * 100., 2)) + '\pm' + str(np.round(std_value * 100., 2)) + '$'
-        pfile.write(line + '\\tabularnewline\n')
-    pfile.write('\\bottomrule\n')
-    pfile.write('\\end{tabular}\n')
-    pfile.write('}\n')
-    pfile.write('\\end{table}')
-    pfile.close()
