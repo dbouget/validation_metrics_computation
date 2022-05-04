@@ -10,36 +10,36 @@ _Amsterdam_ and _StOlavs_ for instance.
 The main data directory containing the original MRI images and corresponding
 manual annotations is expected to resemble:
 
-    ├── path/to/data/root/
-        ├── index0/
-        │   ├── AMS0/
-        |   |   ├── volumes/
-        |   |   |   ├── AMS0_T1.nii.gz
-        |   |   ├── segmentations/
-        |   |   |   ├── AMS0_T1_label_tumor.nii.gz
-        │   ├── AMS25/
-        │   ├── AMS50/
-        ├── index1/
-        │   ├── STO25/
-        │   ├── STO50/
+    └── path/to/data/root/
+        └── index0/
+            ├── AMS0/
+            |   ├── volumes/
+            |   |   └── AMS0_T1.nii.gz
+            |   └── segmentations/
+            |       └── AMS0_T1_label_tumor.nii.gz
+            ├── AMS25/
+            └── AMS50/
+        └── index1/
+            ├── STO25/
+            └── STO50/
 
 ## 1.2 Inference results folder structure
 The inference results should be grouped inside what will become the validation folder,
 resembling the following structure (here for Study1). The outer-most sub-folder
 naming convention inside _predictions_ are the fold numbers.
 
-    ├── path/to/validation/study/
-        ├── predictions/
-        │   ├── 0/
-        |   |   ├── index0_AMS0/
-        |   |   |   ├── AMS0_T1-predictions.nii.gz  
-        |   |   ├── index1_STO25/ 
-        |   |   |   ├── STO25_T1-predictions.nii.gz  
-        │   ├── 0/
-        |   |   ├── index0_AMS50/
-        |   |   |   ├── AMS50_T1-predictions.nii.gz  
-        |   |   ├── index1_STO50/ 
-        |   |   |   ├── STO50_T1-predictions.nii.gz  
+    └── path/to/validation/study/
+        └── predictions/
+            ├── 0/
+            |   ├── index0_AMS0/
+            |   |   └── AMS0_T1-predictions.nii.gz  
+            |   ├── index1_STO25/ 
+            |   |   └── STO25_T1-predictions.nii.gz  
+            └── 0/
+                ├── index0_AMS50/
+                |   └── AMS50_T1-predictions.nii.gz  
+                └── index1_STO50/ 
+                    └── STO50_T1-predictions.nii.gz  
 
 ## 1.3 Folds file
 The file with patients' distribution within each fold used for training should list
