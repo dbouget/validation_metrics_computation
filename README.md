@@ -13,10 +13,10 @@ manual annotations is expected to resemble:
     └── path/to/data/root/
         └── index0/
             ├── AMS0/
-            |   ├── volumes/
-            |   |   └── AMS0_T1.nii.gz
-            |   └── segmentations/
-            |       └── AMS0_T1_label_tumor.nii.gz
+            │   ├── volumes/
+            │   │   └── AMS0_T1.nii.gz
+            │   └── segmentations/
+            │       └── AMS0_T1_label_tumor.nii.gz
             ├── AMS25/
             └── AMS50/
         └── index1/
@@ -31,13 +31,13 @@ naming convention inside _predictions_ are the fold numbers.
     └── path/to/validation/study/
         └── predictions/
             ├── 0/
-            |   ├── index0_AMS0/
-            |   |   └── AMS0_T1-predictions.nii.gz  
-            |   ├── index1_STO25/ 
-            |   |   └── STO25_T1-predictions.nii.gz  
+            │   ├── index0_AMS0/
+            │   |   └── AMS0_T1-predictions.nii.gz  
+            │   ├── index1_STO25/ 
+            │   |   └── STO25_T1-predictions.nii.gz  
             └── 0/
                 ├── index0_AMS50/
-                |   └── AMS50_T1-predictions.nii.gz  
+                │   └── AMS50_T1-predictions.nii.gz  
                 └── index1_STO50/ 
                     └── STO50_T1-predictions.nii.gz  
 
