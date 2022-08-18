@@ -52,6 +52,7 @@ class HGGPreopSegmentationStudy:
         try:
             results_filename = os.path.join(self.input_folder, 'Validation', 'all_dice_scores.csv')
             results_df = pd.read_csv(results_filename)
+            results_df.replace('inf', np.nan, inplace=True)
             columns_to_drop = ['Fold', 'Patient', 'Threshold', 'Dice', '#GT', '#Det']
             columns = results_df.columns
             for elem in columns_to_drop:
@@ -74,6 +75,7 @@ class HGGPreopSegmentationStudy:
                 if data is None:
                     results_filename = os.path.join(self.input_folder, 'Validation', 'all_dice_scores.csv')
                     results = pd.read_csv(results_filename)
+                    results.replace('inf', np.nan, inplace=True)
                 else:
                     results = deepcopy(data)
                 dice_thresholds = [np.round(x, 2) for x in list(np.unique(results['Threshold'].values))]
@@ -92,6 +94,7 @@ class HGGPreopSegmentationStudy:
             if data is None:
                 results_filename = os.path.join(self.input_folder, 'Validation', 'all_dice_scores.csv')
                 results = pd.read_csv(results_filename)
+                results.replace('inf', np.nan, inplace=True)
             else:
                 results = deepcopy(data)
 
@@ -106,7 +109,7 @@ class HGGPreopSegmentationStudy:
             if True in [x not in list(results.columns) for x in list(self.extra_patient_parameters.columns)]:
                 optimal_results_per_patient.loc[:, 'Patient'] = optimal_results_per_patient.Patient.astype(str)
                 optimal_results_per_patient = pd.merge(optimal_results_per_patient, self.extra_patient_parameters,
-                                                       on="Patient", how='left')
+                                                       on="Patient", how='left') #how='outer'
 
             folder = os.path.join(self.input_folder, 'Validation', metric2 + '-Wise')
             os.makedirs(folder, exist_ok=True)
@@ -145,6 +148,7 @@ class HGGPreopSegmentationStudy:
             if data is None:
                 results_filename = os.path.join(self.input_folder, 'Validation', 'all_dice_scores.csv')
                 results = pd.read_csv(results_filename)
+                results.replace('inf', np.nan, inplace=True)
             else:
                 results = deepcopy(data)
             total_thresholds = [np.round(x, 1) for x in list(np.unique(results['Threshold'].values))]

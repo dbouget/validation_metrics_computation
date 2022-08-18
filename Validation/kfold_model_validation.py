@@ -22,7 +22,14 @@ from Validation.validation_utilities import best_segmentation_probability_thresh
 from Validation.extra_metrics_computation import compute_extra_metrics, compute_overall_metrics_correlation
 from tqdm import tqdm
 
-def compute_dice(volume1, volume2, epsilon=0.1):
+def compute_dice(volume1, volume2):
+    dice = 0.
+    if np.sum(volume1[volume2 == 1]) != 0:
+        dice = (np.sum(volume1[volume2 == 1]) * 2.0) / (np.sum(volume1) + np.sum(volume2))
+    return dice
+
+
+def compute_dice_uncertain(volume1, volume2, epsilon=0.1):
     dice = (np.sum(volume1[volume2 == 1]) * 2.0 + epsilon) / (np.sum(volume1) + np.sum(volume2) + epsilon)
     return dice
 
@@ -33,7 +40,7 @@ def separate_dice_computation(args):
     :param args: list of arguments split from the lists given to the multiprocessing.Pool call.
     :return: list with the computed results for the current patient, at the given probability threshold.
     """
-    t = args[0]
+    t = np.round(args[0], 2)
     fold_number = args[1]
     gt = args[2]
     detection_ni = args[3]
@@ -113,6 +120,8 @@ class ModelValidation:
         cross_validation_description_file = os.path.join(self.input_folder, 'cross_validation_folds.txt')
         self.results_df = []
         self.dice_output_filename = os.path.join(self.output_folder, 'all_dice_scores.csv')
+        self.results_df_base_columns = ['Fold', 'Patient', 'Threshold', 'Dice', 'Inst DICE', 'Inst Recall',
+                                                    'Inst Precision', 'Largest foci Dice', '#GT', '#Det']
         if not os.path.exists(self.dice_output_filename):
             self.results_df = pd.DataFrame(columns=['Fold', 'Patient', 'Threshold', 'Dice', 'Inst DICE', 'Inst Recall',
                                                     'Inst Precision', 'Largest foci Dice', '#GT', '#Det', 'Volume segmentation'])
@@ -190,23 +199,29 @@ class ModelValidation:
                 gt = ground_truth_ni.get_data()
                 gt[gt >= 1] = 1
 
-                pool = multiprocessing.Pool(processes=SharedResources.getInstance().number_processes)
+                pat_results = []
                 thr_range = np.arange(0.1, 1.1, 0.1)
-                pat_results = pool.map(separate_dice_computation, zip(thr_range,
-                                                                      itertools.repeat(fold_number),
-                                                                      itertools.repeat(gt),
-                                                                      itertools.repeat(detection_ni),
-                                                                      itertools.repeat(uid)
-                                                                      )
-                                       )
-                pool.close()
-                pool.join()
+                if SharedResources.getInstance().number_processes > 1:
+                    pool = multiprocessing.Pool(processes=SharedResources.getInstance().number_processes)
+                    pat_results = pool.map(separate_dice_computation, zip(thr_range,
+                                                                          itertools.repeat(fold_number),
+                                                                          itertools.repeat(gt),
+                                                                          itertools.repeat(detection_ni),
+                                                                          itertools.repeat(uid)
+                                                                          )
+                                           )
+                    pool.close()
+                    pool.join()
+                else:
+                    for thr_value in thr_range:
+                        thr_res = separate_dice_computation([thr_value, fold_number, gt, detection_ni, uid])
+                        pat_results.append(thr_res)
 
                 for ind, th in enumerate(thr_range):
                     sub_df = self.results_df.loc[(self.results_df['Patient'] == uid) & (self.results_df['Fold'] == fold_number) & (self.results_df['Threshold'] == th)]
-                    ind_values = np.asarray(pat_results).reshape((len(thr_range), len(self.results_df.columns)))[ind, :]
-                    buff_df = pd.DataFrame(ind_values.reshape(1, len(self.results_df.columns)),
-                                           columns=list(self.results_df.columns))
+                    ind_values = np.asarray(pat_results).reshape((len(thr_range), len(self.results_df_base_columns)))[ind, :]
+                    buff_df = pd.DataFrame(ind_values.reshape(1, len(self.results_df_base_columns)),
+                                           columns=list(self.results_df_base_columns))
                     if len(sub_df) == 0:
                         self.results_df = self.results_df.append(buff_df, ignore_index=True)
                     else:
