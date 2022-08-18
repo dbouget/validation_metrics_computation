@@ -385,27 +385,18 @@ def compute_fold_average(folder, data=None, best_threshold=0.5, best_overlap=0.0
     metrics_per_fold_df = pd.DataFrame(data=metrics_per_fold, columns=fold_average_columns)
     study_filename = os.path.join(output_folder, 'folds_metrics_average.csv') if suffix == '' else os.path.join(output_folder, 'folds_metrics_average_' + suffix + '.csv')
     metrics_per_fold_df.to_csv(study_filename)
-<<<<<<< HEAD
-    export_df_to_latex(output_folder, data=metrics_per_fold_df, suffix='folds_metrics_average' + suffix)
-=======
     export_df_to_latex(folder, data=metrics_per_fold_df, suffix='folds_metrics_average' + suffix)
     export_df_to_latex_paper(folder, data=metrics_per_fold_df, suffix='folds_metrics_average' + suffix)
->>>>>>> 32314e2a97dcb66fef44b0877f5e2144ab306db7
 
     ####### Averaging the results from the different folds ###########
     total_samples = metrics_per_fold_df['# samples'].sum()
     fold_averaged_results = [total_samples]
     fixed_metrics = ['Patient-wise recall', 'Patient-wise precision', 'Patient-wise F1', 'FPPP', 'Object-wise recall',
                      'Object-wise precision', 'Object-wise F1', 'Global recall', 'Global precision', 'Global F1',
-<<<<<<< HEAD
                      'Accuracy', 'Balanced accuracy', 'Positive rate', 'Negative rate', 'TNR']
     if dice_fixed_metric:
         fixed_metrics = fixed_metrics + ['Dice_mean']
     fixed_metrics = fixed_metrics + ['Dice-TP_mean', 'Dice-P_mean', 'Dice-N_mean']
-
-=======
-                     'Accuracy', 'Balanced accuracy'] #, 'Dice-TP_mean', 'Dice-P_mean', 'Dice-N_mean'
->>>>>>> 32314e2a97dcb66fef44b0877f5e2144ab306db7
     fold_averaged_results_df_columns = ['Fold']
     # Performing classical averaging first on the relevant metrics
     for fm in fixed_metrics:
@@ -436,63 +427,5 @@ def compute_fold_average(folder, data=None, best_threshold=0.5, best_overlap=0.0
                                             columns=fold_averaged_results_df_columns)
     output_filename = os.path.join(output_folder, 'overall_metrics_average.csv') if suffix == '' else os.path.join(output_folder, 'overall_metrics_average_' + suffix + '.csv')
     fold_averaged_results_df.to_csv(output_filename, index=False)
-<<<<<<< HEAD
     export_mean_std_df_to_latex(output_folder, data=fold_averaged_results_df, suffix='overall_metrics_average' + suffix)
-
-
-def export_df_to_latex(output_folder, data, suffix=''):
-    matrix_filename = os.path.join(output_folder, 'df_latex.txt') if suffix == '' else os.path.join(output_folder,
-                                                                                                    'df_' + suffix + '_latex.txt')
-    columns = data.columns.values
-    pfile = open(matrix_filename, 'w')
-    pfile.write('\\begin{table}[h]\n')
-    pfile.write('\\adjustbox{max width=\\textwidth}{\n')
-    pfile.write('\\begin{tabular}{l'+('r' * int(len(columns) / 2)) + '}\n')
-    pfile.write('\\toprule\n')
-    header_line = '{}'
-    for elem in columns:
-        header_line = header_line + ' & ' + elem
-    pfile.write(header_line + '\\tabularnewline\n')
-    for index, row in data.iterrows():
-        line = str(int(row[columns[0]])) + ' & ' + str(int(row[columns[1]]))
-        for c in range(2, len(columns), 1):
-            value = row[columns[c]]
-            line = line + ' & $' + str(np.round(value * 100., 2)) + '$'
-        pfile.write(line + '\\tabularnewline\n')
-    pfile.write('\\bottomrule\n')
-    pfile.write('\\end{tabular}\n')
-    pfile.write('}\n')
-    pfile.write('\\end{table}')
-    pfile.close()
-
-
-def export_mean_std_df_to_latex(output_folder, data, suffix=''):
-    matrix_filename = os.path.join(output_folder, 'mean_std_df_latex.txt') if suffix == '' else os.path.join(output_folder,
-                                                                                                       'mean_std_df_' + suffix + '_latex.txt')
-    columns = data.columns.values[1:]
-    pfile = open(matrix_filename, 'w')
-    pfile.write('\\begin{table}[h]\n')
-    pfile.write('\\adjustbox{max width=\\textwidth}{\n')
-    pfile.write('\\begin{tabular}{l'+('r' * int(len(columns) / 2)) + '}\n')
-    pfile.write('\\toprule\n')
-    header_line = '{}'
-    for elem in columns[::2]:
-        header_line = header_line + ' & ' + elem.split('_')[0]
-    pfile.write(header_line + '\\tabularnewline\n')
-    for index, row in data.iterrows():
-        line = ''
-        for c in range(0, len(columns), 2):
-            mean_value = row[columns[c]]
-            std_value = row[columns[c+1]]
-            line = line + ' & $' + str(np.round(mean_value * 100., 2)) + '\pm' + str(np.round(std_value * 100., 2)) + '$'
-        pfile.write(line + '\\tabularnewline\n')
-    pfile.write('\\bottomrule\n')
-    pfile.write('\\end{tabular}\n')
-    pfile.write('}\n')
-    pfile.write('\\end{table}')
-    pfile.close()
-=======
-    export_mean_std_df_to_latex(folder, data=fold_averaged_results_df, suffix='overall_metrics_average' + suffix)
-    export_mean_std_df_to_latex_paper(folder, data=fold_averaged_results_df, suffix='overall_metrics_average' + suffix)
-
->>>>>>> 32314e2a97dcb66fef44b0877f5e2144ab306db7
+    export_mean_std_df_to_latex_paper(output_folder, data=fold_averaged_results_df, suffix='overall_metrics_average' + suffix)
