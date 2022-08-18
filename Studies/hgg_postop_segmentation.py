@@ -7,23 +7,27 @@ import traceback
 from Utils.resources import SharedResources
 from Utils.io_converters import reload_optimal_validation_parameters
 from Validation.validation_utilities import compute_fold_average
-from Plotting.metric_versus_binned_boxplot import compute_binned_metric_over_metric_boxplot
+from Plotting.metric_versus_binned_boxplot import compute_binned_metric_over_metric_boxplot_postop
+import matplotlib.pyplot as plt
+import seaborn as sns
+from pathlib import Path
 
 
-class HGGPreopSegmentationStudy:
+class HGGPostopSegmentationStudy:
     """
-    Study for segmenting high-grade gliomas (the core tumor) in T1 MRIs.
+    Study for residual tumor segmentation from high-grade gliomas (the core tumor) in T1 MRIs.
     """
     def __init__(self):
         self.study_name = SharedResources.getInstance().studies_study_name
         self.input_folder = os.path.join(SharedResources.getInstance().studies_input_folder, self.study_name)
         self.output_folder = SharedResources.getInstance().studies_output_folder
+
         self.metric_names = []
         self.extra_patient_parameters = None
         if os.path.exists(SharedResources.getInstance().studies_extra_parameters_filename):
             self.extra_patient_parameters = pd.read_csv(SharedResources.getInstance().studies_extra_parameters_filename)
             # Patient unique ID might include characters
-            self.extra_patient_parameters['Patient'] = self.extra_patient_parameters.Patient.astype(int).astype(str)
+            self.extra_patient_parameters.loc[:, 'Patient'] = self.extra_patient_parameters.Patient.astype(int).astype(str)
 
         if not os.path.exists(self.output_folder):
             self.output_folder = self.input_folder
@@ -33,9 +37,18 @@ class HGGPreopSegmentationStudy:
 
     def run(self):
         self.__retrieve_optimum_values()
+        self.__read_results()
         self.__compute_and_plot_overall()
         if self.extra_patient_parameters is not None:
-            self.__compute_and_plot_metric_over_metric_categories(metric1='Dice', metric2='Volume', metric2_cutoffs=[30.])
+            self.__compute_and_plot_metric_over_metric_categories(data=self.results, metric1='Dice', metric2='Volume', metric2_cutoffs=[1.])
+            volume_figure_fname = Path(self.input_folder, 'Validation', 'volume_cutoff.png')
+            self.__compute_and_plot_volume_cutoff_results(volume_cutoff_range=[0., 0.5], optimal_cutoff=0.175, save_fname=volume_figure_fname)
+            results_cutoff = self.__compute_results_cutoff_volume(cutoff_volume=0.175)
+            results_cutoff.to_csv(Path(self.input_folder, 'Validation', 'all_dice_scores_volume_cutoff.csv'), index=False)
+            compute_fold_average(self.input_folder, results_cutoff, best_threshold=self.optimal_threshold,
+                                 best_overlap=self.optimal_overlap,
+                                 suffix='volume_cutoff', output_folder=str(Path(self.input_folder, 'Validation')))
+
 
     def __retrieve_optimum_values(self):
         study_filename = os.path.join(self.input_folder, 'Validation', 'optimal_dice_study.csv')
@@ -44,14 +57,35 @@ class HGGPreopSegmentationStudy:
 
         self.optimal_overlap, self.optimal_threshold = reload_optimal_validation_parameters(study_filename=study_filename)
 
+    def __read_results(self):
+        try:
+            results_filename = os.path.join(self.input_folder, 'Validation', 'all_dice_scores.csv')
+            results = pd.read_csv(results_filename)
+            dice_thresholds = [np.round(x, 1) for x in list(np.unique(results['Threshold'].values))]
+            nb_thresholds = len(dice_thresholds)
+            optimal_threshold_index = dice_thresholds.index(self.optimal_threshold)
+            optimal_results_per_patient = results[optimal_threshold_index::nb_thresholds]
+            #best_dices_per_patient = results['Dice'].values[optimal_threshold_index::nb_thresholds]
+
+            if self.extra_patient_parameters is not None:
+                optimal_results_per_patient.loc[:, 'Patient'] = optimal_results_per_patient.Patient.astype(str)
+                optimal_results_per_patient = pd.merge(optimal_results_per_patient, self.extra_patient_parameters,
+                                                       on="Patient", how='left')
+
+            self.results = results
+            self.optimal_results = optimal_results_per_patient
+        except Exception as e:
+            print('{}'.format(traceback.format_exc()))
+
     def __compute_and_plot_overall(self):
         """
         Generate average results across all folds and per fold for all the computed metrics.
         :return:
         """
         try:
-            results_filename = os.path.join(self.input_folder, 'Validation', 'all_dice_scores.csv')
-            results_df = pd.read_csv(results_filename)
+            # results_filename = os.path.join(self.input_folder, 'Validation', 'all_dice_scores.csv')
+            # results_df = pd.read_csv(results_filename)
+            results_df = deepcopy(self.results)
             columns_to_drop = ['Fold', 'Patient', 'Threshold', 'Dice', '#GT', '#Det']
             columns = results_df.columns
             for elem in columns_to_drop:
@@ -107,10 +141,11 @@ class HGGPreopSegmentationStudy:
                 optimal_results_per_patient.loc[:, 'Patient'] = optimal_results_per_patient.Patient.astype(str)
                 optimal_results_per_patient = pd.merge(optimal_results_per_patient, self.extra_patient_parameters,
                                                        on="Patient", how='left')
-
+            results = deepcopy(self.results)
+            optimal_results_per_patient = deepcopy(self.optimal_results)
             folder = os.path.join(self.input_folder, 'Validation', metric2 + '-Wise')
             os.makedirs(folder, exist_ok=True)
-            compute_binned_metric_over_metric_boxplot(folder=folder, data=optimal_results_per_patient,
+            compute_binned_metric_over_metric_boxplot_postop(folder=folder, data=optimal_results_per_patient,
                                                       metric1=metric1, metric2=metric2, criterion1=self.optimal_overlap,
                                                       postfix='_overall' + suffix, number_bins=10)
 
@@ -132,7 +167,7 @@ class HGGPreopSegmentationStudy:
 
                 fold_folder = os.path.join(fold_base_folder, str(f))
                 os.makedirs(fold_folder, exist_ok=True)
-                compute_binned_metric_over_metric_boxplot(folder=fold_folder, data=fold_optimal_results,
+                compute_binned_metric_over_metric_boxplot_postop(folder=fold_folder, data=fold_optimal_results,
                                                           metric1=metric1, metric2=metric2,
                                                           criterion1=self.optimal_overlap,
                                                           postfix='_fold' + str(f) + suffix, number_bins=10)
@@ -178,3 +213,118 @@ class HGGPreopSegmentationStudy:
                                                           suffix=suffix + '_' + metric2 + '_' + category)
         except Exception as e:
             print('{}'.format(traceback.format_exc()))
+
+    def __compute_and_plot_volume_cutoff_results(self, volume_cutoff_range=[0., 5.], n_cutoff_steps=100,
+                                                 cutoff_gt = True, optimal_cutoff = None, save_fname=None):
+        try:
+            cutoff_range = np.arange(volume_cutoff_range[0], volume_cutoff_range[1], (volume_cutoff_range[1]-volume_cutoff_range[0])/n_cutoff_steps)
+            results = {}
+            for cutoff in cutoff_range:
+                res = threshold_volume_and_compute_classification_metrics(self.optimal_results, cutoff, cutoff if cutoff_gt else 0.0)
+                if not len(results):
+                    for k, v in res.items():
+                        results[k] = [v]
+                else:
+                    for k, v in res.items():
+                        results[k].append(v)
+
+                output = f"Cutoff = {cutoff}, recall = {res['Recall']}, precision = {res['Precision']}, "\
+                         f"F1 = {res['F1']}, accuracy = {res['Accuracy']}, tnr = {res['True negative rate']}, "\
+                         f"positive rate = {res['Positive rate']}, negative rate = {res['Negative rate']}"
+                print(output)
+
+            plot_classification_metrics_volume_cutoffs(results, cutoff_range, 'first_plot', None,
+                                                       metrics_to_plot=['Recall', 'Precision', 'F1', 'Accuracy',
+                                                                        'Dice Positive', 'Dice True Positive'],
+                                                       optimal_cutoff=optimal_cutoff,
+                                                       metrics_to_maximize=['Accuracy', 'F1', 'Recall'],
+                                                       save_fname=save_fname)
+
+
+        except Exception as e:
+            print('{}'.format(traceback.format_exc()))
+
+        return
+
+    def __compute_results_cutoff_volume(self, cutoff_volume, cutoff_gt=True):
+        data = deepcopy(self.optimal_results)
+        data.loc[(data['Volume segmentation'] <= cutoff_volume), 'Volume segmentation'] = 0.0
+        data.loc[(data['Volume segmentation'] == cutoff_volume), '#Det'] = 0
+
+        if cutoff_gt:
+            data.loc[(data['Volume'] <= cutoff_volume), 'Volume'] = 0.0
+            data.loc[(data['Volume'] == 0), '#GT'] = 0
+
+        # Drop columns missing volume
+        data.dropna(axis=0, subset=['Volume'], inplace=True)
+
+        return data
+
+
+def threshold_volume_and_compute_classification_metrics(optimal_results, cutoff_seg_vol, cutoff_true_vol=0.01):
+
+    true_positives = len(
+        optimal_results.loc[(optimal_results['Volume segmentation'] > cutoff_seg_vol) & (optimal_results['Volume'] > cutoff_true_vol)])
+    false_negatives = len(
+        optimal_results.loc[(optimal_results['Volume segmentation'] <= cutoff_seg_vol) & (optimal_results['Volume'] > cutoff_true_vol)])
+    false_positives = len(
+        optimal_results.loc[(optimal_results['Volume segmentation'] > cutoff_seg_vol) & (optimal_results['Volume'] <= cutoff_true_vol)])
+    true_negatives = len(
+        optimal_results.loc[(optimal_results['Volume segmentation'] <= cutoff_seg_vol) & (optimal_results['Volume'] <= cutoff_true_vol)])
+    total = true_positives + false_negatives + false_positives + true_negatives
+
+    # print(true_positives, false_negatives, false_positives, true_negatives, total)
+    # print((true_positives +false_negatives) / total)
+    # print((true_negatives + false_positives) / total)
+    dice_pos = np.mean(optimal_results.loc[(optimal_results['Volume'] > cutoff_true_vol), 'Dice'])
+    dice_true_pos = np.mean(optimal_results.loc[(optimal_results['Volume segmentation'] > cutoff_seg_vol) & \
+                                                (optimal_results['Volume'] > cutoff_true_vol), 'Dice'])
+
+    results = {}
+    results['Recall'] = true_positives / (true_positives + false_negatives)
+    results['Precision'] = true_positives / (true_positives + false_positives)
+    results['F1'] = 2 * ((results['Recall'] * results['Precision']) / (results['Precision'] + results['Recall']))
+    results['Accuracy'] = (true_positives + true_negatives) / (true_negatives + true_positives + false_negatives + false_positives)
+    results['True negative rate'] = true_negatives / (true_negatives + false_negatives)
+    results['Balanced accuracy'] = (results['Recall'] + results['True negative rate']) / 2
+    results['Positive rate'] = (true_positives + false_negatives) / total
+    results['Negative rate'] = (true_negatives + false_positives) / total
+    results['Dice Positive'] = dice_pos
+    results['Dice True Positive'] = dice_true_pos
+
+    return results
+
+def plot_classification_metrics_volume_cutoffs(results, cutoffs, title, output_path,
+                                               metrics_to_maximize=['Accuracy'],
+                                               metrics_to_plot=None, optimal_cutoff=None, save_fname=None):
+    sns.set_theme()
+    palette = sns.color_palette('colorblind', 10)
+    fig = plt.figure()
+    plt.ylim(0, 1)
+    maxim_metrics = []
+    colors = {}
+    legend = []
+    if metrics_to_plot is None:
+        metrics_to_plot = results.keys()
+
+    for i, m in enumerate(metrics_to_plot):
+        plt.plot(cutoffs, results[m], c=palette[i])
+        colors[m] = palette[i]
+        if m in metrics_to_maximize:
+            maxim_metrics.append(results[m])
+
+    if optimal_cutoff is None:
+        arg_cutoff = np.argmax(np.sum(np.array(maxim_metrics), axis=0))
+    else:
+        arg_cutoff = np.where(np.round(cutoffs, 3) == optimal_cutoff)[0][0]
+
+
+    for m in metrics_to_maximize:
+        plt.scatter(cutoffs[arg_cutoff], results[m][arg_cutoff], c=colors[m], marker='x')
+        plt.text(cutoffs[arg_cutoff], results[m][arg_cutoff], f"{m} = {results[m][arg_cutoff]:.3f}", fontsize=10)
+
+    #print(maxim_combined, cutoffs[maxim_combined])
+    plt.legend(metrics_to_plot)
+    if save_fname is not None:
+        plt.savefig(save_fname)
+    plt.show(block=False)

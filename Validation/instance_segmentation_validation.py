@@ -180,14 +180,19 @@ class InstanceSegmentationValidation:
         average_dice = 0.0
         largest_component_dice = 0.0
         recall = 0.0
-        precision = 0.0
+        precision = 1.0
         if len(self.matching_results) != 0:
             array_matching = np.asarray(self.matching_results)
             average_dice = np.mean(array_matching, axis=0)[2]
             recall = len(np.unique(array_matching[:, 0])) / len(self.gt_candidates)
             precision = len(np.unique(array_matching[:, 1])) / len(self.detection_candidates)
-        index_larger_component = [x.area for x in self.gt_candidates].index(np.max([x.area for x in self.gt_candidates]))
-        matching_larger_component = [x[0] for x in self.matching_results].index(index_larger_component + 1) if (index_larger_component + 1) in [x[0] for x in self.matching_results] else -1
-        if matching_larger_component != -1:
-            largest_component_dice = self.matching_results[matching_larger_component][2]
+
+            index_larger_component = [x.area for x in self.gt_candidates].index(np.max([x.area for x in self.gt_candidates]))
+            matching_larger_component = [x[0] for x in self.matching_results].index(index_larger_component + 1) if (index_larger_component + 1) in [x[0] for x in self.matching_results] else -1
+            if matching_larger_component != -1:
+                largest_component_dice = self.matching_results[matching_larger_component][2]
+
+        if len(self.gt_candidates) == 0 and len(self.detection_candidates) > 0:
+            precision = 0
+
         self.instance_detection_results = [average_dice, recall, precision, largest_component_dice]

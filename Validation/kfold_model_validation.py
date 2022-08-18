@@ -12,14 +12,15 @@ from nibabel import four_to_three
 from copy import deepcopy
 import pandas as pd
 from math import ceil
-from tqdm import tqdm
 
 from Validation.instance_segmentation_validation import *
 from Utils.resources import SharedResources
 from Utils.io_converters import get_fold_from_file
-from Validation.validation_utilities import best_segmentation_probability_threshold_analysis, compute_fold_average
+from Utils.volume_utilities import compute_tumor_volume
+from Validation.validation_utilities import best_segmentation_probability_threshold_analysis,\
+    best_segmentation_probability_threshold_analysis_postop, compute_fold_average
 from Validation.extra_metrics_computation import compute_extra_metrics, compute_overall_metrics_correlation
-
+from tqdm import tqdm
 
 def compute_dice(volume1, volume2, epsilon=0.1):
     dice = (np.sum(volume1[volume2 == 1]) * 2.0 + epsilon) / (np.sum(volume1) + np.sum(volume2) + epsilon)
@@ -44,6 +45,8 @@ def separate_dice_computation(args):
     detection[detection >= t] = 1
     detection = detection.astype('uint8')
     dice = compute_dice(gt, detection)
+    voxel_size = np.prod(detection_ni.header.get_zooms()[0:3])
+    volume_seg_ml = compute_tumor_volume(detection, voxel_size)
 
     obj_val = InstanceSegmentationValidation(gt_image=gt, detection_image=detection)
     try:
@@ -56,7 +59,8 @@ def separate_dice_computation(args):
 
     instance_results = obj_val.instance_detection_results
     results.append([fold_number, patient_id, t, dice] + instance_results + [len(obj_val.gt_candidates),
-                                                                            len(obj_val.detection_candidates)])
+                                                                            len(obj_val.detection_candidates)] \
+                   + [volume_seg_ml])
 
     return results
 
@@ -88,7 +92,7 @@ class ModelValidation:
 
     def run(self):
         self.__generate_dice_scores()
-        optimal_overlap, optimal_threshold = best_segmentation_probability_threshold_analysis(self.input_folder,
+        optimal_overlap, optimal_threshold = best_segmentation_probability_threshold_analysis_postop(self.input_folder,
                                                                                               detection_overlap_thresholds=self.detection_overlap_thresholds)
 
         compute_fold_average(self.input_folder, best_threshold=optimal_threshold, best_overlap=optimal_overlap)
@@ -111,7 +115,7 @@ class ModelValidation:
         self.dice_output_filename = os.path.join(self.output_folder, 'all_dice_scores.csv')
         if not os.path.exists(self.dice_output_filename):
             self.results_df = pd.DataFrame(columns=['Fold', 'Patient', 'Threshold', 'Dice', 'Inst DICE', 'Inst Recall',
-                                                    'Inst Precision', 'Largest foci Dice', '#GT', '#Det'])
+                                                    'Inst Precision', 'Largest foci Dice', '#GT', '#Det', 'Volume segmentation'])
         else:
             self.results_df = pd.read_csv(self.dice_output_filename)
             if self.results_df.columns[0] != 'Fold':

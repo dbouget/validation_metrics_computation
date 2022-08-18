@@ -34,7 +34,8 @@ class SharedResources:
         self.__parse_default_parameters()
         self.__parse_validation_parameters()
         self.__parse_studies_parameters()
-
+        if 'Test' in self.config:
+            self.__parse_test_parameters()
     def __parse_default_parameters(self):
         """
         Parse the user-selected configuration parameters linked to the overall behaviour.
@@ -165,3 +166,52 @@ class SharedResources:
         if self.config.has_option('Validation', 'tiny_objects_removal_threshold'):
             if self.config['Validation']['tiny_objects_removal_threshold'].split('#')[0].strip() != '':
                 self.validation_tiny_objects_removal_threshold = int(self.config['Validation']['tiny_objects_removal_threshold'].split('#')[0].strip())
+
+    def __parse_test_parameters(self):
+        self.test_input_folder = ''
+        self.test_output_folder = ''
+        self.test_nb_folds = 5
+        self.test_metric_names = []
+        self.test_detection_overlap_thresholds = []
+        self.test_gt_files_suffix = ''
+        self.test_prediction_files_suffix = ''
+        self.test_tiny_objects_removal_threshold = 50
+
+        if self.config.has_option('Test', 'input_folder'):
+            if self.config['Test']['input_folder'].split('#')[0].strip() != '':
+                self.test_input_folder = self.config['Test']['input_folder'].split('#')[0].strip()
+
+        if self.config.has_option('Test', 'output_folder'):
+            if self.config['Test']['output_folder'].split('#')[0].strip() != '':
+                self.test_output_folder = self.config['Test']['output_folder'].split('#')[0].strip()
+
+        if self.config.has_option('Test', 'nb_folds'):
+            if self.config['Test']['nb_folds'].split('#')[0].strip() != '':
+                self.test_nb_folds = int(self.config['Test']['nb_folds'].split('#')[0].strip())
+
+        if self.config.has_option('Test', 'extra_metrics'):
+            if self.config['Test']['extra_metrics'].split('#')[0].strip() != '':
+                self.test_metric_names = [x.strip() for x in
+                                                self.config['Test']['extra_metrics'].split('#')[0].strip().split(
+                                                    ',')]
+
+        if self.config.has_option('Test', 'detection_overlap_thresholds'):
+            if self.config['Test']['detection_overlap_thresholds'].split('#')[0].strip() != '':
+                self.test_detection_overlap_thresholds = [float(x) for x in self.config['Test'][
+                    'detection_overlap_thresholds'].split('#')[0].strip().split(',')]
+        if len(self.test_detection_overlap_thresholds) == 0:
+            self.test_detection_overlap_thresholds = [0.]
+
+        if self.config.has_option('Test', 'prediction_files_suffix'):
+            if self.config['Test']['prediction_files_suffix'].split('#')[0].strip() != '':
+                self.test_prediction_files_suffix = \
+                self.config['Test']['prediction_files_suffix'].split('#')[0].strip()
+
+        if self.config.has_option('Test', 'gt_files_suffix'):
+            if self.config['Test']['gt_files_suffix'].split('#')[0].strip() != '':
+                self.test_gt_files_suffix = self.config['Test']['gt_files_suffix'].split('#')[0].strip()
+
+        if self.config.has_option('Test', 'tiny_objects_removal_threshold'):
+            if self.config['Test']['tiny_objects_removal_threshold'].split('#')[0].strip() != '':
+                self.test_tiny_objects_removal_threshold = int(
+                    self.config['Test']['tiny_objects_removal_threshold'].split('#')[0].strip())
