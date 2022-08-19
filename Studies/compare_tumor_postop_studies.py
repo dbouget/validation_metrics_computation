@@ -80,7 +80,9 @@ class ComparePostopSegmentationStudy:
 
         self.read_global_results(subdir=subdir)
         self.compute_results_minimal_dataset_overlap_cutoff(subdir=subdir)
-        self.write_cutoff_results_latex(subdir=subdir)
+        self.write_cutoff_results_latex(metrics=['Dice-P', 'Dice-TP', 'Patient-wise recall postop',
+                                                 'Patient-wise precision postop', 'Patient-wise F1 postop'],
+                                        suffix='diceP-diceTP-F1-Rec-Prec', subdir=subdir)
         self.plot_all_metrics(subdir=subdir)
 
     def read_global_results(self, subdir=''):
@@ -140,10 +142,12 @@ class ComparePostopSegmentationStudy:
 
             #results_min_filtered_thresh =
 
-    def write_cutoff_results_latex(self, metrics=['Dice_mean', 'Dice-TP_mean', 'Dice-P_mean', 'Global F1', 'Global recall', 'Global precision'],
+    def write_cutoff_results_latex(self, metrics=['Dice', 'Dice-TP', 'Dice-P', 'Patient-wise recall postop',
+                                                 'Patient-wise precision postop', 'Patient-wise F1 postop'],
                                     suffix='', subdir=''):
-        latex_table_fname = Path(self.output_dir, subdir, 'results_latex.txt') if suffix == '' else Path(self.output_dir,
-                                                                                           f'results_{suffix}_latex.txt')
+        latex_table_fname = Path(self.output_dir, subdir, 'key_metrics_after_cutoff_latex.txt') if suffix == '' else Path(self.output_dir,
+                                                                                                                          subdir,
+                                                                                                                          f'results_{suffix}_latex.txt')
         pfile = open(latex_table_fname, 'w+')
 
         for i, study in enumerate(self.studies):
@@ -152,43 +156,49 @@ class ComparePostopSegmentationStudy:
             results = pd.read_csv(fname)
 
             for m in metrics:
-                output_string += f" & {results.loc[0, m+'_mean']*100:.2f}$\pm${results.loc[0, m+'_std']*100:.2f}"
+                if results.loc[0, m+'_std'] > 0:
+                    output_string += f" & {results.loc[0, m + '_mean'] * 100:.2f}$\pm${results.loc[0, m + '_std'] * 100:.2f}"
+                else:
+                    output_string += f" & {results.loc[0, m+'_mean']*100:.2f}"
 
-            pfile.write(output_string + "\\ \n")
+            pfile.write(output_string + "\\\ \n")
 
         pfile.close()
 
     def plot_all_metrics(self, subdir=''):
-        dice_metrics = ['Dice', 'Dice-TP_mean', 'Dice-P_mean', 'Dice-N_mean']
+        dice_metrics = ['Dice', 'Dice-P', 'Dice-TP', 'Dice-N']
         self.plot_metrics(dice_metrics,
-                          'dice_metrics.png', 'Postop dice metrics', figsize=(10, 7),
+                          'dice_metrics.png', f'Postop DSC - {subdir}', figsize=(10, 7),
                           subdir=subdir)
 
-        classification_metrics = ['Global recall', 'Global precision', 'Global F1', 'Accuracy',
+        classification_metrics = ['Patient-wise recall postop', 'Patient-wise precision postop',
+                                  'Patient-wise F1 postop', 'Accuracy',
                                   'Balanced accuracy', 'Positive rate', 'TNR']
         self.plot_metrics(classification_metrics,
                           'res_tumor_classification.png',
-                          'Metrics for binary classification: residual tumor / gross total resection',
+                          f'Metrics for binary classification: residual tumor / gross total resection - {subdir}',
                           figsize=(18, 10),
                           subdir=subdir)
 
-        specific_classification_metrics = ['Patient-wise recall', 'Patient-wise precision', 'Patient-wise F1',
-                             'Object-wise recall', 'Object-wise precision', 'Object-wise F1']
+        specific_classification_metrics = ['Patient-wise recall postop', 'Patient-wise precision postop',
+                                           'Patient-wise F1 postop', 'Object-wise recall', 'Object-wise precision',
+                                           'Object-wise F1']
         self.plot_metrics(specific_classification_metrics,
                           'specific_classification_metrics.png',
-                          'Patient-wise and object-wise classification metrics',
+                          f'Patient-wise and object-wise classification metrics - {subdir}',
                           figsize=(16, 10),
                           subdir=subdir)
 
-        metrics_cutoff = ['Global recall', 'Global precision', 'Global F1', 'Accuracy',
-                                  'Balanced accuracy', 'Positive rate', 'TNR', 'Dice', 'Dice-P_mean']
+        metrics_cutoff = ['Patient-wise recall postop', 'Patient-wise precision postop',
+                          'Patient-wise F1 postop', 'Accuracy', 'Balanced accuracy',
+                          'Positive rate', 'TNR', 'Dice-P', 'Dice-TP']
         self.plot_metrics(metrics_cutoff,
                           'metrics_volume_cutoff.png',
-                          'Classification and dice metrics after volume cutoff',
+                          f'Classification metrics and DSC after volume cutoff - {subdir}',
                           figsize=(18, 10), cutoff=True, subdir=subdir)
         self.plot_metrics(metrics_cutoff,
                           'metrics_before_volume_cutoff.png',
-                          'Classification and dice metrics before volume cutoff',
+                          f'Classification metrics and DSC before volume cutoff - {subdir}',
                           figsize=(18, 10), cutoff=False, subdir=subdir)
 
     def __retrieve_optimum_values(self, study):
@@ -241,6 +251,7 @@ class ComparePostopSegmentationStudy:
         ax.legend((r[0] for r in rects), (l for l in legends), loc=1, fontsize=12)
         plot_output_path = Path(self.output_dir, subdir, file_name)
         print(f"Saving figure at {plot_output_path}")
+        plt.tight_layout()
         plt.savefig(plot_output_path)
 
 

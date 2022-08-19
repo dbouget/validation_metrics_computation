@@ -303,7 +303,8 @@ def compute_fold_average(folder, data=None, best_threshold=0.5, best_overlap=0.0
     metrics_per_fold = []
     fold_average_columns = ['Fold', '# samples', 'Patient-wise recall', 'Patient-wise precision', 'Patient-wise F1',
                             'FPPP', 'Object-wise recall', 'Object-wise precision', 'Object-wise F1',
-                            'Global recall', 'Global precision', 'Global F1', 'Accuracy', 'Balanced accuracy', 'Positive rate', 'Negative rate', 'TNR']
+                            'Patient-wise recall postop', 'Patient-wise precision postop', 'Patient-wise F1 postop',
+                            'Accuracy', 'Balanced accuracy', 'Positive rate', 'Negative rate', 'TNR']
     for m in metric_names:
         if m in results.columns.values or 'Dice' in m:
             fold_average_columns.extend([m + '_mean', m + '_std'])
@@ -341,16 +342,16 @@ def compute_fold_average(folder, data=None, best_threshold=0.5, best_overlap=0.0
         false_positives = len(all_for_thresh.loc[(all_for_thresh['#Det'] > 0) & (all_for_thresh['#GT'] == 0)])
         true_negatives = len(all_for_thresh.loc[(all_for_thresh['#Det'] == 0) & (all_for_thresh['#GT'] == 0)])
 
-        global_recall = true_positives / (true_positives + false_negatives)
-        global_precision = true_positives / (true_positives + false_positives)
-        global_F1 = 2 * ((global_recall * global_precision) / (global_precision + global_recall))
+        patient_wise_recall_postop = true_positives / (true_positives + false_negatives)
+        patient_wise_precision_postop = true_positives / (true_positives + false_positives)
+        patient_wise_F1_postop = 2 * ((patient_wise_recall_postop * patient_wise_precision_postop) / (patient_wise_precision_postop + patient_wise_recall_postop))
         accuracy = (true_positives + true_negatives ) / (true_negatives + true_positives + false_negatives + false_positives)
         true_negative_rate = 1 if (true_negatives + false_negatives) == 0 else true_negatives / (true_negatives + false_negatives)
-        balanced_accuracy = (global_recall + true_negative_rate) / 2
+        balanced_accuracy = (patient_wise_recall_postop + true_negative_rate) / 2
 
         fold_average = [f, len(np.unique(fold_results['Patient'].values)), patient_wise_recall, patient_wise_precision,
                         patient_wise_F1, fppp, object_wise_recall, object_wise_precision, object_wise_F1,
-                        global_recall, global_precision, global_F1, accuracy, balanced_accuracy,
+                        patient_wise_recall_postop, patient_wise_precision_postop, patient_wise_F1_postop, accuracy, balanced_accuracy,
                         (true_positives + false_negatives)/len(all_for_thresh), (false_positives + true_negatives)/len(all_for_thresh), true_negative_rate]
         for m in metric_names:
             if m in fold_results.columns.values:
@@ -385,18 +386,18 @@ def compute_fold_average(folder, data=None, best_threshold=0.5, best_overlap=0.0
     metrics_per_fold_df = pd.DataFrame(data=metrics_per_fold, columns=fold_average_columns)
     study_filename = os.path.join(output_folder, 'folds_metrics_average.csv') if suffix == '' else os.path.join(output_folder, 'folds_metrics_average_' + suffix + '.csv')
     metrics_per_fold_df.to_csv(study_filename)
-    export_df_to_latex(folder, data=metrics_per_fold_df, suffix='folds_metrics_average' + suffix)
-    export_df_to_latex_paper(folder, data=metrics_per_fold_df, suffix='folds_metrics_average' + suffix)
+    export_df_to_latex(output_folder, data=metrics_per_fold_df, suffix='folds_metrics_average' + suffix)
+    export_df_to_latex_paper(output_folder, data=metrics_per_fold_df, suffix='folds_metrics_average' + suffix)
 
     ####### Averaging the results from the different folds ###########
     total_samples = metrics_per_fold_df['# samples'].sum()
     fold_averaged_results = [total_samples]
     fixed_metrics = ['Patient-wise recall', 'Patient-wise precision', 'Patient-wise F1', 'FPPP', 'Object-wise recall',
-                     'Object-wise precision', 'Object-wise F1', 'Global recall', 'Global precision', 'Global F1',
-                     'Accuracy', 'Balanced accuracy', 'Positive rate', 'Negative rate', 'TNR']
+                     'Object-wise precision', 'Object-wise F1', 'Patient-wise recall postop', 'Patient-wise precision postop',
+                     'Patient-wise F1 postop', 'Accuracy', 'Balanced accuracy', 'Positive rate', 'Negative rate', 'TNR']
     if dice_fixed_metric:
-        fixed_metrics = fixed_metrics + ['Dice_mean']
-    fixed_metrics = fixed_metrics + ['Dice-TP_mean', 'Dice-P_mean', 'Dice-N_mean']
+        fixed_metrics = fixed_metrics + ['Dice_mean', 'Dice-TP_mean', 'Dice-P_mean', 'Dice-N_mean']
+
     fold_averaged_results_df_columns = ['Fold']
     # Performing classical averaging first on the relevant metrics
     for fm in fixed_metrics:
@@ -427,5 +428,5 @@ def compute_fold_average(folder, data=None, best_threshold=0.5, best_overlap=0.0
                                             columns=fold_averaged_results_df_columns)
     output_filename = os.path.join(output_folder, 'overall_metrics_average.csv') if suffix == '' else os.path.join(output_folder, 'overall_metrics_average_' + suffix + '.csv')
     fold_averaged_results_df.to_csv(output_filename, index=False)
-    export_mean_std_df_to_latex(output_folder, data=fold_averaged_results_df, suffix='overall_metrics_average' + suffix)
-    export_mean_std_df_to_latex_paper(output_folder, data=fold_averaged_results_df, suffix='overall_metrics_average' + suffix)
+    export_mean_std_df_to_latex(output_folder, data=fold_averaged_results_df, suffix='overall_metrics_average_' + suffix)
+    export_mean_std_df_to_latex_paper(output_folder, data=fold_averaged_results_df, suffix='overall_metrics_average_' + suffix)
