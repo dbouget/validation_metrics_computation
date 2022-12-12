@@ -78,6 +78,7 @@ class SharedResources:
         self.studies_task = ''
         self.studies_study_name = None
         self.studies_extra_parameters_filename = ''
+        self.studies_exclude_ids = []
 
         if self.config.has_option('Studies', 'input_folder'):
             if self.config['Studies']['input_folder'].split('#')[0].strip() != '':
@@ -98,6 +99,11 @@ class SharedResources:
         if self.config.has_option('Studies', 'extra_parameters_filename'):
             if self.config['Studies']['extra_parameters_filename'].split('#')[0].strip() != '':
                 self.studies_extra_parameters_filename = self.config['Studies']['extra_parameters_filename'].split('#')[0].strip()
+
+        if self.config.has_option('Studies', 'exclude_ids'):
+            if self.config['Studies']['exclude_ids'].split('#')[0].strip() != '':
+                self.studies_exclude_ids = [str(x) for x in self.config['Studies'][
+                    'exclude_ids'].split('#')[0].strip().split(',')]
 
     def __parse_validation_parameters(self):
         """
@@ -176,6 +182,7 @@ class SharedResources:
         self.test_gt_files_suffix = ''
         self.test_prediction_files_suffix = ''
         self.test_tiny_objects_removal_threshold = 50
+        self.test_exclude_ids = []
 
         if self.config.has_option('Test', 'input_folder'):
             if self.config['Test']['input_folder'].split('#')[0].strip() != '':
@@ -215,3 +222,8 @@ class SharedResources:
             if self.config['Test']['tiny_objects_removal_threshold'].split('#')[0].strip() != '':
                 self.test_tiny_objects_removal_threshold = int(
                     self.config['Test']['tiny_objects_removal_threshold'].split('#')[0].strip())
+
+        if self.config.has_option('Test', 'exclude_ids'):
+            if self.config['Test']['exclude_ids'].split('#')[0].strip() != '':
+                self.test_exclude_ids = [str(x) for x in self.config['Test'][
+                    'exclude_ids'].split('#')[0].strip().split(',')]

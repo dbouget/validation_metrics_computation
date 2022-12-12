@@ -7,6 +7,7 @@ import math
 import nibabel as nib
 from copy import deepcopy
 from Utils.resources import SharedResources
+from pathlib import Path
 
 
 def box_overlap(box1, box2):
@@ -56,6 +57,9 @@ class InstanceSegmentationValidation:
         self.matching_results = []
         self.instance_detection_results = [0.0, 0.0, 1.0, 0.0]
         self.tiny_objects_removal_threshold = SharedResources.getInstance().validation_tiny_objects_removal_threshold
+        self.set_trace_parameters(
+            '/home/ragnhild/Data/Neuro/Studies/PostopSegmentation/NetworkValidation/Alexandros_experiments/503/trace_output',
+            0, 'index0_VUmc15', 10)
 
     def set_trace_parameters(self, output_folder, fold_number, patient, threshold):
         """
@@ -67,6 +71,8 @@ class InstanceSegmentationValidation:
         :return:
         """
         self.output_folder = output_folder
+        Path(self.output_folder).mkdir(exist_ok=True, parents=True)
+
         self.fold_number = fold_number
         self.patient = patient
         self.threshold = threshold
@@ -118,6 +124,7 @@ class InstanceSegmentationValidation:
             # print('Found {} objects after cleaning up.'.format(np.max(self.detection_labels)))
             self.detection_candidates = regionprops(self.detection_labels)
 
+        # self.dump_trace = True
         if self.dump_trace:
             dump_gt_filename = os.path.join(self.output_folder, str(self.fold_number), '1_' +
                                             self.patient.split('_')[0], 'gt_labels.nii.gz')

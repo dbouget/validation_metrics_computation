@@ -3,6 +3,8 @@ from Studies.hgg_preop_segmentation import *
 from Studies.hgg_postop_segmentation import *
 from Studies.compare_tumor_postop_studies import *
 from Studies.hgg_postop_testset_inference import *
+from Studies.compare_architectures import *
+
 
 class StudyConnector:
     """
@@ -26,5 +28,9 @@ class StudyConnector:
 
         if self.perform_study == 'hgg_postop_test_inference':
             processor = HGGPostopTestsetInference()
+            processor.run()
+
+        if self.perform_study == 'compare_architectures':
+            processor = CompareArchitecturesStudy()
             processor.run()
 

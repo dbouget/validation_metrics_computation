@@ -103,11 +103,11 @@ class ModelValidation:
                                                                                               detection_overlap_thresholds=self.detection_overlap_thresholds)
 
         compute_fold_average(self.input_folder, best_threshold=optimal_threshold, best_overlap=optimal_overlap)
-        compute_extra_metrics(self.data_root, self.input_folder, nb_folds=self.fold_number, split_way=self.split_way,
-                              optimal_threshold=optimal_threshold, metrics=self.metric_names[5:],
-                              gt_files_suffix=self.gt_files_suffix,
-                              prediction_files_suffix=self.prediction_files_suffix)
-        compute_overall_metrics_correlation(self.input_folder, best_threshold=optimal_threshold)
+        # compute_extra_metrics(self.data_root, self.input_folder, nb_folds=self.fold_number, split_way=self.split_way,
+        #                       optimal_threshold=optimal_threshold, metrics=self.metric_names[5:],
+        #                       gt_files_suffix=self.gt_files_suffix,
+        #                       prediction_files_suffix=self.prediction_files_suffix)
+        # compute_overall_metrics_correlation(self.input_folder, best_threshold=optimal_threshold)
 
     def __generate_dice_scores(self):
         """
@@ -121,10 +121,10 @@ class ModelValidation:
         self.results_df = []
         self.dice_output_filename = os.path.join(self.output_folder, 'all_dice_scores.csv')
         self.results_df_base_columns = ['Fold', 'Patient', 'Threshold', 'Dice', 'Inst DICE', 'Inst Recall',
-                                                    'Inst Precision', 'Largest foci Dice', '#GT', '#Det']
+                                                    'Inst Precision', 'Largest foci Dice', '#GT', '#Det', 'Predicted postop volume']
         if not os.path.exists(self.dice_output_filename):
             self.results_df = pd.DataFrame(columns=['Fold', 'Patient', 'Threshold', 'Dice', 'Inst DICE', 'Inst Recall',
-                                                    'Inst Precision', 'Largest foci Dice', '#GT', '#Det', 'Volume segmentation'])
+                                                    'Inst Precision', 'Largest foci Dice', '#GT', '#Det', 'Predicted postop volume'])
         else:
             self.results_df = pd.read_csv(self.dice_output_filename)
             if self.results_df.columns[0] != 'Fold':
@@ -149,7 +149,8 @@ class ModelValidation:
                 # start = time.time()
                 uid = patient.split('_')[1]
                 sub_folder_index = patient.split('_')[0]
-                patient_extended = '_'.join(patient.split('_')[1:-1]).strip()
+                #patient_extended = '_'.join(patient.split('_')[1:-1]).strip()
+                patient_extended = '_'.join(patient.split('_')[1:]).strip().replace('_sample', '')
 
                 # Checking if values have already been computed for the current patient to skip it if so.
                 # In case values were not properly computed for the core part (i.e. first 10 columns without

@@ -14,7 +14,7 @@ def get_fold_from_file(filename, fold_number):
     val_set = None
     test_set = None
     if filename is None or not os.path.exists(filename):
-        raise AttributeError('The provided filename containing the folds distribution is invalid.\n')
+        raise AttributeError(f'The provided filename containing the folds distribution is invalid: {filename}.\n')
 
     if filename.split('.')[-1] == 'txt':
         with open(filename) as f:
@@ -22,8 +22,8 @@ def get_fold_from_file(filename, fold_number):
                 val_line = f.readline()
                 test_line = f.readline()
 
-            val_line = f.readline()
-            test_line = f.readline()
+            val_line = f.readline().strip()
+            test_line = f.readline().strip()
 
             val_set = val_line.split(' ')
             val_set = [x for x in val_set]

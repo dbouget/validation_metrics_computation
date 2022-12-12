@@ -304,7 +304,7 @@ def compute_fold_average(folder, data=None, best_threshold=0.5, best_overlap=0.0
     fold_average_columns = ['Fold', '# samples', 'Patient-wise recall', 'Patient-wise precision', 'Patient-wise F1',
                             'FPPP', 'Object-wise recall', 'Object-wise precision', 'Object-wise F1',
                             'Patient-wise recall postop', 'Patient-wise precision postop', 'Patient-wise F1 postop',
-                            'Accuracy', 'Balanced accuracy', 'Positive rate', 'Negative rate', 'TNR']
+                            'Accuracy', 'Balanced accuracy', 'Positive rate', 'Negative rate', 'Specificity']
     for m in metric_names:
         if m in results.columns.values or 'Dice' in m:
             fold_average_columns.extend([m + '_mean', m + '_std'])
@@ -346,13 +346,13 @@ def compute_fold_average(folder, data=None, best_threshold=0.5, best_overlap=0.0
         patient_wise_precision_postop = true_positives / (true_positives + false_positives)
         patient_wise_F1_postop = 2 * ((patient_wise_recall_postop * patient_wise_precision_postop) / (patient_wise_precision_postop + patient_wise_recall_postop))
         accuracy = (true_positives + true_negatives ) / (true_negatives + true_positives + false_negatives + false_positives)
-        true_negative_rate = 1 if (true_negatives + false_negatives) == 0 else true_negatives / (true_negatives + false_negatives)
-        balanced_accuracy = (patient_wise_recall_postop + true_negative_rate) / 2
+        specificity = 1 if (true_negatives + false_positives) == 0 else true_negatives / (true_negatives + false_positives)
+        balanced_accuracy = (patient_wise_recall_postop + specificity) / 2
 
         fold_average = [f, len(np.unique(fold_results['Patient'].values)), patient_wise_recall, patient_wise_precision,
                         patient_wise_F1, fppp, object_wise_recall, object_wise_precision, object_wise_F1,
                         patient_wise_recall_postop, patient_wise_precision_postop, patient_wise_F1_postop, accuracy, balanced_accuracy,
-                        (true_positives + false_negatives)/len(all_for_thresh), (false_positives + true_negatives)/len(all_for_thresh), true_negative_rate]
+                        (true_positives + false_negatives)/len(all_for_thresh), (false_positives + true_negatives)/len(all_for_thresh), specificity]
         for m in metric_names:
             if m in fold_results.columns.values:
                 if m in ['HD95', 'ASSD', 'RAVD', 'VC', 'OASSD']:
@@ -394,7 +394,8 @@ def compute_fold_average(folder, data=None, best_threshold=0.5, best_overlap=0.0
     fold_averaged_results = [total_samples]
     fixed_metrics = ['Patient-wise recall', 'Patient-wise precision', 'Patient-wise F1', 'FPPP', 'Object-wise recall',
                      'Object-wise precision', 'Object-wise F1', 'Patient-wise recall postop', 'Patient-wise precision postop',
-                     'Patient-wise F1 postop', 'Accuracy', 'Balanced accuracy', 'Positive rate', 'Negative rate', 'TNR']
+                     'Patient-wise F1 postop', 'Accuracy', 'Balanced accuracy', 'Positive rate', 'Negative rate', 'Specificity']
+
     if dice_fixed_metric:
         fixed_metrics = fixed_metrics + ['Dice_mean', 'Dice-TP_mean', 'Dice-P_mean', 'Dice-N_mean']
 

@@ -47,8 +47,8 @@ class ComparePostopSegmentationStudy:
 
         #self.studies = ['Ams_Trd_T1c', 'Ams_Trd_T1c_T1w', 'Ams_Trd_T1c_T1w_FLAIR', 'All_T1c_T1w_preop']
         #self.studies = ['run2_exp1_T1c', 'run2_exp2_T1c_T1w', 'run2_exp3_T1c_T1w_flair', 'run2_exp4_T1c_T1w_preop', 'run2_exp5_T1c_T1w_flair_preop']
-        self.studies = ['501', '502', '503', '504', '505']
-        self.studies_description = ['T1ce', 'T1ce+T1w', 'T1ce+T1w+FLAIR',  'T1ce+T1w+Preop T1ce', 'T1ce+T1w+FLAIR+Preop T1ce'] #'T1ce+T1w+Preop T1ce',
+        self.studies = ['501', '502', '503', '505']
+        self.studies_description = ['T1ce', 'T1ce+T1w', 'T1ce+T1w+FLAIR',  'T1ce+T1w+FLAIR+Preop T1ce'] #'T1ce+T1w+Preop T1ce',
 
         #self.studies = ['Ams_T1c', 'Ams_Trd_T1c', 'Ams_T1c_T1w', 'Ams_Trd_T1c_T1w'] #
         #self.studies_description = ['Ams, T1c', 'Ams + Trd, T1c', 'Ams, T1c + T1w', 'Ams + Trd, T1c + T1w']#, 'Ams v1 + Trd, T1c']

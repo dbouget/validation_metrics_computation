@@ -11,6 +11,7 @@ from Plotting.metric_versus_binned_boxplot import compute_binned_metric_over_met
 import matplotlib.pyplot as plt
 import seaborn as sns
 from pathlib import Path
+from pyCompare import blandAltman
 
 
 class HGGPostopSegmentationStudy:
@@ -38,17 +39,19 @@ class HGGPostopSegmentationStudy:
     def run(self):
         self.__retrieve_optimum_values()
         self.__read_results()
+        self.__drop_exclude_ids()
         self.__compute_and_plot_overall()
         if self.extra_patient_parameters is not None:
-            self.__compute_and_plot_metric_over_metric_categories(data=self.results, metric1='Dice', metric2='Volume', metric2_cutoffs=[1.])
-            volume_figure_fname = Path(self.input_folder, 'Validation', 'volume_cutoff.png')
-            self.__compute_and_plot_volume_cutoff_results(volume_cutoff_range=[0., 0.5], optimal_cutoff=0.175, save_fname=volume_figure_fname)
+            self.__compute_and_plot_metric_over_metric_categories(data=self.results, metric1='Dice', metric2='True postop volume', metric2_cutoffs=[1.])
+            # volume_figure_fname = Path(self.input_folder, 'Validation', 'volume_cutoff.png')
+            # self.__compute_and_plot_volume_cutoff_results(volume_cutoff_range=[0., 0.5], optimal_cutoff=0.175, save_fname=volume_figure_fname)
             results_cutoff = self.__compute_results_cutoff_volume(cutoff_volume=0.175)
             results_cutoff.to_csv(Path(self.input_folder, 'Validation', 'all_dice_scores_volume_cutoff.csv'), index=False)
             compute_fold_average(self.input_folder, results_cutoff, best_threshold=self.optimal_threshold,
                                  best_overlap=self.optimal_overlap,
                                  suffix='volume_cutoff', output_folder=str(Path(self.input_folder, 'Validation')))
-
+            results_cutoff = self.__compute_EOR(results_cutoff, crop_to_zero=True)
+            self.__study_volume_and_EOR(results_cutoff)
 
     def __retrieve_optimum_values(self):
         study_filename = os.path.join(self.input_folder, 'Validation', 'optimal_dice_study.csv')
@@ -77,6 +80,13 @@ class HGGPostopSegmentationStudy:
         except Exception as e:
             print('{}'.format(traceback.format_exc()))
 
+    def __drop_exclude_ids(self):
+        drop_index_res = self.results[self.results['Patient'].isin(self.exclude_ids)].index
+        self.results.drop(drop_index_res, axis=0, inplace=True)
+
+        drop_index_opt = self.optimal_results[self.optimal_results['Patient'].isin(self.exclude_ids)].index
+        self.optimal_results.drop(drop_index_opt, axis=0, inplace=True)
+
     def __compute_and_plot_overall(self):
         """
         Generate average results across all folds and per fold for all the computed metrics.
@@ -97,7 +107,7 @@ class HGGPostopSegmentationStudy:
             self.__compute_dice_confidence_intervals(data=results_df)
 
             if self.extra_patient_parameters is not None:
-                self.__compute_results_metric_over_metric(data=results_df, metric1='Dice', metric2='Volume', suffix='')
+                self.__compute_results_metric_over_metric(data=results_df, metric1='Dice', metric2='True postop volume', suffix='')
         except Exception as e:
             print('{}'.format(traceback.format_exc()))
 
@@ -229,7 +239,7 @@ class HGGPostopSegmentationStudy:
                         results[k].append(v)
 
                 output = f"Cutoff = {cutoff}, recall = {res['Recall']}, precision = {res['Precision']}, "\
-                         f"F1 = {res['F1']}, accuracy = {res['Accuracy']}, tnr = {res['True negative rate']}, "\
+                         f"F1 = {res['F1']}, accuracy = {res['Accuracy']}, tnr = {res['Specificity']}, "\
                          f"positive rate = {res['Positive rate']}, negative rate = {res['Negative rate']}"
                 print(output)
 
@@ -248,45 +258,101 @@ class HGGPostopSegmentationStudy:
 
     def __compute_results_cutoff_volume(self, cutoff_volume, cutoff_gt=True):
         data = deepcopy(self.optimal_results)
-        data.loc[(data['Volume segmentation'] <= cutoff_volume), 'Volume segmentation'] = 0.0
-        data.loc[(data['Volume segmentation'] == cutoff_volume), '#Det'] = 0
+        data.loc[(data['Predicted postop volume'] <= cutoff_volume), 'Predicted postop volume'] = 0.0
+        data.loc[(data['Predicted postop volume'] == cutoff_volume), '#Det'] = 0
 
         if cutoff_gt:
-            data.loc[(data['Volume'] <= cutoff_volume), 'Volume'] = 0.0
-            data.loc[(data['Volume'] == 0), '#GT'] = 0
+            data.loc[(data['True postop volume'] <= cutoff_volume), 'True postop volume'] = 0.0
+            data.loc[(data['True postop volume'] == 0), '#GT'] = 0
 
         # Drop columns missing volume
-        data.dropna(axis=0, subset=['Volume'], inplace=True)
+        data.dropna(axis=0, subset=['True postop volume'], inplace=True)
 
         return data
+
+    def __compute_EOR(self, results, crop_to_zero=False):
+        data = deepcopy(results)
+
+        true_EOR = np.array((results.loc[:, 'True preop volume'] - results.loc[:, 'True postop volume']) / results.loc[:, 'True preop volume'])
+        data['True EOR'] = true_EOR
+        #print(true_EOR[np.where(true_EOR<0)])
+        #print(data.loc[np.where(true_EOR < 0), 'Patient'].values)
+
+        predicted_EOR_type1 = np.array((results.loc[:, 'True preop volume'] - results.loc[:, 'Predicted postop volume']) / results.loc[:, 'True preop volume'])
+        data['Predicted EOR type 1'] = predicted_EOR_type1
+        #print(predicted_EOR_type1[np.where(predicted_EOR_type1 < 0)])
+        #print(data.loc[np.where(predicted_EOR_type1 < 0), 'Patient'].values)
+
+        if crop_to_zero:
+            data.loc[(data['True EOR'] < 0), 'True EOR'] = 0.0
+            data.loc[(data['Predicted EOR type 1'] < 0), 'Predicted EOR type 1'] = 0.0
+
+        return data
+
+    def __study_volume_and_EOR(self, results):
+        data = deepcopy(results)
+        output_folder = Path(self.input_folder, 'Validation', 'Volume-EOR')
+        output_folder.mkdir(exist_ok=True)
+        sns.set_style('ticks')
+
+        # EOR
+        save_fname = str(Path(output_folder, f'EOR_scatter_{self.study_name}_Validation.png'))
+        plt.figure()
+        ax = sns.scatterplot(data=data*100, x='True EOR', y='Predicted EOR type 1')
+        ax.plot(ax.get_xlim(), ax.get_ylim(), ls="--", c=".1")
+        ax.set(title=f'True vs predicted EOR',
+               xlabel='True EOR (%)', ylabel='Predicted EOR (%)')
+        plt.savefig(save_fname)
+
+        save_fname = str(Path(output_folder, f'EOR_bland_altman_{self.study_name}_Validation.png'))
+        blandAltman(data['True EOR'], data['Predicted EOR type 1'],
+                    title=f'Bland-Altman of true vs predicted EOR',
+                    savePath=save_fname)
+
+        # VOLUME
+        save_fname = str(Path(output_folder, f'volume_scatter_{self.study_name}_Validation.png'))
+        plt.figure()
+        plt.xscale('symlog')
+        plt.yscale('symlog')
+        ax = sns.scatterplot(data=data, x='True postop volume', y='Predicted postop volume')
+        ax.plot(ax.get_xlim(), ax.get_ylim(), ls="--", c=".1")
+        #ax.title('True vs predicted postop volume (symlog scale)')
+        ax.set(title=f'True vs predicted postop volume (symlog scale)',
+               xlabel='True postop volume (ml)', ylabel='Predicted postop volume (ml)')
+        plt.savefig(save_fname)
+
+        save_fname = str(Path(output_folder, f'volume_bland_altman_{self.study_name}_Validation.png'))
+        blandAltman(data['True postop volume'], data['Predicted postop volume'],
+                    title=f'Bland-Altman of true vs predicted postop volume',
+                    savePath=save_fname)
 
 
 def threshold_volume_and_compute_classification_metrics(optimal_results, cutoff_seg_vol, cutoff_true_vol=0.01):
 
     true_positives = len(
-        optimal_results.loc[(optimal_results['Volume segmentation'] > cutoff_seg_vol) & (optimal_results['Volume'] > cutoff_true_vol)])
+        optimal_results.loc[(optimal_results['Predicted postop volume'] > cutoff_seg_vol) & (optimal_results['True postop volume'] > cutoff_true_vol)])
     false_negatives = len(
-        optimal_results.loc[(optimal_results['Volume segmentation'] <= cutoff_seg_vol) & (optimal_results['Volume'] > cutoff_true_vol)])
+        optimal_results.loc[(optimal_results['Predicted postop volume'] <= cutoff_seg_vol) & (optimal_results['True postop volume'] > cutoff_true_vol)])
     false_positives = len(
-        optimal_results.loc[(optimal_results['Volume segmentation'] > cutoff_seg_vol) & (optimal_results['Volume'] <= cutoff_true_vol)])
+        optimal_results.loc[(optimal_results['Predicted postop volume'] > cutoff_seg_vol) & (optimal_results['True postop volume'] <= cutoff_true_vol)])
     true_negatives = len(
-        optimal_results.loc[(optimal_results['Volume segmentation'] <= cutoff_seg_vol) & (optimal_results['Volume'] <= cutoff_true_vol)])
+        optimal_results.loc[(optimal_results['Predicted postop volume'] <= cutoff_seg_vol) & (optimal_results['True postop volume'] <= cutoff_true_vol)])
     total = true_positives + false_negatives + false_positives + true_negatives
 
     # print(true_positives, false_negatives, false_positives, true_negatives, total)
     # print((true_positives +false_negatives) / total)
     # print((true_negatives + false_positives) / total)
-    dice_pos = np.mean(optimal_results.loc[(optimal_results['Volume'] > cutoff_true_vol), 'Dice'])
-    dice_true_pos = np.mean(optimal_results.loc[(optimal_results['Volume segmentation'] > cutoff_seg_vol) & \
-                                                (optimal_results['Volume'] > cutoff_true_vol), 'Dice'])
+    dice_pos = np.mean(optimal_results.loc[(optimal_results['True postop volume'] > cutoff_true_vol), 'Dice'])
+    dice_true_pos = np.mean(optimal_results.loc[(optimal_results['Predicted postop volume'] > cutoff_seg_vol) & \
+                                                (optimal_results['True postop volume'] > cutoff_true_vol), 'Dice'])
 
     results = {}
     results['Recall'] = true_positives / (true_positives + false_negatives)
     results['Precision'] = true_positives / (true_positives + false_positives)
     results['F1'] = 2 * ((results['Recall'] * results['Precision']) / (results['Precision'] + results['Recall']))
     results['Accuracy'] = (true_positives + true_negatives) / (true_negatives + true_positives + false_negatives + false_positives)
-    results['True negative rate'] = true_negatives / (true_negatives + false_negatives)
-    results['Balanced accuracy'] = (results['Recall'] + results['True negative rate']) / 2
+    results['Specificity'] = true_negatives / (true_negatives + false_positives)
+    results['Balanced accuracy'] = (results['Recall'] + results['Specificity']) / 2
     results['Positive rate'] = (true_positives + false_negatives) / total
     results['Negative rate'] = (true_negatives + false_positives) / total
     results['Dice Positive'] = dice_pos
