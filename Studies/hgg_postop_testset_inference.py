@@ -292,11 +292,11 @@ class HGGPostopTestsetInference:
     def __compute_results_cutoff_volume(self, cutoff_volume, cutoff_gt=True):
         data = deepcopy(self.optimal_results)
         data.loc[(data['Predicted postop volume'] <= cutoff_volume), 'Predicted postop volume'] = 0.0
-        data.loc[(data['Predicted postop volume'] == cutoff_volume), '#Det'] = 0
+        data.loc[(data['Predicted postop volume'] <= cutoff_volume), '#Det'] = 0
 
         if cutoff_gt:
             data.loc[(data['True postop volume'] <= cutoff_volume), 'True postop volume'] = 0.0
-            data.loc[(data['True postop volume'] == 0), '#GT'] = 0
+            data.loc[(data['True postop volume'] <= 0), '#GT'] = 0
 
         # Drop columns missing volume
         data.dropna(axis=0, subset=['True postop volume'], inplace=True)
