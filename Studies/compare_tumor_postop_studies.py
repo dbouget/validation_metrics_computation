@@ -45,27 +45,11 @@ class ComparePostopSegmentationStudy:
                 print(f"Convert patient IDs to int failed, error {e}")
             self.extra_patient_parameters.loc[:, 'Patient'] = self.extra_patient_parameters.Patient.astype(str)
 
-        #self.studies = ['Ams_Trd_T1c', 'Ams_Trd_T1c_T1w', 'Ams_Trd_T1c_T1w_FLAIR', 'All_T1c_T1w_preop']
-        #self.studies = ['run2_exp1_T1c', 'run2_exp2_T1c_T1w', 'run2_exp3_T1c_T1w_flair', 'run2_exp4_T1c_T1w_preop', 'run2_exp5_T1c_T1w_flair_preop']
+        # self.studies = ['run2_exp1_T1c', 'run2_exp2_T1c_T1w', 'run2_exp3_T1c_T1w_flair', 'run2_exp4_T1c_T1w_preop', 'run2_exp5_T1c_T1w_flair_preop']
+
         self.studies = ['501', '502', '503', '504', '505']
-        self.studies_description = ['T1ce', 'T1ce+T1w', 'T1ce+T1w+FLAIR',  'T1ce+T1w+Preop T1ce', 'T1ce+T1w+FLAIR+Preop T1ce'] #'T1ce+T1w+Preop T1ce',
-
-        #self.studies = ['Ams_T1c', 'Ams_Trd_T1c', 'Ams_T1c_T1w', 'Ams_Trd_T1c_T1w'] #
-        #self.studies_description = ['Ams, T1c', 'Ams + Trd, T1c', 'Ams, T1c + T1w', 'Ams + Trd, T1c + T1w']#, 'Ams v1 + Trd, T1c']
-
-        #self.studies = ['Ams_T1c', 'Ams_Trd_T1c', 'Ams_T1c_T1w', 'Ams_Trd_T1c_T1w'] #
-        #self.studies_description = ['Ams, T1c', 'Ams + Trd, T1c', 'Ams, T1c + T1w', 'Ams + Trd, T1c + T1w']#, 'Ams v1 + Trd, T1c']
-        # self.studies_description = ['Ams, T1c', 'Ams, T1c + T1w']  # , 'Ams v1 + Trd, T1c']
-        # self.studies = ['Ams_T1c', 'Ams_T1c_T1w']  #
-
-        #self.studies = ['Postop_Finetune_MRI_HGG_Preop_BrainMask', 'Postop_3Seq_v2', 'Postop_t1_w_t1woc']
-        #self.studies_short = ['T1c', 'T1c + T2 + FLAIR', 'T1c + T1']
-
-        #self.studies = ['Ams_T1c']#, 'Ams_Trd_T1c']
-        #self.studies_short = ['Ams T1c']
-
-        #self.studies = ['ams_data_stuyd']
-        #self.studies_short = ['AMS Inference only']
+        # self.studies_description = ['T1ce', 'T1ce+T1w', 'T1ce+T1w+FLAIR',  'T1ce+T1w+Preop T1ce', 'T1ce+T1w+FLAIR+Preop T1ce'] #'T1ce+T1w+Preop T1ce',
+        self.studies_description = ['A', 'B', 'C', 'D', 'E']
 
         #sns.set_theme()
         self.palette = sns.color_palette('Accent', 10)
@@ -73,7 +57,7 @@ class ComparePostopSegmentationStudy:
         self.colors = [self.palette[1], self.palette[4], self.palette[3], self.palette[6], self.palette[7]]
 
     def run(self):
-        #self._run_subdir('Validation')
+        self._run_subdir('Validation')
         self._run_subdir('Test')
         return
 

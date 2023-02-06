@@ -46,13 +46,6 @@ class HGGPostopTestsetInference:
         print("Detection overlap: ", self.detection_overlap_thresholds)
         self.gt_files_suffix = SharedResources.getInstance().test_gt_files_suffix
         self.prediction_files_suffix = SharedResources.getInstance().test_prediction_files_suffix
-        self.exclude_ids = SharedResources.getInstance().test_exclude_ids
-        if len(self.exclude_ids) > 0:
-            try:
-                exclude_ids = [int(i) for i in self.exclude_ids]
-                self.exclude_ids = exclude_ids
-            except Exception as e:
-                print(f"Convert patient IDs to int failed, error {e}")
 
         self.extra_patient_parameters = None
         if os.path.exists(SharedResources.getInstance().studies_extra_parameters_filename):
@@ -63,8 +56,18 @@ class HGGPostopTestsetInference:
             except Exception as e:
                 print(f"Convert patient IDs to int failed, error {e}")
             self.extra_patient_parameters.loc[:, 'Patient'] = self.extra_patient_parameters.Patient.astype(str)
+
         self.optimal_overlap = None
         self.optimal_threshold = None
+
+        self.convert_ids = SharedResources.getInstance().test_convert_ids
+        self.exclude_ids = SharedResources.getInstance().test_exclude_ids
+        if len(self.exclude_ids) > 0:
+            try:
+                exclude_ids = [int(i) for i in self.exclude_ids]
+                self.exclude_ids = exclude_ids
+            except Exception as e:
+                print(f"Convert patient IDs to int failed, error {e}")
 
     def run(self):
         self.__generate_dice_scores()
@@ -74,9 +77,9 @@ class HGGPostopTestsetInference:
         self.__compute_and_plot_overall()
 
         if self.extra_patient_parameters is not None:
-            self.__compute_and_plot_metric_over_metric_categories(data=self.results, metric1='Dice', metric2='True postop volume', metric2_cutoffs=[1.])
-            volume_figure_fname = Path(self.output_folder, 'volume_cutoff.png')
-            self.__compute_and_plot_volume_cutoff_results(volume_cutoff_range=[0., 0.5], optimal_cutoff=0.175, save_fname=volume_figure_fname)
+            # self.__compute_and_plot_metric_over_metric_categories(data=self.results, metric1='Dice', metric2='True postop volume', metric2_cutoffs=[1.])
+            # volume_figure_fname = Path(self.output_folder, 'volume_cutoff.png')
+            # self.__compute_and_plot_volume_cutoff_results(volume_cutoff_range=[0., 0.5], optimal_cutoff=0.175, save_fname=volume_figure_fname)
             results_cutoff = self.__compute_results_cutoff_volume(cutoff_volume=0.175)
             results_cutoff.to_csv(Path(self.output_folder, 'all_dice_scores_volume_cutoff.csv'), index=False)
             compute_fold_average(self.input_folder, results_cutoff, best_threshold=self.optimal_threshold,
@@ -96,6 +99,10 @@ class HGGPostopTestsetInference:
         try:
             results_filename = os.path.join(self.output_folder, 'all_dice_scores.csv')
             results = pd.read_csv(results_filename)
+
+            if self.convert_ids:
+                results = self.__convert_patient_ids(results)
+
             dice_thresholds = [np.round(x, 1) for x in list(np.unique(results['Threshold'].values))]
             nb_thresholds = len(dice_thresholds)
             optimal_threshold_index = dice_thresholds.index(self.optimal_threshold)
@@ -109,8 +116,37 @@ class HGGPostopTestsetInference:
 
             self.results = results
             self.optimal_results = optimal_results_per_patient
+
+            if len(self.exclude_ids) > 0:
+                self.__drop_exclude_ids()
+
+            # Save new results file after ID conversion and exclusion
+            self.results.to_csv(Path(self.output_folder, 'all_dice_scores_clean.csv'), index=False)
+
         except Exception as e:
             print('{}'.format(traceback.format_exc()))
+
+    def __convert_patient_ids(self, results):
+        id_mapping_file = SharedResources.getInstance().test_id_mapping
+        base_id_column = SharedResources.getInstance().test_base_id_column
+        new_id_column = SharedResources.getInstance().test_new_id_column
+
+        if not Path(id_mapping_file).exists():
+            print(f"Error converting patient IDs, ID mapping file {id_mapping_file} not found")
+            return results
+
+        id_mapping = pd.read_csv(id_mapping_file)
+        if base_id_column not in id_mapping.columns or new_id_column not in id_mapping.columns:
+            print(f"Error converting patient IDs, base id or new id columns {base_id_column}, {new_id_column} missing from id mapping")
+
+        # Create ID dict
+        self.id_dict = {id_row[base_id_column]: id_row[new_id_column] for row_name, id_row in id_mapping.iterrows()}
+
+        # Update results
+        results['Patient_old_IDs'] = deepcopy(results['Patient'])
+        results['Patient'] = results['Patient'].map(self.id_dict)
+        results.dropna(axis='index', inplace=True)
+        return results
 
     def __drop_exclude_ids(self):
         drop_index_res = self.results[self.results['Patient'].isin(self.exclude_ids)].index
@@ -128,7 +164,7 @@ class HGGPostopTestsetInference:
             # results_filename = os.path.join(self.input_folder, 'Validation', 'all_dice_scores.csv')
             # results_df = pd.read_csv(results_filename)
             results_df = deepcopy(self.results)
-            columns_to_drop = ['Fold', 'Patient', 'Threshold', 'Dice', '#GT', '#Det']
+            columns_to_drop = ['Fold', 'Patient', 'Patient_old_IDs', 'Threshold', 'Dice', '#GT', '#Det']
             columns = results_df.columns
             for elem in columns_to_drop:
                 if elem in columns.values:
@@ -166,24 +202,9 @@ class HGGPostopTestsetInference:
 
     def __compute_results_metric_over_metric(self, data=None, metric1='Dice', metric2='Volume', suffix=''):
         try:
-            if data is None:
-                results_filename = os.path.join(self.output_folder, 'all_dice_scores.csv')
-                results = pd.read_csv(results_filename)
-            else:
-                results = deepcopy(data)
-
             if self.extra_patient_parameters is None:
                 return
 
-            total_thresholds = [np.round(x, 1) for x in list(np.unique(results['Threshold'].values))]
-            nb_thresholds = len(np.unique(results['Threshold'].values))
-            optimal_thresold_index = total_thresholds.index(self.optimal_threshold)
-            optimal_results_per_patient = results[optimal_thresold_index::nb_thresholds]
-            # Not elegant, but either the two files have been merged before or not, so this test should be sufficient.
-            if True in [x not in list(results.columns) for x in list(self.extra_patient_parameters.columns)]:
-                optimal_results_per_patient.loc[:, 'Patient'] = optimal_results_per_patient.Patient.astype(str)
-                optimal_results_per_patient = pd.merge(optimal_results_per_patient, self.extra_patient_parameters,
-                                                       on="Patient", how='left')
             results = deepcopy(self.results)
             optimal_results_per_patient = deepcopy(self.optimal_results)
             folder = os.path.join(self.output_folder, metric2 + '-Wise')
@@ -198,15 +219,7 @@ class HGGPostopTestsetInference:
 
             existing_folds = np.unique(results['Fold'].values)
             for f, fold in enumerate(existing_folds):
-                results_fold = results.loc[results['Fold'] == fold]
-                optimal_results_per_patient = results_fold[optimal_thresold_index::nb_thresholds]
-                if True in [x not in list(results.columns) for x in list(self.extra_patient_parameters.columns)]:
-                    optimal_results_per_patient.loc[:, 'Patient'] = optimal_results_per_patient.Patient.astype(str)
-                    # Trick to only keep extra information for patients from the current fold with the 'how' attribute
-                    fold_optimal_results = pd.merge(optimal_results_per_patient, self.extra_patient_parameters,
-                                                    on="Patient", how='left')
-                else:
-                    fold_optimal_results = optimal_results_per_patient
+                fold_optimal_results = optimal_results_per_patient
 
                 fold_folder = os.path.join(fold_base_folder, str(f))
                 os.makedirs(fold_folder, exist_ok=True)
@@ -274,7 +287,7 @@ class HGGPostopTestsetInference:
                 output = f"Cutoff = {cutoff}, recall = {res['Recall']}, precision = {res['Precision']}, "\
                          f"F1 = {res['F1']}, accuracy = {res['Accuracy']}, tnr = {res['Specificity']}, "\
                          f"positive rate = {res['Positive rate']}, negative rate = {res['Negative rate']}"
-                print(output)
+                # print(output)
 
             plot_classification_metrics_volume_cutoffs(results, cutoff_range, 'first_plot', None,
                                                        metrics_to_plot=['Recall', 'Precision', 'F1', 'Accuracy',

@@ -20,36 +20,54 @@ class HGGPostopSegmentationStudy:
     """
     def __init__(self):
         self.study_name = SharedResources.getInstance().studies_study_name
-        self.input_folder = os.path.join(SharedResources.getInstance().studies_input_folder, self.study_name)
-        self.output_folder = SharedResources.getInstance().studies_output_folder
+        self.input_folder = Path(SharedResources.getInstance().studies_input_folder, self.study_name)
+        self.base_output_folder = Path(SharedResources.getInstance().studies_output_folder, self.study_name)
+        if self.base_output_folder is not None and str(self.base_output_folder) != "":
+            self.output_folder = Path(self.base_output_folder, 'Validation')
+        else:
+            self.output_folder = Path(self.input_folder, 'Validation')
+        self.output_folder.mkdir(exist_ok=True)
 
         self.metric_names = []
         self.extra_patient_parameters = None
-        if os.path.exists(SharedResources.getInstance().studies_extra_parameters_filename):
+        if Path(SharedResources.getInstance().studies_extra_parameters_filename).exists():
             self.extra_patient_parameters = pd.read_csv(SharedResources.getInstance().studies_extra_parameters_filename)
             # Patient unique ID might include characters
-            self.extra_patient_parameters.loc[:, 'Patient'] = self.extra_patient_parameters.Patient.astype(int).astype(str)
-
-        if not os.path.exists(self.output_folder):
-            self.output_folder = self.input_folder
+            try:
+                self.extra_patient_parameters.loc[:, 'Patient'] = self.extra_patient_parameters.Patient.astype(
+                    int).astype(str)
+            except Exception as e:
+                print(f"Convert patient IDs to int failed, keep as string, error {e}")
+            self.extra_patient_parameters.loc[:, 'Patient'] = self.extra_patient_parameters.Patient.astype(str)
 
         self.optimal_overlap = None
         self.optimal_threshold = None
 
+        self.convert_ids = SharedResources.getInstance().postop_convert_ids
+        self.exclude_ids = SharedResources.getInstance().postop_exclude_ids
+        if len(self.exclude_ids) > 0:
+            try:
+                exclude_ids = [int(i) for i in self.exclude_ids]
+                self.exclude_ids = exclude_ids
+            except Exception as e:
+                print(f"Convert exclude patient IDs to int failed, keep as string, error {e}")
+
     def run(self):
         self.__retrieve_optimum_values()
         self.__read_results()
-        self.__drop_exclude_ids()
+
+        # self.export_data_validation_study()
+
         self.__compute_and_plot_overall()
         if self.extra_patient_parameters is not None:
-            self.__compute_and_plot_metric_over_metric_categories(data=self.results, metric1='Dice', metric2='True postop volume', metric2_cutoffs=[1.])
+            # self.__compute_and_plot_metric_over_metric_categories(data=self.results, metric1='Dice', metric2='True postop volume', metric2_cutoffs=[1.])
             # volume_figure_fname = Path(self.input_folder, 'Validation', 'volume_cutoff.png')
             # self.__compute_and_plot_volume_cutoff_results(volume_cutoff_range=[0., 0.5], optimal_cutoff=0.175, save_fname=volume_figure_fname)
             results_cutoff = self.__compute_results_cutoff_volume(cutoff_volume=0.175)
             results_cutoff.to_csv(Path(self.input_folder, 'Validation', 'all_dice_scores_volume_cutoff.csv'), index=False)
             compute_fold_average(self.input_folder, results_cutoff, best_threshold=self.optimal_threshold,
                                  best_overlap=self.optimal_overlap,
-                                 suffix='volume_cutoff', output_folder=str(Path(self.input_folder, 'Validation')))
+                                 suffix='volume_cutoff', output_folder=str(self.output_folder))
             results_cutoff = self.__compute_EOR(results_cutoff, crop_to_zero=True)
             self.__study_volume_and_EOR(results_cutoff)
 
@@ -64,21 +82,57 @@ class HGGPostopSegmentationStudy:
         try:
             results_filename = os.path.join(self.input_folder, 'Validation', 'all_dice_scores.csv')
             results = pd.read_csv(results_filename)
+
+            if self.convert_ids:
+                results = self.__convert_patient_ids(results)
+
             dice_thresholds = [np.round(x, 1) for x in list(np.unique(results['Threshold'].values))]
             nb_thresholds = len(dice_thresholds)
             optimal_threshold_index = dice_thresholds.index(self.optimal_threshold)
             optimal_results_per_patient = results[optimal_threshold_index::nb_thresholds]
-            #best_dices_per_patient = results['Dice'].values[optimal_threshold_index::nb_thresholds]
 
             if self.extra_patient_parameters is not None:
+                try:
+                    optimal_results_per_patient.loc[:, 'Patient'] = optimal_results_per_patient.Patient.astype(int)
+                except Exception as e:
+                    print("Conversion of patient ID to int failed, keep as str")
                 optimal_results_per_patient.loc[:, 'Patient'] = optimal_results_per_patient.Patient.astype(str)
                 optimal_results_per_patient = pd.merge(optimal_results_per_patient, self.extra_patient_parameters,
                                                        on="Patient", how='left')
 
             self.results = results
             self.optimal_results = optimal_results_per_patient
+
+            if len(self.exclude_ids) > 0:
+                self.__drop_exclude_ids()
+
+            # Save new results file after ID conversion and exclusion
+            self.results.to_csv(Path(self.output_folder, 'all_dice_scores_clean.csv'), index=False)
+
         except Exception as e:
             print('{}'.format(traceback.format_exc()))
+
+    def __convert_patient_ids(self, results):
+        id_mapping_file = SharedResources.getInstance().postop_id_mapping
+        base_id_column = SharedResources.getInstance().postop_base_id_column
+        new_id_column = SharedResources.getInstance().postop_new_id_column
+
+        if not Path(id_mapping_file).exists():
+            print(f"Error converting patient IDs, ID mapping file {id_mapping_file} not found")
+            return results
+
+        id_mapping = pd.read_csv(id_mapping_file)
+        if base_id_column not in id_mapping.columns or new_id_column not in id_mapping.columns:
+            print(f"Error converting patient IDs, base id or new id columns {base_id_column}, {new_id_column} missing from id mapping")
+
+        # Create ID dict
+        self.id_dict = {id_row[base_id_column]: id_row[new_id_column] for row_name, id_row in id_mapping.iterrows()}
+
+        # Update results
+        results['Patient_old_IDs'] = deepcopy(results['Patient'])
+        results['Patient'] = results['Patient'].map(self.id_dict)
+        results.dropna(axis='index', inplace=True)
+        return results
 
     def __drop_exclude_ids(self):
         drop_index_res = self.results[self.results['Patient'].isin(self.exclude_ids)].index
@@ -96,7 +150,7 @@ class HGGPostopSegmentationStudy:
             # results_filename = os.path.join(self.input_folder, 'Validation', 'all_dice_scores.csv')
             # results_df = pd.read_csv(results_filename)
             results_df = deepcopy(self.results)
-            columns_to_drop = ['Fold', 'Patient', 'Threshold', 'Dice', '#GT', '#Det']
+            columns_to_drop = ['Fold', 'Patient', 'Patient_old_IDs', 'Threshold', 'Dice', '#GT', '#Det']
             columns = results_df.columns
             for elem in columns_to_drop:
                 if elem in columns.values:
@@ -120,7 +174,7 @@ class HGGPostopSegmentationStudy:
                     results = pd.read_csv(results_filename)
                 else:
                     results = deepcopy(data)
-                dice_thresholds = [np.round(x, 2) for x in list(np.unique(results['Threshold'].values))]
+                dice_thresholds = [np.round(x, 1) for x in list(np.unique(results['Threshold'].values))]
                 nb_tresholds = len(dice_thresholds)
                 optimal_thresold_index = dice_thresholds.index(self.optimal_threshold)
                 best_dices_per_patient = results['Dice'].values[optimal_thresold_index::nb_tresholds]
@@ -133,24 +187,9 @@ class HGGPostopSegmentationStudy:
 
     def __compute_results_metric_over_metric(self, data=None, metric1='Dice', metric2='Volume', suffix=''):
         try:
-            if data is None:
-                results_filename = os.path.join(self.input_folder, 'Validation', 'all_dice_scores.csv')
-                results = pd.read_csv(results_filename)
-            else:
-                results = deepcopy(data)
-
             if self.extra_patient_parameters is None:
                 return
 
-            total_thresholds = [np.round(x, 1) for x in list(np.unique(results['Threshold'].values))]
-            nb_thresholds = len(np.unique(results['Threshold'].values))
-            optimal_thresold_index = total_thresholds.index(self.optimal_threshold)
-            optimal_results_per_patient = results[optimal_thresold_index::nb_thresholds]
-            # Not elegant, but either the two files have been merged before or not, so this test should be sufficient.
-            if True in [x not in list(results.columns) for x in list(self.extra_patient_parameters.columns)]:
-                optimal_results_per_patient.loc[:, 'Patient'] = optimal_results_per_patient.Patient.astype(str)
-                optimal_results_per_patient = pd.merge(optimal_results_per_patient, self.extra_patient_parameters,
-                                                       on="Patient", how='left')
             results = deepcopy(self.results)
             optimal_results_per_patient = deepcopy(self.optimal_results)
             folder = os.path.join(self.input_folder, 'Validation', metric2 + '-Wise')
@@ -165,15 +204,16 @@ class HGGPostopSegmentationStudy:
 
             existing_folds = np.unique(results['Fold'].values)
             for f, fold in enumerate(existing_folds):
-                results_fold = results.loc[results['Fold'] == fold]
-                optimal_results_per_patient = results_fold[optimal_thresold_index::nb_thresholds]
-                if True in [x not in list(results.columns) for x in list(self.extra_patient_parameters.columns)]:
-                    optimal_results_per_patient.loc[:, 'Patient'] = optimal_results_per_patient.Patient.astype(str)
-                    # Trick to only keep extra information for patients from the current fold with the 'how' attribute
-                    fold_optimal_results = pd.merge(optimal_results_per_patient, self.extra_patient_parameters,
-                                                    on="Patient", how='left')
-                else:
-                    fold_optimal_results = optimal_results_per_patient
+                # results_fold = results.loc[results['Fold'] == fold]
+                # optimal_results_per_patient = results_fold[optimal_thresold_index::nb_thresholds]
+                optimal_results_per_patient_fold = optimal_results_per_patient[optimal_results_per_patient['Fold'] == fold]
+                # if True in [x not in list(results.columns) for x in list(self.extra_patient_parameters.columns)]:
+                #     optimal_results_per_patient_fold.loc[:, 'Patient'] = optimal_results_per_patient_fold.Patient.astype(str)
+                #     # Trick to only keep extra information for patients from the current fold with the 'how' attribute
+                #     fold_optimal_results = pd.merge(optimal_results_per_patient_fold, self.extra_patient_parameters,
+                #                                     on="Patient", how='left')
+                # else:
+                fold_optimal_results = optimal_results_per_patient
 
                 fold_folder = os.path.join(fold_base_folder, str(f))
                 os.makedirs(fold_folder, exist_ok=True)
@@ -241,7 +281,7 @@ class HGGPostopSegmentationStudy:
                 output = f"Cutoff = {cutoff}, recall = {res['Recall']}, precision = {res['Precision']}, "\
                          f"F1 = {res['F1']}, accuracy = {res['Accuracy']}, tnr = {res['Specificity']}, "\
                          f"positive rate = {res['Positive rate']}, negative rate = {res['Negative rate']}"
-                print(output)
+                # print(output)
 
             plot_classification_metrics_volume_cutoffs(results, cutoff_range, 'first_plot', None,
                                                        metrics_to_plot=['Recall', 'Precision', 'F1', 'Accuracy',
@@ -275,13 +315,9 @@ class HGGPostopSegmentationStudy:
 
         true_EOR = np.array((results.loc[:, 'True preop volume'] - results.loc[:, 'True postop volume']) / results.loc[:, 'True preop volume'])
         data['True EOR'] = true_EOR
-        #print(true_EOR[np.where(true_EOR<0)])
-        #print(data.loc[np.where(true_EOR < 0), 'Patient'].values)
 
         predicted_EOR_type1 = np.array((results.loc[:, 'True preop volume'] - results.loc[:, 'Predicted postop volume']) / results.loc[:, 'True preop volume'])
         data['Predicted EOR type 1'] = predicted_EOR_type1
-        #print(predicted_EOR_type1[np.where(predicted_EOR_type1 < 0)])
-        #print(data.loc[np.where(predicted_EOR_type1 < 0), 'Patient'].values)
 
         if crop_to_zero:
             data.loc[(data['True EOR'] < 0), 'True EOR'] = 0.0
@@ -291,7 +327,7 @@ class HGGPostopSegmentationStudy:
 
     def __study_volume_and_EOR(self, results):
         data = deepcopy(results)
-        output_folder = Path(self.input_folder, 'Validation', 'Volume-EOR')
+        output_folder = Path(self.output_folder, 'Volume-EOR')
         output_folder.mkdir(exist_ok=True)
         sns.set_style('ticks')
 
@@ -325,6 +361,12 @@ class HGGPostopSegmentationStudy:
         blandAltman(data['True postop volume'], data['Predicted postop volume'],
                     title=f'Bland-Altman of true vs predicted postop volume',
                     savePath=save_fname)
+
+    def export_data_validation_study(self):
+        data_base_dir = Path(self.input_folder).parent.parent
+        opids_postop_consent = list(pd.read_csv(Path(data_base_dir, 'opids_postop_consent.csv')).columns)
+        opids_postop_consent = np.unique(list(map(lambda x: int(x), opids_postop_consent)))
+        print(data_base_dir)
 
 
 def threshold_volume_and_compute_classification_metrics(optimal_results, cutoff_seg_vol, cutoff_true_vol=0.01):

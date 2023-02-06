@@ -40,16 +40,21 @@ class CompareArchitecturesStudy:
 
         self.arch_names = ['nnU-Net', 'AGU-Net']
         self.input_study_dirs = [Path('/home/ragnhild/Data/Neuro/Studies/PostopSegmentation/NetworkValidation/Alexandros_experiments/compare_nnUNet_501-505'),
-                                 Path('/home/ragnhild/Data/Neuro/Studies/PostopSegmentation/NetworkValidation/compare_run2_exp1-5')]
+                                 Path('/home/ragnhild/Data/Neuro/Studies/PostopSegmentation/NetworkValidation/AGU-Net_compare_exp1_5')]
 
         #self.studies = ['Ams_Trd_T1c', 'Ams_Trd_T1c_T1w', 'Ams_Trd_T1c_T1w_FLAIR', 'All_T1c_T1w_preop']
         self.studies_lists = [['501', '502', '503', '504', '505'], #'504',
-            ['run2_exp1_T1c', 'run2_exp2_T1c_T1w', 'run2_exp3_T1c_T1w_flair', 'run2_exp4_T1c_T1w_preop', 'run2_exp5_T1c_T1w_flair_preop']] #
-        self.studies_description = ['T1ce', 'T1ce+T1w', 'T1ce+T1w+FLAIR', 'T1ce+T1w+Preop T1ce', 'T1ce+T1w+FLAIR+Preop T1ce'] #
+            ['run2_exp1_T1c', 'run2_exp2_T1c_T1w', 'run2_exp3_T1c_T1w_flair', 'run2_exp4_T1c_T1w_preop', 'run2_exp5_T1c_T1w_flair_preop']]
+        # self.studies_lists = [['505'], ['run2_exp5_T1c_T1w_flair_preop']]
+        # self.studies_description = ['T1ce', 'T1ce+T1w', 'T1ce+T1w+FLAIR', 'T1ce+T1w+Preop T1ce', 'T1ce+T1w+FLAIR+Preop T1ce'] #
+        self.studies_description = ['A', 'B', 'C', 'D', 'E']
+        # self.studies_description = ['E']
+        self.subdirs = ['Validation', 'Test']
+        self.subdir_labels = ['Val', 'Test']
 
         palette_names = ['cubehelix', 'cubehelix']
         palette_names = ['flare', 'crest']
-        palette_names = ["light:salmon","light:b"]
+        palette_names = ["light:salmon", "light:b"]
         self.palettes = [sns.color_palette(palette_names[0], n_colors=6), sns.color_palette(palette_names[1], n_colors=7, desat=1)]
         self.colors = [[pal[i+1] for i in range(len(self.studies_lists[0]))] for pal in self.palettes]
 
@@ -60,14 +65,29 @@ class CompareArchitecturesStudy:
             self.extra_patient_parameters.loc[:, 'Patient'] = self.extra_patient_parameters.Patient.astype(int).astype(
                 str)
 
+        self.interrater_study_filepath = Path(self.output_dir, 'interrater_study.csv')
+
     def run(self):
-        # self._run_subdir('Validation')
-        # self._run_subdir('Test')
+        for subdir in self.subdirs:
+            self._run_subdir(subdir)
+        self._create_tables_segmentation()
+        self._create_tables_classification()
         # self.create_interrater_consensus_segmentations()
         # self.interrater_study()
         # self.interrater_study_summary()
-        self.visualize_interrater_results()
+        # self.visualize_interrater_results()
         return
+
+    def _create_tables_segmentation(self):
+        self.write_cutoff_results_latex(metrics=['Dice-P', 'Dice-TP', 'Object-wise recall',
+                                                 'Object-wise precision', 'Object-wise F1'],
+                                        suffix='seg_scores_DiceP_Dice_TP_obj-wise_Rec_Prec_F1', subdirs=self.subdirs)
+
+    def _create_tables_classification(self):
+        self.write_cutoff_results_latex(
+            metrics=['Patient-wise recall postop', 'Patient-wise precision postop', 'Specificity',
+                     'Patient-wise F1 postop', 'Balanced accuracy'],
+            suffix='classif_scores-Rec-Prec-Spec-F1-bAcc', subdirs=self.subdirs)
 
     def _run_subdir(self, subdir):
 
@@ -83,11 +103,17 @@ class CompareArchitecturesStudy:
         print("OK")
         self.write_cutoff_results_latex(metrics=['Dice-P', 'Dice-TP', 'Patient-wise recall postop',
                                                  'Patient-wise precision postop',  'Specificity', 'Patient-wise F1 postop'],
-                                        suffix='diceP-diceTP-Rec-Prec-Spec-F1', subdir=subdir)
+                                        suffix='diceP-diceTP-Rec-Prec-Spec-F1', subdirs=[subdir])
         self.write_cutoff_results_latex(metrics=['Dice-P', 'Dice-TP', 'Patient-wise recall postop',
                                                  'Patient-wise precision postop', 'Specificity',
                                                  'Patient-wise F1 postop', 'Balanced accuracy'],
-                                        suffix='diceP-diceTP-Rec-Prec-Spec-F1-bAcc', subdir=subdir)
+                                        suffix='diceP-diceTP-Rec-Prec-Spec-F1-bAcc', subdirs=[subdir])
+        self.write_cutoff_results_latex(metrics=['Dice-P', 'Dice-TP', 'Object-wise recall',
+                                                 'Object-wise precision', 'Object-wise F1'],
+                                        suffix='seg_scores_DiceP_Dice_TP_obj-wise_Rec_Prec_F1', subdirs=[subdir])
+        self.write_cutoff_results_latex(metrics=['Patient-wise recall postop', 'Patient-wise precision postop', 'Specificity',
+                                                 'Patient-wise F1 postop', 'Balanced accuracy'],
+                                        suffix='classif_scores-Rec-Prec-Spec-F1-bAcc', subdirs=[subdir])
         self.plot_all_metrics(subdir=subdir)
 
     def read_results_arch(self, arch_index, subdir=''):
@@ -138,29 +164,33 @@ class CompareArchitecturesStudy:
 
     def write_cutoff_results_latex(self, metrics=['Dice', 'Dice-TP', 'Dice-P', 'Patient-wise recall postop',
                                                  'Patient-wise precision postop', 'Patient-wise F1 postop'],
-                                    suffix='', subdir=''):
-        latex_table_fname = Path(self.output_dir, subdir, 'key_metrics_after_cutoff_latex.txt') if suffix == '' else Path(self.output_dir,
-                                                                                                                          subdir,
-                                                                                                                          f'results_{suffix}_latex.txt')
-        pfile = open(latex_table_fname, 'w+')
+                                    suffix='', subdirs=[]):
+        latex_table_fname = 'key_metrics_after_cutoff_latex.txt' if suffix == '' else f'results_{suffix}_latex.txt'
+        latex_table_fpath = Path(self.output_dir, subdirs[0], latex_table_fname) if len(subdirs) == 1 else \
+            Path(self.output_dir, latex_table_fname)
+        pfile = open(latex_table_fpath, 'w+')
         n_arch = len(self.studies_lists)
 
         for i in range(len(self.studies_lists[0])):
             pfile.write(f"\\midrule \n")
-            for j in range(n_arch):
-                output_string = self.arch_names[j] + " / " + self.studies_description[i]
-                fname = Path(self.input_study_dirs[j].parent, self.studies_lists[j][i], subdir, f'overall_metrics_average_volume_cutoff.csv')
-                results = pd.read_csv(fname)
+            for k, subdir in enumerate(subdirs):
+                for j in range(n_arch):
+                    # output_string = self.arch_names[j] + " & " + self.studies_description[i] + " & " + self.subdir_labels[k]
+                    output_string = ""
+                    output_string += "\\multirow{4}{1}{" + self.studies_description[i] + "}" if j == 0 and k == 0 else ""
+                    output_string += " & \\multirow{2}{1}{" + self.subdir_labels[k] + "}" if j == 0 else " & "
+                    output_string += " & " + self.arch_names[j]
 
-                for m in metrics:
-                    if results.loc[0, m + '_std'] > 0:
-                        output_string += f" & {results.loc[0, m + '_mean'] * 100:.2f}$\pm${results.loc[0, m + '_std'] * 100:.2f}"
-                    else:
-                        output_string += f" & {results.loc[0, m + '_mean'] * 100:.2f}"
+                    fname = Path(self.input_study_dirs[j].parent, self.studies_lists[j][i], subdir, f'overall_metrics_average_volume_cutoff.csv')
+                    results = pd.read_csv(fname)
 
-                pfile.write(output_string + "\\\ \n")
+                    for m in metrics:
+                        if results.loc[0, m + '_std'] > 0:
+                            output_string += f" & {results.loc[0, m + '_mean'] * 100:.2f}$\pm${results.loc[0, m + '_std'] * 100:.2f}"
+                        else:
+                            output_string += f" & {results.loc[0, m + '_mean'] * 100:.2f}"
 
-
+                    pfile.write(output_string + "\\\ \n")
         pfile.close()
 
     def plot_all_metrics(self, subdir=''):
@@ -310,138 +340,77 @@ class CompareArchitecturesStudy:
         patient_folders = [d for d in interrater_glioblastoma_data_path.iterdir() if d.is_dir()]
         patient_op_ids = [int(d.name.split('-')[1][4:]) for d in patient_folders]
 
-        patient_id_mapping_filepath = Path('/home/ragnhild/Data/Neuro/Studies/PostopSegmentation/patient_id_mapping.csv')
+        patient_id_mapping_filepath = Path(
+            '/home/ragnhild/Data/Neuro/Studies/PostopSegmentation/patient_id_mapping.csv')
         id_df = pd.read_csv(patient_id_mapping_filepath)
         vumc_df = id_df[(id_df['Hospital'] == 'VUmc')]
 
         annotator_groups = ['nov', 'exp']
         all_annotators = sum([[f"{annot}{i}" for i in range(1, 5)] for annot in annotator_groups], [])
         consensus_annotators = ['strict-consensus-nov', 'strict-consensus-exp', 'strict-consensus-all-annotators']
-                                #'consensus-nov', 'consensus-exp', 'consensus-all-annotators']
-        # consensus_annotators = ['consensus-all-annotators']
+        # consensus_annotators = ['consensus-nov', 'consensus-exp', 'consensus-all-annotators']
 
         all_annotators += consensus_annotators
         # all_annotators = consensus_annotators
         metrics = ['Dice', 'Jaccard', 'volume_seg', 'residual_tumor_prediction']
-
-        annot_metrics = [[f"{annotator}_{metric}" for metric in metrics] for annotator in all_annotators]
-        group_metrics = [[f"{group}_{metric}" for metric in metrics] for group in annotator_groups]
-        all_annotators_metrics = [f"all_annotators_{metric}" for metric in metrics]
-        architecture_metrics = [[f"{arch}_{metric}" for metric in metrics] for arch in self.arch_names]
-        # columns = ['reference', 'pid', 'opid', 'volume', 'res_tumor'] + sum(annot_metrics, []) + \
-        #     sum(group_metrics, []) + all_annotators_metrics + sum(architecture_metrics, [])
         columns = ['reference', 'pid', 'opid', 'volume', 'residual_tumor', 'annotator/model'] + metrics
 
-        all_results = []
-        # indx = [3, 8] #, 10]
+        self.interrater_study_filepath = Path(self.output_dir, 'interrater_study.csv')
+        if not self.interrater_study_filepath.exists():
+            self.interrater_results_df = pd.DataFrame(columns=columns)
+        else:
+            self.interrater_results_df = pd.read_csv(self.interrater_study_filepath)
+
+        # indx = [8, 10]
         # patient_op_ids = [patient_op_ids[i] for i in indx]
         # patient_folders = [patient_folders[i] for i in indx]
         for ind, (op_id, patient_folder) in enumerate(zip(patient_op_ids, patient_folders)):
             patient = vumc_df[vumc_df['OP.ID'] == op_id]
             annotation_folder = Path(patient_folder, 'ses-postop', 'anat')
-            pid = patient['DB ID'].values[0]
-            db_index = patient['DB index'].values[0]
+            pid = patient['DB_ID'].values[0]
+            db_index = patient['DB_index'].values[0]
 
             # Load reference segmentations
-            references, reference_volumes_res_tumor = self.__load_interrater_references(pid, db_index, annotation_folder)
+            references = self.__load_interrater_references(pid, db_index, annotation_folder)
 
             print(f"Compute scores for patient pid {pid} / opid {op_id}")
-            for ref_name, (ref_ni, ref) in references.items():
+            for ref_name, ref_ni in references.items():
                 print(f"Reference: {ref_name}")
-                # Store reference data
-                ref_basic_info = [ref_name, pid, op_id] + reference_volumes_res_tumor[ref_name]
-                #all_results.append([ref_name, pid, op_id] + reference_volumes_res_tumor[ref_name])
 
-                all_annotations = [f for f in annotation_folder.iterdir() if 'label' in f.name and 'TMRenh_dseg' in f.name and
-                                   'NativeT1c' in f.name]
-                for annotator in all_annotators:
-                    if not 'strict' in annotator:
-                        annotation_filepath = [f for f in all_annotations if annotator in f.name and not 'strict' in f.name]
-                    else:
-                        annotation_filepath = [f for f in all_annotations if annotator in f.name]
+                # Get segmentations
+                segmentations = self.__load_evaluator_segmentations(pid, db_index, patient, ref_ni, annotation_folder,
+                                                                    all_annotators)
 
-                    if len(annotation_filepath) == 0:
-                        #print(f"No annotations for patient {pid} annot {annotator}, creating empty mask")
-                        annotation_ni = nib.Nifti1Image(np.zeros(ref.shape), affine=ref_ni.affine)
-                    else:
-                        annotation_ni = nib.load(annotation_filepath[0])
-                        if len(annotation_ni.shape) == 4:
-                            annotation_ni = nib.four_to_three(annotation_ni)[0]
+                # If any of them does not exist - compute reference volume + res tumor
+                ref_volume, ref_residual_tumor = compute_volume_residual_tumor(ref_ni,
+                                                                               threshold_segmentation(ref_ni, 0.5))
+                ref_basic_info = [ref_name, pid, op_id, ref_volume, ref_residual_tumor]
 
-                        if not annotation_ni.shape == ref_ni.shape:
-                            print(f"Mismatch in shape between {annotator} annotation and GT for patient {pid} / opid {op_id}, skip")
-                            continue
+                for eval_name, (seg_ni, thresh) in segmentations.items():
+                    # Check for entries in results
+                    eval_res = self.interrater_results_df.loc[(self.interrater_results_df['reference'] == ref_name) &
+                                                              (self.interrater_results_df['pid'] == pid) &
+                                                              (self.interrater_results_df[
+                                                                   'annotator/model'] == eval_name)]
+                    if len(eval_res) != 0 and not np.isnan(np.sum(eval_res.values[6:])):
+                        continue
 
-                    results = dice_computation(ref, annotation_ni)
-                    # all_results[-1].extend(results)
-                    all_results.append(ref_basic_info + [annotator] + results)
+                    if not seg_ni.shape == ref_ni.shape:
+                        print(
+                            f"Mismatch in shape between {eval_name} segmentation and GT for patient {pid} / opid {op_id}, skip")
+                        continue
+                    results = dice_computation(ref_ni, seg_ni, thresh)
+                    results_df = pd.DataFrame([ref_basic_info + [eval_name] + results], columns=columns)
 
-                # res_inter = pd.DataFrame([all_results[-1]], columns=columns[:len(all_results[-1])])
-                # #Compute average scores per group
-                # for group in annotator_groups:
-                #     group_res = []
-                #     for m in metrics:
-                #         cols = [c for c in res_inter.columns if group in c and m in c]
-                #         avg = np.mean(res_inter[cols].values)
-                #         if m == 'res_tumor':
-                #             avg = 1 if avg >= 0.5 else 0
-                #         group_res.append(avg)
-                #
-                #     all_results[-1].extend(group_res)
-                # #Compute average scores for all annotators
-                # all_annot_res = []
-                # for m in metrics:
-                #     cols = [c for c in res_inter.columns if ('exp' in c or 'nov' in c) and m in c]
-                #     avg = np.mean(res_inter[cols].values)
-                #     if m == 'res_tumor':
-                #         avg = 1 if avg >= 0.5 else 0
-                #     all_annot_res.append(avg)
-                # all_results[-1].extend(all_annot_res)
-
-                # Compute scores for models
-                for i, arch in enumerate(self.arch_names):
-                    #for j, study in enumerate(self.studies_lists[i]):
-                    j = 4
-                    study = self.studies_lists[i][j]
-
-                    # Find prediction file
-                    prediction_dir = Path(self.input_study_dirs[i].parent, study, 'test_predictions', '0')
-                    self.arch_names = ['nnU-Net', 'AGU-Net']
-                    if arch == 'AGU-Net':
-                        patient_folder = Path(prediction_dir, f'{db_index}_{pid}')
-                        prediction_file = [f for f in patient_folder.iterdir() if f.is_file() and 'pred_tumor' in f.name][0]
-                    else:
-                        nnunet_index = patient['nnU-Net ID'].values[0]
-                        patient_folder = Path(prediction_dir, f'index0_{nnunet_index}')
-                        prediction_file = [f for f in patient_folder.iterdir() if f.is_file() and 'predictions' in f.name][0]
-
-                    pred_ni = nib.load(prediction_file)
-
-                    if pred_ni.shape != ref_ni.shape:
-                        print(f"Error, mismatch in shape between prediction and ground truth for pid {pid} / opid {op_id}, arch {arch}")
-                        print(f"Pred shape: {pred_ni.shape}, GT shape {ref_ni.shape}")
-                        #all_results[-1].extend([None, None, None, None])
-                        results = [None for _ in metrics]
-                    else:
-                        # Load optimal threshold and threshold predictions
-                        optimal_dice_study = Path(self.input_study_dirs[i].parent, study, 'Validation', 'optimal_dice_study.csv')
-                        optimal_overlap, optimal_threshold = reload_optimal_validation_parameters(
-                            study_filename=optimal_dice_study)
-
-                        results = dice_computation(ref, pred_ni, t=optimal_threshold)
-
-                    all_results.append(ref_basic_info + [arch] + results)
-
-        output_filepath = Path(self.output_dir, 'interrater_study.csv')
-        results_df = pd.DataFrame(all_results, columns=columns)
-        results_df.to_csv(output_filepath, index=False)
+                    self.interrater_results_df = self.interrater_results_df.append(results_df, ignore_index=True)
+                    self.interrater_results_df.to_csv(self.interrater_study_filepath, index=False)
 
     def __load_interrater_references(self, pid, db_index, annotation_folder):
         references = {}
-        reference_volume_res_tumor = {}
         image_filepath = [f for f in annotation_folder.iterdir() if 'NativeT1c' in f.name and 'dseg' not in f.name][
             0]
         image_ni = nib.load(image_filepath)
+        print(image_ni.shape)
 
         # Load ground truth segmentation
         gt_data_path = Path(self.data_root, str(db_index), str(pid), 'segmentations')
@@ -459,18 +428,9 @@ class CompareArchitecturesStudy:
 
         if not image_ni.shape == gt_ni.shape:
             print(f"Mismatch in shape between T1c image and GT for patient {pid}, skip")
+            print(f"GT shape = {gt_ni.shape}, im shape = {image_ni.shape}")
         else:
-            gt = gt_ni.get_data()
-            gt[gt > 0.5] = 1
-            gt[gt <= 0.5] = 0
-            gt = gt.astype('uint8')
-            references['ground_truth_segmentation'] = [gt_ni, deepcopy(gt)]
-
-            # Compute tumor volume and check for residual tumor
-            voxel_size = np.prod(gt_ni.header.get_zooms()[0:3])
-            volume_seg_ml = compute_tumor_volume(gt, voxel_size)
-            res_tumor = 1 if volume_seg_ml > 0.175 else 0
-            reference_volume_res_tumor['ground_truth_segmentation'] = [volume_seg_ml, res_tumor]
+            references['ground_truth_segmentation'] = gt_ni
 
         # Load consensus segmentation(s)
         # consensus_annotation_files = [f for f in annotation_folder.iterdir() if 'consensus-all-annotators' in f.name]
@@ -484,43 +444,70 @@ class CompareArchitecturesStudy:
                 consensus_ni = nib.four_to_three(consensus_ni)[0]
 
             if not image_ni.shape == consensus_ni.shape:
-                print(f"Mismatch in shape between T1c image and {consensus_identifier} segmentation for patient {pid}, skip")
+                print(
+                    f"Mismatch in shape between T1c image and {consensus_identifier} segmentation for patient {pid}, skip")
             else:
-                consensus = consensus_ni.get_data()
-                consensus[consensus > 0.5] = 1
-                consensus[consensus <= 0.5] = 0
-                consensus = consensus.astype('uint8')
-                references[consensus_identifier] = [consensus_ni, deepcopy(consensus)]
+                references[consensus_identifier] = consensus_ni
 
-                # Compute tumor volume and check for residual tumor
-                voxel_size = np.prod(consensus_ni.header.get_zooms()[0:3])
-                volume_seg_ml = compute_tumor_volume(consensus, voxel_size)
-                res_tumor = 1 if volume_seg_ml > 0.175 else 0
-                reference_volume_res_tumor[consensus_identifier] = [volume_seg_ml, res_tumor]
+        return references
 
-        return references, reference_volume_res_tumor
+    def __load_evaluator_segmentations(self, pid, db_index, patient, ref_ni, annotation_folder, annotators):
+        segmentations_thresholds = {}
+
+        # Load all annotations
+        all_annotations = [f for f in annotation_folder.iterdir() if 'label' in f.name and 'TMRenh_dseg' in f.name and
+                           'NativeT1c' in f.name]
+        for annotator in annotators:
+            if not 'strict' in annotator:
+                annotation_filepath = [f for f in all_annotations if annotator in f.name and not 'strict' in f.name]
+            else:
+                annotation_filepath = [f for f in all_annotations if annotator in f.name]
+
+            if len(annotation_filepath) == 0:
+                # print(f"No annotations for patient {pid} annot {annotator}, creating empty mask")
+                annotation_ni = nib.Nifti1Image(np.zeros(ref_ni.shape), affine=ref_ni.affine)
+            else:
+                annotation_ni = nib.load(annotation_filepath[0])
+                if len(annotation_ni.shape) == 4:
+                    annotation_ni = nib.four_to_three(annotation_ni)[0]
+
+            segmentations_thresholds[annotator] = [annotation_ni, 0.5]
+
+        # Load all segmentations from models
+        for i, arch in enumerate(self.arch_names):
+            # for j, study in enumerate(self.studies_lists[i]):
+            j = 4
+            for j, study in enumerate(self.studies_lists[i]):
+                # Find prediction file
+                prediction_dir = Path(self.input_study_dirs[i].parent, study, 'test_predictions', '0')
+                self.arch_names = ['nnU-Net', 'AGU-Net']
+                if arch == 'AGU-Net':
+                    patient_folder = Path(prediction_dir, f'{db_index}_{pid}')
+                    prediction_file = [f for f in patient_folder.iterdir() if f.is_file() and 'pred_tumor' in f.name][0]
+                else:
+                    nnunet_index = patient['nnU-Net_ID'].values[0]
+                    patient_folder = Path(prediction_dir, f'index0_{nnunet_index}')
+                    prediction_file = [f for f in patient_folder.iterdir() if f.is_file() and 'predictions' in f.name][0]
+
+                pred_ni = nib.load(prediction_file)
+                # Load optimal threshold and threshold predictions
+                optimal_dice_study = Path(self.input_study_dirs[i].parent, study, 'Validation',
+                                          'optimal_dice_study.csv')
+                optimal_overlap, optimal_threshold = reload_optimal_validation_parameters(study_filename=optimal_dice_study)
+                segmentations_thresholds[f"{arch}_{self.studies_description[j]}"] = [pred_ni, optimal_threshold]
+
+        return segmentations_thresholds
 
     def interrater_study_summary(self):
-        study_filepath = Path(self.output_dir, 'interrater_study.csv')
-        results = pd.read_csv(study_filepath)
+        results = pd.read_csv(self.interrater_study_filepath)
         results.replace('inf', 0, inplace=True)
         results.replace('', 0, inplace=True)
         results.replace(' ', 0, inplace=True)
 
-        annotator_groups = ['nov', 'exp']
-        all_annotators = sum([[f"{annot}{i}" for i in range(1, 5)] for annot in annotator_groups], [])
-
-        metrics = ['Dice', 'Jaccard', 'volume_seg', 'res_tumor']
-        annot_metrics = [[f"{annotator}_{metric}" for metric in metrics] for annotator in all_annotators]
-        group_metrics = [[f"{group}_{metric}" for metric in metrics] for group in annotator_groups]
-        all_annotators_metrics = [f"all_annotators_{metric}" for metric in metrics]
-        architecture_metrics = [[f"{arch}_{metric}" for metric in metrics] for arch in self.arch_names]
-        # columns = ['reference', 'pid', 'opid', 'volume', 'res_tumor'] + sum(annot_metrics, []) + \
-        #           sum(group_metrics, []) + all_annotators_metrics + sum(architecture_metrics, [])
-
         # Compute metrics
         eval_metrics = ['Dice', 'Dice-P', 'Jaccard', 'Jaccard-P']
-        average_columns = ['reference', 'evaluator', 'Patient-wise recall', 'Patient-wise precision', 'Patient-wise specificity',
+        average_columns = ['reference', 'evaluator', 'Patient-wise recall', 'Patient-wise precision',
+                           'Patient-wise specificity',
                            'Patient-wise F1', 'Accuracy', 'Balanced accuracy', 'Positive rate', 'Negative rate']
         for m in eval_metrics:
             average_columns.extend([m + '_mean', m + '_std'])
@@ -537,22 +524,19 @@ class CompareArchitecturesStudy:
             for evaluator in unique_evaluators:
                 evaluator_average = []
                 eval_results = ref_results.loc[results['annotator/model'] == evaluator]
-                # true_pos = len(ref_results.loc[(ref_results[f'{evaluator}_res_tumor'] == 1) & (ref_results['res_tumor'] == 1)])
-                # false_pos = len(
-                #     ref_results.loc[(ref_results[f'{evaluator}_res_tumor'] == 1) & (ref_results['res_tumor'] == 0)])
-                # true_neg = len(
-                #     ref_results.loc[(ref_results[f'{evaluator}_res_tumor'] == 0) & (ref_results['res_tumor'] == 0)])
-                # false_neg = len(
-                #     ref_results.loc[(ref_results[f'{evaluator}_res_tumor'] == 0) & (ref_results['res_tumor'] == 1)])
                 true_pos = len(
-                    eval_results.loc[(eval_results[f'residual_tumor_prediction'] == 1) & (eval_results['residual_tumor'] == 1)])
+                    eval_results.loc[
+                        (eval_results[f'residual_tumor_prediction'] == 1) & (eval_results['residual_tumor'] == 1)])
                 false_pos = len(
-                    eval_results.loc[(eval_results[f'residual_tumor_prediction'] == 1) & (eval_results['residual_tumor'] == 0)])
+                    eval_results.loc[
+                        (eval_results[f'residual_tumor_prediction'] == 1) & (eval_results['residual_tumor'] == 0)])
                 true_neg = len(
-                    eval_results.loc[(eval_results[f'residual_tumor_prediction'] == 0) & (eval_results['residual_tumor'] == 0)])
+                    eval_results.loc[
+                        (eval_results[f'residual_tumor_prediction'] == 0) & (eval_results['residual_tumor'] == 0)])
                 false_neg = len(
-                    eval_results.loc[(eval_results[f'residual_tumor_prediction'] == 0) & (eval_results['residual_tumor'] == 1)])
-                print(sum([true_pos, false_pos, true_neg, false_neg]))
+                    eval_results.loc[
+                        (eval_results[f'residual_tumor_prediction'] == 0) & (eval_results['residual_tumor'] == 1)])
+                # print(f"{evaluator}: {sum([true_pos, false_pos, true_neg, false_neg])}")
 
                 recall = 1 if (true_pos + false_neg) == 0 else true_pos / (true_pos + false_neg)
                 precision = 1 if (true_pos + false_pos) == 0 else true_pos / (true_pos + false_pos)
@@ -563,7 +547,7 @@ class CompareArchitecturesStudy:
                 pos_rate = (true_pos + false_neg) / len(eval_results)
                 neg_rate = (true_neg + false_pos) / len(eval_results)
                 evaluator_average.extend([recall, precision, specificity, f1, accuracy, balanced_acc,
-                                              pos_rate, neg_rate])
+                                          pos_rate, neg_rate])
 
                 for m in eval_metrics:
                     if '-P' in m:
@@ -584,53 +568,104 @@ class CompareArchitecturesStudy:
 
         metrics_df = pd.DataFrame(metrics_per_ref_evaluator, columns=average_columns)
         output_filepath = Path(self.output_dir, 'interrater_study_average_metrics.csv')
-        metrics_df.to_csv(output_filepath, index = False)
+        metrics_df.to_csv(output_filepath, index=False)
 
-    def visualize_interrater_results(self):
+    def visualize_interrater_results(self, references=[], evaluators=[]):
+        # Results to plot
+        evaluators = ['exp1', 'exp2', 'exp3', 'exp4', 'nov1', 'nov2', 'nov3', 'nov4',
+                      'AGU-Net_E', 'nnU-Net_E']
+        references = ['ground_truth_segmentation', 'strict-consensus-all-annotators']
+
+        # Plot parameters
+        palettes = [sns.color_palette("light:seagreen", n_colors=6),
+                    sns.color_palette("light:b", n_colors=6),
+                    sns.color_palette("light:m", n_colors=7)]
+
+        palette = {f'nov{i + 1}': palettes[0][i+1] for i in range(4)}
+        palette.update({f'exp{i+1}': palettes[1][i+1] for i in range(4)})
+        palette.update({'AGU-Net_E': palettes[2][2], 'nnU-Net_E': palettes[2][3]})
+        figsize = (18, 8)
+        tick_fontsize = 16
+        label_fontsize = tick_fontsize + 1
+        title_fontsize = label_fontsize + 1
+        all_refs_one_fig = True
+        plt.rcParams["font.family"] = "serif"
+
+        # Load and process results
         study_filepath = Path(self.output_dir, 'interrater_study.csv')
         results = pd.read_csv(study_filepath)
         results.replace('inf', 0, inplace=True)
         results.replace('', 0, inplace=True)
         results.replace(' ', 0, inplace=True)
 
-        annotator_groups = ['nov', 'exp']
-        all_annotators = sum([[f"{annot}{i}" for i in range(1, 5)] for annot in annotator_groups], [])
+        if len(references) == 0:
+            references = np.unique(results['reference'])
+        if len(evaluators) == 0:
+            evaluators = np.unique(results['annotator/model'])
 
-        unique_references = np.unique(results['reference'])
-        unique_evaluators = np.unique(['_'.join(colname.split('_')[:-1]) for colname in results.columns if
-                                       ('Dice' in colname or 'Jaccard' in colname)])
-        print(len(unique_evaluators), unique_evaluators)
+        results = results[results['annotator/model'].isin(evaluators)]
 
-        for ref in unique_references:
-            ref_results = results.loc[results['reference'] == ref]
-            ref_results_positive = ref_results.loc[ref_results['residual_tumor'] == 1]
+        reference_names = {'strict-consensus-all-annotators': "Consensus agreement annotation",
+                           'ground_truth_segmentation': "Ground truth annotation"}
 
-            # ref_results_annot = ref_results[all_annotators]
+        if all_refs_one_fig:
+            fig, axes = plt.subplots(1, 2, figsize=figsize)
+            b_list = []
+            for i, ref in enumerate(references):
+                ref_results = results.loc[results['reference'] == ref]
+                ref_results_positive = ref_results.loc[ref_results['residual_tumor'] == 1]
 
-            plt.figure(figsize=(15, 8))
-            b = sns.boxplot(data=ref_results_positive, x='annotator/model', y='Jaccard')
-            b.set_xticklabels(b.get_xticklabels(), rotation=45)
-            b.set(ylim=(0, 1))
-            plt.title(f"Reference = {ref}")
+                b_list.append(sns.boxplot(ax=axes[i], data=ref_results_positive, x='annotator/model', y='Jaccard',
+                                palette=palette))
+
+                b_list[i].set_xticklabels(b_list[i].get_xticklabels(), rotation=45, fontsize=tick_fontsize)
+                b_list[i].set(ylim=(0, 1))
+                b_list[i].set_yticklabels(np.round(b_list[i].get_yticks(), 1), fontsize=tick_fontsize)
+                b_list[i].set_xlabel("Annotator / Model", fontsize=label_fontsize)
+                b_list[i].set_ylabel("Jaccard score", fontsize=label_fontsize)
+
+                b_list[i].set_title(f"Reference:  {reference_names[ref]}", fontsize=title_fontsize)
+
             plt.tight_layout()
-            plt.savefig(Path(self.output_dir, f'jaccard_scores_ref_{ref}.png'))
-            # plt.show(block=False)
+            plt.savefig(Path(self.output_dir, f'jaccard_scores_all_refs.png'), dpi=300)
 
-def dice_computation(reference, detection_ni, t=0.5):
-    detection = deepcopy(detection_ni.get_data())
-    detection[detection <= t] = 0
-    detection[detection > t] = 1
-    detection = detection.astype('uint8')
+        else:
+            for i, ref in enumerate(references):
+                ref_results = results.loc[results['reference'] == ref]
+                ref_results_positive = ref_results.loc[ref_results['residual_tumor'] == 1]
 
-    ref = deepcopy(reference)
-    ref[ref <= t] = 0
-    ref[ref > t] = 1
-    ref = ref.astype('uint8')
+                plt.figure(figsize=figsize)
+                b = sns.boxplot(data=ref_results_positive, x='annotator/model', y='Jaccard',
+                                palette=palette)
 
-    dice = compute_dice(ref, detection)
+                b.set_xticklabels(b.get_xticklabels(), rotation=45, fontsize=tick_fontsize)
+                b.set(ylim=(0, 1))
+                b.set_yticklabels(np.round(b.get_yticks(), 1), fontsize=tick_fontsize)
+                b.set_xlabel("Annotator / Model", fontsize=label_fontsize)
+                b.set_ylabel("Jaccard score", fontsize=label_fontsize)
+
+                plt.title(f"Reference:  {reference_names[ref]}", fontsize=title_fontsize)
+                plt.tight_layout()
+                plt.savefig(Path(self.output_dir, f'jaccard_scores_ref_{ref}.png'))
+
+def dice_computation(reference_ni, detection_ni, t=0.5):
+    reference = threshold_segmentation(reference_ni, t)
+    detection = threshold_segmentation(detection_ni, t)
+
+    dice = compute_dice(reference, detection)
     jaccard = dice / (2-dice)
-    voxel_size = np.prod(detection_ni.header.get_zooms()[0:3])
-    volume_seg_ml = compute_tumor_volume(detection, voxel_size)
-    res_tumor = 1 if volume_seg_ml > 0.175 else 0
-
+    volume_seg_ml, res_tumor = compute_volume_residual_tumor(detection_ni, detection)
     return [dice, jaccard, volume_seg_ml, res_tumor]
+
+def threshold_segmentation(segmentation_ni, t):
+    segmentation = deepcopy(segmentation_ni.get_data())
+    segmentation[segmentation <= t] = 0
+    segmentation[segmentation > t] = 1
+    return segmentation.astype('uint8')
+
+
+def compute_volume_residual_tumor(segmentation_ni, segmentation):
+    voxel_size = np.prod(segmentation_ni.header.get_zooms()[0:3])
+    volume_seg_ml = compute_tumor_volume(segmentation, voxel_size)
+    res_tumor = 1 if volume_seg_ml > 0.175 else 0
+    return volume_seg_ml, res_tumor

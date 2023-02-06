@@ -34,8 +34,11 @@ class SharedResources:
         self.__parse_default_parameters()
         self.__parse_validation_parameters()
         self.__parse_studies_parameters()
-        if 'Test' in self.config:
+        if 'PostopTest' in self.config:
             self.__parse_test_parameters()
+        if 'PostopStudy' in self.config:
+            self.__parse_postop_study_parameters()
+
     def __parse_default_parameters(self):
         """
         Parse the user-selected configuration parameters linked to the overall behaviour.
@@ -78,7 +81,6 @@ class SharedResources:
         self.studies_task = ''
         self.studies_study_name = None
         self.studies_extra_parameters_filename = ''
-        self.studies_exclude_ids = []
 
         if self.config.has_option('Studies', 'input_folder'):
             if self.config['Studies']['input_folder'].split('#')[0].strip() != '':
@@ -99,11 +101,6 @@ class SharedResources:
         if self.config.has_option('Studies', 'extra_parameters_filename'):
             if self.config['Studies']['extra_parameters_filename'].split('#')[0].strip() != '':
                 self.studies_extra_parameters_filename = self.config['Studies']['extra_parameters_filename'].split('#')[0].strip()
-
-        if self.config.has_option('Studies', 'exclude_ids'):
-            if self.config['Studies']['exclude_ids'].split('#')[0].strip() != '':
-                self.studies_exclude_ids = [str(x) for x in self.config['Studies'][
-                    'exclude_ids'].split('#')[0].strip().split(',')]
 
     def __parse_validation_parameters(self):
         """
@@ -181,49 +178,113 @@ class SharedResources:
         self.test_detection_overlap_thresholds = []
         self.test_gt_files_suffix = ''
         self.test_prediction_files_suffix = ''
-        self.test_tiny_objects_removal_threshold = 50
+        self.test_tiny_objects_removal_threshold = 0
+        self.test_id_mapping = ''
+        self.test_convert_ids = False
+        self.test_base_id_column = ''
+        self.test_new_id_column = ''
         self.test_exclude_ids = []
 
-        if self.config.has_option('Test', 'input_folder'):
-            if self.config['Test']['input_folder'].split('#')[0].strip() != '':
-                self.test_input_folder = self.config['Test']['input_folder'].split('#')[0].strip()
+        if self.config.has_option('PostopTest', 'input_folder'):
+            if self.config['PostopTest']['input_folder'].split('#')[0].strip() != '':
+                self.test_input_folder = self.config['PostopTest']['input_folder'].split('#')[0].strip()
 
-        if self.config.has_option('Test', 'output_folder'):
-            if self.config['Test']['output_folder'].split('#')[0].strip() != '':
-                self.test_output_folder = self.config['Test']['output_folder'].split('#')[0].strip()
+        if self.config.has_option('PostopTest', 'output_folder'):
+            if self.config['PostopTest']['output_folder'].split('#')[0].strip() != '':
+                self.test_output_folder = self.config['PostopTest']['output_folder'].split('#')[0].strip()
 
-        if self.config.has_option('Test', 'nb_folds'):
-            if self.config['Test']['nb_folds'].split('#')[0].strip() != '':
-                self.test_nb_folds = int(self.config['Test']['nb_folds'].split('#')[0].strip())
+        if self.config.has_option('PostopTest', 'nb_folds'):
+            if self.config['PostopTest']['nb_folds'].split('#')[0].strip() != '':
+                self.test_nb_folds = int(self.config['PostopTest']['nb_folds'].split('#')[0].strip())
 
-        if self.config.has_option('Test', 'extra_metrics'):
-            if self.config['Test']['extra_metrics'].split('#')[0].strip() != '':
+        if self.config.has_option('PostopTest', 'extra_metrics'):
+            if self.config['PostopTest']['extra_metrics'].split('#')[0].strip() != '':
                 self.test_metric_names = [x.strip() for x in
-                                                self.config['Test']['extra_metrics'].split('#')[0].strip().split(
+                                                self.config['PostopTest']['extra_metrics'].split('#')[0].strip().split(
                                                     ',')]
 
-        if self.config.has_option('Test', 'detection_overlap_thresholds'):
-            if self.config['Test']['detection_overlap_thresholds'].split('#')[0].strip() != '':
-                self.test_detection_overlap_thresholds = [float(x) for x in self.config['Test'][
+        if self.config.has_option('PostopTest', 'detection_overlap_thresholds'):
+            if self.config['PostopTest']['detection_overlap_thresholds'].split('#')[0].strip() != '':
+                self.test_detection_overlap_thresholds = [float(x) for x in self.config['PostopTest'][
                     'detection_overlap_thresholds'].split('#')[0].strip().split(',')]
+
         if len(self.test_detection_overlap_thresholds) == 0:
             self.test_detection_overlap_thresholds = [0.]
 
-        if self.config.has_option('Test', 'prediction_files_suffix'):
-            if self.config['Test']['prediction_files_suffix'].split('#')[0].strip() != '':
+        if self.config.has_option('PostopTest', 'prediction_files_suffix'):
+            if self.config['PostopTest']['prediction_files_suffix'].split('#')[0].strip() != '':
                 self.test_prediction_files_suffix = \
-                self.config['Test']['prediction_files_suffix'].split('#')[0].strip()
+                self.config['PostopTest']['prediction_files_suffix'].split('#')[0].strip()
 
-        if self.config.has_option('Test', 'gt_files_suffix'):
-            if self.config['Test']['gt_files_suffix'].split('#')[0].strip() != '':
-                self.test_gt_files_suffix = self.config['Test']['gt_files_suffix'].split('#')[0].strip()
+        if self.config.has_option('PostopTest', 'gt_files_suffix'):
+            if self.config['PostopTest']['gt_files_suffix'].split('#')[0].strip() != '':
+                self.test_gt_files_suffix = self.config['PostopTest']['gt_files_suffix'].split('#')[0].strip()
 
-        if self.config.has_option('Test', 'tiny_objects_removal_threshold'):
-            if self.config['Test']['tiny_objects_removal_threshold'].split('#')[0].strip() != '':
+        if self.config.has_option('PostopTest', 'tiny_objects_removal_threshold'):
+            if self.config['PostopTest']['tiny_objects_removal_threshold'].split('#')[0].strip() != '':
                 self.test_tiny_objects_removal_threshold = int(
-                    self.config['Test']['tiny_objects_removal_threshold'].split('#')[0].strip())
+                    self.config['PostopTest']['tiny_objects_removal_threshold'].split('#')[0].strip())
 
-        if self.config.has_option('Test', 'exclude_ids'):
-            if self.config['Test']['exclude_ids'].split('#')[0].strip() != '':
-                self.test_exclude_ids = [str(x) for x in self.config['Test'][
+        if self.config.has_option('PostopTest', 'id_mapping'):
+            if self.config['PostopTest']['id_mapping'].split('#')[0].strip() != '':
+                self.test_id_mapping = self.config['PostopTest']['id_mapping'].split('#')[0].strip()
+
+        if self.config.has_option('PostopTest', 'convert_ids'):
+            if self.config['PostopTest']['convert_ids'].split('#')[0].strip() != '':
+                self.test_convert_ids = True if \
+                        self.config['PostopTest']['convert_ids'].split('#')[0].strip().lower() == 'true' else False
+
+        if self.config.has_option('PostopTest', 'base_id_column'):
+            if self.config['PostopTest']['base_id_column'].split('#')[0].strip() != '':
+                self.test_base_id_column = self.config['PostopTest']['base_id_column'].split('#')[0].strip()
+
+        if self.config.has_option('PostopTest', 'new_id_column'):
+            if self.config['PostopTest']['new_id_column'].split('#')[0].strip() != '':
+                self.test_new_id_column = self.config['PostopTest']['new_id_column'].split('#')[0].strip()
+
+
+        if self.config.has_option('PostopTest', 'exclude_ids'):
+            if self.config['PostopTest']['exclude_ids'].split('#')[0].strip() != '':
+                self.test_exclude_ids = [str(x) for x in self.config['PostopTest'][
+                    'exclude_ids'].split('#')[0].strip().split(',')]
+
+    def __parse_postop_study_parameters(self):
+        """
+        Parse the user-selected configuration parameters linked to the HGG postop study (plotting and visualization).
+        :param: studies_input_folder: main directory containing the validation results.
+        :param: (optional) studies_output_folder: destination directory where the study results will be saved.
+        If empty, the study results will be saved in the studies_input_folder location.
+        :param: studies_task: identifier for the study script to run. Each identified should link to a python file in
+        the /Studies sub-directory.
+        :param: studies_study_name: folder name for the specific study.
+        :param: studies_extra_parameters_filename: resources file containing patient-specific information, for example
+        the tumor volume, data origin, etc... for in-depth results analysis.
+        :return:
+        """
+        self.postop_id_mapping = ''
+        self.postop_convert_ids = False
+        self.postop_base_id_column = ''
+        self.postop_new_id_column = ''
+        self.postop_exclude_ids = []
+
+        if self.config.has_option('PostopStudy', 'id_mapping'):
+            if self.config['PostopStudy']['id_mapping'].split('#')[0].strip() != '':
+                self.postop_id_mapping = self.config['PostopStudy']['id_mapping'].split('#')[0].strip()
+
+        if self.config.has_option('PostopStudy', 'convert_ids'):
+            if self.config['PostopStudy']['convert_ids'].split('#')[0].strip() != '':
+                self.postop_convert_ids = True if \
+                        self.config['PostopStudy']['convert_ids'].split('#')[0].strip().lower() == 'true' else False
+
+        if self.config.has_option('PostopStudy', 'base_id_column'):
+            if self.config['PostopStudy']['base_id_column'].split('#')[0].strip() != '':
+                self.postop_base_id_column = self.config['PostopStudy']['base_id_column'].split('#')[0].strip()
+
+        if self.config.has_option('PostopStudy', 'new_id_column'):
+            if self.config['PostopStudy']['new_id_column'].split('#')[0].strip() != '':
+                self.postop_new_id_column = self.config['PostopStudy']['new_id_column'].split('#')[0].strip()
+
+        if self.config.has_option('PostopStudy', 'exclude_ids'):
+            if self.config['PostopStudy']['exclude_ids'].split('#')[0].strip() != '':
+                self.postop_exclude_ids = [str(x) for x in self.config['PostopStudy'][
                     'exclude_ids'].split('#')[0].strip().split(',')]
