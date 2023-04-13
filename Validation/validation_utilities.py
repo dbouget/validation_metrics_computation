@@ -6,9 +6,30 @@ import math
 from copy import deepcopy
 import matplotlib.pyplot as plt
 from Utils.latex_converter import *
+from Utils.resources import SharedResources
 
 
 def best_segmentation_probability_threshold_analysis(folder, detection_overlap_thresholds=None):
+    classes = SharedResources.getInstance().validation_class_names
+    class_optimal = {}
+    for c in classes:
+        class_optimal[c] = {}
+        class_optimal[c]['All'] = []
+        class_optimal[c]['True Positive'] = []
+        optimal_overlap, optimal_threshold = best_segmentation_probability_threshold_analysis_inner(folder,
+                                                                                                    detection_overlap_thresholds,
+                                                                                                    c, False)
+        class_optimal[c]['All'] = [optimal_overlap, optimal_threshold]
+        optimal_overlap_tp, optimal_threshold_tp = best_segmentation_probability_threshold_analysis_inner(folder,
+                                                                                                          detection_overlap_thresholds,
+                                                                                                          c, True)
+        class_optimal[c]['True Positive'] = [optimal_overlap_tp, optimal_threshold_tp]
+
+    return class_optimal
+
+
+def best_segmentation_probability_threshold_analysis_inner(folder, detection_overlap_thresholds, class_name,
+                                                           true_positive_state):
     """
     The best threshold probability and object overlap are determined based on a combination of overall DICE
     performance and F1-score. The recall here is not object-wise (i.e., each tumor part not considered individually),
@@ -17,12 +38,13 @@ def best_segmentation_probability_threshold_analysis(folder, detection_overlap_t
     :param detection_overlap_thresholds: list of threshold values (float) to use in the range [0., 1.].
     :return: optimal probability threshold and Dice cut-off.
     """
-    patient_dices_filename = os.path.join(folder, 'Validation', 'all_dice_scores.csv')
-    study_filename = os.path.join(folder, 'Validation', 'optimal_dice_study.csv')
+    suffix = "_tp" if true_positive_state else ""
+    patient_dices_filename = os.path.join(folder, 'Validation', class_name + '_dice_scores.csv')
+    study_filename = os.path.join(folder, 'Validation', class_name + '_optimal_dice_study' + suffix + '.csv')
     study_file = open(study_filename, 'w')
     study_writer = csv.writer(study_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
     study_writer.writerow(
-        ['Detection threshold', 'Dice threshold', 'Mean dice', 'Nb found', 'Nb total', 'Recall', 'Precision', 'F1'])
+        ['Detection threshold', 'Dice threshold', 'Dice', 'PiW Recall', 'PiW Precision', 'PiW F1', 'Found', 'Total'])
 
     all_dices = pd.read_csv(patient_dices_filename)
     object_detection_dice_thresholds = [0.]
@@ -36,40 +58,27 @@ def best_segmentation_probability_threshold_analysis(folder, detection_overlap_t
     max_global_metrics_value = 0
     max_threshold = None
     max_overlap = None
+    if true_positive_state:
+        all_dices = all_dices.loc[all_dices["True Positive"] == True]
+
     for obj in object_detection_dice_thresholds:
         for thr in range(nb_thresh):
-            dices = all_dices['Dice'].values[thr::nb_thresh]
-            # using x <= obj brings up results since more leniant
-            mean = np.ma.masked_array(dices, [np.round(x, 3) < obj for x in dices]).mean()
-            detection = [np.round(x, 3) > obj for x in dices]
-            found = np.count_nonzero(detection)
+            pixelwise_metrics_df = all_dices[['PiW Dice', 'PiW Recall', 'PiW Precision', 'PiW F1']]
+            dice_selected_pixelwise_metrics_df = pixelwise_metrics_df.loc[np.round(pixelwise_metrics_df['PiW Dice'], 3) >= obj]
+            dice_selected_pixelwise_metrics = dice_selected_pixelwise_metrics_df[thr::nb_thresh]
+            mean_dice = dice_selected_pixelwise_metrics['PiW Dice'].values.mean()
+            mean_recall = dice_selected_pixelwise_metrics['PiW Recall'].values.mean()
+            mean_precision = dice_selected_pixelwise_metrics['PiW Precision'].values.mean()
+            mean_f1 = dice_selected_pixelwise_metrics['PiW F1'].values.mean()
 
-            gt = all_dices['#GT'].values[thr::nb_thresh]
-            relevant = np.count_nonzero(gt)
-            recall = found / relevant
-            #recall = found / len(dices)
-            #
-            # det = all_dices['#Det'].values[thr::nb_thresh]
-            # selected = np.count_nonzero(det)
-            # if selected > 0:
-            #     precision = found / selected
-            # else:
-            #     precision = 1
-            all_for_thresh = all_dices.values[thr::nb_thresh]
-            precisions = []
-            # The proper overall precision computation can be debated?
-            for x, xval in enumerate(all_for_thresh):
-                tmp = pd.DataFrame(xval.reshape((1, len(xval))), columns=all_dices.columns)
-                if np.round(tmp['Dice'].values[0], 3) > obj and tmp['#GT'].values[0] > 0:
-                    precisions.append(tmp['Inst Precision'].values[0])
+            gt = all_dices['True Positive'].values[thr::nb_thresh]
+            nb_gt = len(gt)
+            nb_found = len(dice_selected_pixelwise_metrics)
 
-            precision = np.mean(precisions)
+            recall_precision_results.append([obj, thresholds[thr], mean_dice, mean_recall, mean_precision, mean_f1, nb_found, nb_gt])
+            study_writer.writerow([obj, thresholds[thr], mean_dice, mean_recall, mean_precision, mean_f1, nb_found, nb_gt])
 
-            F1 = 2 * ((precision * recall) / (precision + recall))
-            recall_precision_results.append([obj, thresholds[thr], mean, found, len(dices), recall, precision, F1])
-            study_writer.writerow([obj, thresholds[thr], mean, found, len(dices), recall, precision, F1])
-
-            global_result = (mean + F1) / 2.
+            global_result = mean_dice
             if global_result > max_global_metrics_value:
                 max_global_metrics_value = global_result
                 max_threshold = thresholds[thr]
@@ -82,8 +91,9 @@ def best_segmentation_probability_threshold_analysis(folder, detection_overlap_t
     study_writer.writerow(['', '', '', '', '', '', '', ''])
     study_writer.writerow([max_overlap, max_threshold, '', '', '', '', '', ''])
     study_file.close()
-    print('Selected values (Overlap: {}, Threshold: {}) for global metric of {}.'.format(max_overlap, max_threshold,
-                                                                                         max_global_metrics_value))
+    print('Class \'{}\' - Selected values (Overlap: {}, Threshold: {}) for global metric of {}.'
+          ' True positive case: {}'.format(class_name, max_overlap, max_threshold, max_global_metrics_value,
+                                           true_positive_state))
 
     recall_precision_results = np.asarray(recall_precision_results)
     plt.rcParams["font.weight"] = "bold"
@@ -95,7 +105,7 @@ def best_segmentation_probability_threshold_analysis(folder, detection_overlap_t
     for o, obj in enumerate(object_detection_dice_thresholds):
         threshs = recall_precision_results[o * nb_thresh:(o + 1) * nb_thresh, 1]
         dices = recall_precision_results[o * nb_thresh:(o + 1) * nb_thresh, 2]
-        F1s = recall_precision_results[o * nb_thresh:(o + 1) * nb_thresh, 7]
+        F1s = recall_precision_results[o * nb_thresh:(o + 1) * nb_thresh, 5]
         ax.plot(threshs, dices, label=str(obj * 100) + '% overlap')
         ax2.plot(threshs, F1s, label=str(obj * 100) + '% overlap')
         ax3.plot(dices, F1s, label=str(obj * 100) + '% overlap')
@@ -138,7 +148,18 @@ def best_segmentation_probability_threshold_analysis(folder, detection_overlap_t
     return max_overlap, max_threshold
 
 
-def compute_fold_average(folder, data=None, best_threshold=0.5, best_overlap=0.0, metrics=[], suffix=''):
+def compute_fold_average(folder, data=None, class_optimal={}, metrics=[], suffix='', true_positive_state=False):
+    classes = SharedResources.getInstance().validation_class_names
+    optimal_tag = 'All' if not true_positive_state else 'True Positive'
+    for c in classes:
+        optimal_values = class_optimal[c][optimal_tag]
+        compute_fold_average_inner(folder, class_name=c, best_threshold=optimal_values[1],
+                                   best_overlap=optimal_values[0], metrics=metrics, suffix=suffix,
+                                   true_positive_state=true_positive_state)
+
+
+def compute_fold_average_inner(folder, class_name, data=None, best_threshold=0.5, best_overlap=0.0, metrics=[],
+                               suffix='', true_positive_state=False):
     """
     :param folder: Main study folder where the results will be dumped (assuming inside a Validation sub-folder)
     :param best_threshold:
@@ -148,144 +169,146 @@ def compute_fold_average(folder, data=None, best_threshold=0.5, best_overlap=0.0
     """
     results = None
     if data is None:
-        results_filename = os.path.join(folder, 'Validation', 'all_dice_scores.csv')
+        results_filename = os.path.join(folder, 'Validation', class_name + '_dice_scores.csv')
         results = pd.read_csv(results_filename)
+        if true_positive_state:
+            results = results.loc[results["True Positive"] == True]
     else:
         results = deepcopy(data)
 
     results.replace('inf', np.nan, inplace=True)
     results.replace('', np.nan, inplace=True)
     results.replace(' ', np.nan, inplace=True)
-    metric_names = ['Dice', 'Dice-TP', 'Dice-P', 'Dice-N']
-    if metrics is not None:
-        metric_names.extend(metrics)
-        # 'Inst DICE', 'Inst Recall', 'Inst Precision', 'VS', 'IOU', 'MI', 'ARI', 'Jaccard', 'TPR',
-        #             'TNR', 'FPR', 'FNR', 'PPV', 'AUC', 'MCC', 'CKS', 'HD95', 'ASSD', 'RAVD', 'VC', 'OASSD']
     unique_folds = np.unique(results['Fold'])
     nb_folds = len(unique_folds)
     metrics_per_fold = []
-    fold_average_columns = ['Fold', '# samples', 'Patient-wise recall', 'Patient-wise precision', 'Patient-wise F1',
-                            'FPPP', 'Object-wise recall', 'Object-wise precision', 'Object-wise F1',
-                            'Global recall', 'Global precision', 'Global F1', 'Accuracy', 'Balanced accuracy']
+
+    metric_names = list(results.columns[3:])
+    if metrics is not None:
+        metric_names.extend(metrics)
+
+    fold_average_columns = ['Fold', '# samples', 'Patient-wise recall', 'Patient-wise precision', 'Patient-wise specificity',
+                            'Patient-wise F1', 'Patient-wise Accuracy', 'Patient-wise Balanced accuracy']
     for m in metric_names:
-        if m in results.columns.values or 'Dice' in m:
-            fold_average_columns.extend([m + '_mean', m + '_std'])
+        fold_average_columns.extend([m + ' (Mean)', m + ' (Std)'])
 
     # Regarding the overlap threshold, should the patient discarded for recall be
     # used for other metrics computation?
     for f in unique_folds:
-        fold_results = results.loc[results['Fold'] == f]
-        thresh_index = (np.round(fold_results['Threshold'], 1) == best_threshold)
-        all_for_thresh = fold_results.loc[thresh_index] #fold_results.loc[fold_results['Threshold'] == best_threshold]
-        if len(all_for_thresh) == 0: # Empty fold? Can indicate something went wrong, or was not computed properly beforehand
-            fold_average = [f, 0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-            metrics_per_fold.append(fold_average)
-            continue
-
-        nb_missed_tumors = len(fold_results.loc[thresh_index & (fold_results['Dice'] < best_overlap)])
-        nb_tumors = len(fold_results.loc[thresh_index & (fold_results['#GT'] > 0)])
-        patient_wise_recall = 1 - (nb_missed_tumors / nb_tumors) #1 - (nb_missed_tumors/len(all_for_thresh))
-        patient_wise_precision = fold_results.loc[thresh_index & (fold_results['#Det'] > 0)]['Inst Precision'].mean() # all_for_thresh.loc[all_for_thresh['#Det'] > 0]['Inst Precision'].mean()
-        fppp = np.subtract(all_for_thresh['#Det'].values,
-                           np.multiply(all_for_thresh['Inst Precision'].values,
-                                       all_for_thresh['#Det'].values)).mean()
-        objects_total = all_for_thresh['#GT'].values.sum()
-        objects_found = np.multiply(all_for_thresh['Inst Recall'].values, all_for_thresh['#GT'].values).sum()
-        object_wise_recall = objects_found / objects_total
-        objects_false_positive_total = np.subtract(all_for_thresh['#Det'].values,
-                                        np.multiply(all_for_thresh['Inst Precision'].values,
-                                                    all_for_thresh['#Det'].values)).sum()
-        object_wise_precision = 1 - (objects_false_positive_total / all_for_thresh['#Det'].sum())
-        patient_wise_F1 = 2 * ((patient_wise_precision * patient_wise_recall) / (patient_wise_precision + patient_wise_recall))
-        object_wise_F1 = 2 * ((object_wise_precision * object_wise_recall) / (object_wise_precision + object_wise_recall))
-
-        true_positives = len(all_for_thresh.loc[(all_for_thresh['#Det'] > 0) & (all_for_thresh['#GT'] > 0)])
-        false_negatives = len(all_for_thresh.loc[(all_for_thresh['#Det'] == 0) & (all_for_thresh['#GT'] > 0)])
-        false_positives = len(all_for_thresh.loc[(all_for_thresh['#Det'] > 0) & (all_for_thresh['#GT'] == 0)])
-        true_negatives = len(all_for_thresh.loc[(all_for_thresh['#Det'] == 0) & (all_for_thresh['#GT'] == 0)])
-
-        global_recall = true_positives / (true_positives + false_negatives)
-        global_precision = true_positives / (true_positives + false_positives)
-        global_F1 = 2 * ((global_recall * global_precision) / (global_precision + global_recall))
-        accuracy = (true_positives + true_negatives ) / (true_negatives + true_positives + false_negatives + false_positives)
-        true_negative_rate = 1 if (true_negatives + false_negatives) == 0 else true_negatives / (true_negatives + false_negatives)
-        balanced_accuracy = (global_recall + true_negative_rate) / 2
-
-        fold_average = [f, len(np.unique(fold_results['Patient'].values)), patient_wise_recall, patient_wise_precision,
-                        patient_wise_F1, fppp, object_wise_recall, object_wise_precision, object_wise_F1,
-                        global_recall, global_precision, global_F1, accuracy, balanced_accuracy]
-        for m in metric_names:
-            if m in fold_results.columns.values:
-                if m in ['HD95', 'ASSD', 'RAVD', 'VC', 'OASSD']:
-                    # avg = all_for_thresh[all_for_thresh[m] != -1.0][m].dropna().astype('float32').mean()
-                    # std = all_for_thresh[all_for_thresh[m] != -1.0][m].dropna().astype('float32').std(ddof=0)
-                    avg = fold_results.loc[thresh_index][fold_results.loc[thresh_index][m] != -1.0][m].dropna().astype('float32').mean()
-                    std = fold_results.loc[thresh_index][fold_results.loc[thresh_index][m] != -1.0][m].dropna().astype('float32').std(ddof=0)
-                else:
-                    avg = all_for_thresh[m].dropna().astype('float32').mean()
-                    std = all_for_thresh[m].dropna().astype('float32').std(ddof=0)
-                fold_average.extend([avg, std])
-            elif m == 'Dice-TP':
-                true_positives = all_for_thresh.loc[(all_for_thresh['Dice'] >= best_overlap) &
-                                                    (all_for_thresh['#GT'] > 0)]
-                avg = true_positives['Dice'].astype('float32').mean()
-                std = true_positives['Dice'].astype('float32').std(ddof=0)
-                fold_average.extend([avg, std])
-            elif m == 'Dice-P':
-                positives = all_for_thresh.loc[(all_for_thresh['#GT'] > 0)]
-                avg = positives['Dice'].astype('float32').mean()
-                std = positives['Dice'].astype('float32').std()
-                fold_average.extend([avg, std])
-            elif m == 'Dice-N':
-                negatives = all_for_thresh.loc[(all_for_thresh['#GT'] == 0)]
-                avg = negatives['Dice'].astype('float32').mean()
-                std = negatives['Dice'].astype('float32').std()
-                fold_average.extend([avg, std])
-
+        patientwise_metrics = compute_patientwise_fold_metrics(results, f, best_threshold, best_overlap)
+        fold_average_metrics, fold_std_metrics = compute_singe_fold_average_metrics(results, f, best_threshold, best_overlap, metrics)
+        fold_metrics = []
+        for m in range(len(fold_average_metrics)):
+            fold_metrics.append(fold_average_metrics[m])
+            fold_metrics.append(fold_std_metrics[m])
+        fold_average = [f, len(np.unique(results.loc[results['Fold'] == f]['Patient'].values))] + patientwise_metrics + fold_metrics
         metrics_per_fold.append(fold_average)
 
     metrics_per_fold_df = pd.DataFrame(data=metrics_per_fold, columns=fold_average_columns)
-    study_filename = os.path.join(folder, 'Validation', 'folds_metrics_average.csv') if suffix == '' else os.path.join(folder, 'Validation', 'folds_metrics_average_' + suffix + '.csv')
-    metrics_per_fold_df.to_csv(study_filename)
-    export_df_to_latex(folder, data=metrics_per_fold_df, suffix='folds_metrics_average' + suffix)
-    export_df_to_latex_paper(folder, data=metrics_per_fold_df, suffix='folds_metrics_average' + suffix)
+    study_filename = os.path.join(folder, 'Validation', class_name + '_folds_metrics_average.csv') if suffix == '' else os.path.join(folder,
+                                                                                                 'Validation',
+                                                                                                 class_name + '_folds_metrics_average_' + suffix + '.csv')
+    metrics_per_fold_df.to_csv(study_filename, index=False)
 
     ####### Averaging the results from the different folds ###########
     total_samples = metrics_per_fold_df['# samples'].sum()
+    patientwise_fold_metrics_to_average = metrics_per_fold_df.values[:, 2:8]
+    fold_metrics_to_average = metrics_per_fold_df.values[:, 8:][:, 0::2]
+    fold_std_metrics_to_average = metrics_per_fold_df.values[:, 8:][:, 1::2]
+    total_fold_metrics_to_average = np.concatenate((patientwise_fold_metrics_to_average, fold_metrics_to_average), axis=1)
+    fold_metrics_average = np.mean(total_fold_metrics_to_average, axis=0)
+    fold_metrics_std = np.std(total_fold_metrics_to_average, axis=0)
     fold_averaged_results = [total_samples]
-    fixed_metrics = ['Patient-wise recall', 'Patient-wise precision', 'Patient-wise F1', 'FPPP', 'Object-wise recall',
-                     'Object-wise precision', 'Object-wise F1', 'Global recall', 'Global precision', 'Global F1',
-                     'Accuracy', 'Balanced accuracy'] #, 'Dice-TP_mean', 'Dice-P_mean', 'Dice-N_mean'
-    fold_averaged_results_df_columns = ['Fold']
-    # Performing classical averaging first on the relevant metrics
-    for fm in fixed_metrics:
-        mean_final = 0
-        std_final = metrics_per_fold_df[fm].values.std()
-        for f in unique_folds:
-            fold_val = metrics_per_fold_df.loc[metrics_per_fold_df['Fold'] == f]
-            mean_final = mean_final + (fold_val[fm].values[0] * fold_val['# samples'].values[0])
-        mean_final = mean_final / total_samples
-        fold_averaged_results.extend([mean_final, std_final])
-        fold_averaged_results_df_columns.extend([fm + '_mean', fm + '_std'])
+    for m in range(len(fold_metrics_average)):
+        fold_averaged_results.append(fold_metrics_average[m])
+        fold_averaged_results.append(fold_metrics_std[m])
 
     # Performing pooled estimates (taking into account the sample size for each fold) when relevant
-    for m in metric_names:
-        if m in [x.split('_')[0] for x in metrics_per_fold_df.columns.values]:
-            mean_final = 0
-            std_final = 0
-            for f in unique_folds:
-                fold_val = metrics_per_fold_df.loc[metrics_per_fold_df['Fold'] == f]
-                mean_final = mean_final + (fold_val[m + '_mean'].values[0] * fold_val['# samples'].values[0])
-                std_final = std_final + ((fold_val['# samples'].values[0] - 1) * math.pow(fold_val[m + '_std'].values[0], 2) + (fold_val['# samples'].values[0]) * math.pow(fold_val[m + '_mean'].values[0], 2))
-            mean_final = mean_final / total_samples
+    pooled_fold_averaged_results = [len(unique_folds), total_samples]
+    pw_index = 8
+    for m in range(total_fold_metrics_to_average.shape[1]):
+        mean_final = 0
+        std_final = 0
+        for f in range(len(unique_folds)):
+            fold_val = total_fold_metrics_to_average[f, m]
+            fold_sample_size = list(metrics_per_fold_df['# samples'])[f]
+            mean_final = mean_final + (fold_val * fold_sample_size)
+            # For patient-wise metrics, there is no std value for within each fold
+            if m < pw_index:
+                std_final = std_final
+            else:
+                std_final = std_final + ((fold_sample_size - 1) * math.pow(fold_std_metrics_to_average[f, m-pw_index], 2) + (fold_sample_size) * math.pow(fold_val, 2))
+        mean_final = mean_final / total_samples
+        if m >= pw_index:
             std_final = math.sqrt((1 / (total_samples - 1)) * (std_final - (total_samples * math.pow(mean_final, 2))))
-            fold_averaged_results.extend([mean_final, std_final])
-            fold_averaged_results_df_columns.extend([m + '_mean', m + '_std'])
+        else:
+            std_final = np.std(total_fold_metrics_to_average[:, m])
+        pooled_fold_averaged_results.extend([mean_final, std_final])
 
-    fold_averaged_results_df = pd.DataFrame(np.asarray(fold_averaged_results).reshape((1, len(fold_averaged_results))),
-                                            columns=fold_averaged_results_df_columns)
-    output_filename = os.path.join(folder, 'Validation', 'overall_metrics_average.csv') if suffix == '' else os.path.join(folder, 'Validation', 'overall_metrics_average_' + suffix + '.csv')
-    fold_averaged_results_df.to_csv(output_filename, index=False)
-    export_mean_std_df_to_latex(folder, data=fold_averaged_results_df, suffix='overall_metrics_average' + suffix)
-    export_mean_std_df_to_latex_paper(folder, data=fold_averaged_results_df, suffix='overall_metrics_average' + suffix)
+    overall_average_columns = ['Fold', '# samples']
+    for m in ['Patient-wise recall', 'Patient-wise precision', 'Patient-wise specificity', 'Patient-wise F1',
+              'Patient-wise Accuracy', 'Patient-wise Balanced accuracy']:
+        overall_average_columns.extend([m + ' (Mean)', m + ' (Std)'])
+
+    for m in metric_names:
+        overall_average_columns.extend([m + ' (Mean)', m + ' (Std)'])
+    pooled_fold_averaged_results_df = pd.DataFrame(data=np.asarray(pooled_fold_averaged_results).reshape(1, len(overall_average_columns)), columns=overall_average_columns)
+    study_filename = os.path.join(folder, 'Validation', class_name + '_overall_metrics_average.csv') if suffix == '' else os.path.join(folder,
+                                                                                                 'Validation',
+                                                                                                 class_name + '_overall_metrics_average_' + suffix + '.csv')
+    pooled_fold_averaged_results_df.to_csv(study_filename, index=False)
+
+
+def compute_singe_fold_average_metrics(results, fold_number, best_threshold, best_overlap, metric_names):
+    fold_results = results.loc[results['Fold'] == fold_number]
+    thresh_index = (np.round(fold_results['Threshold'], 1) == best_threshold)
+    all_for_thresh = fold_results.loc[thresh_index]
+    if len(all_for_thresh) == 0:
+        # Empty fold? Can indicate something went wrong, or was not computed properly beforehand
+        return None
+    default_metrics_average = list(np.mean(all_for_thresh.values[:, 3:], axis=0))
+    default_metrics_std = [np.std(all_for_thresh.values[:, x], axis=0) for x in range(3, all_for_thresh.values.shape[1])]
+
+    extra_metrics_average = []
+    extra_metrics_std = []
+    for m in metric_names:
+        if m in fold_results.columns.values:
+            if m in ['HD95', 'ASSD', 'RAVD', 'VC', 'OASSD']:
+                avg = fold_results.loc[thresh_index][fold_results.loc[thresh_index][m] != -1.0][m].dropna().astype(
+                    'float32').mean()
+                std = fold_results.loc[thresh_index][fold_results.loc[thresh_index][m] != -1.0][m].dropna().astype(
+                    'float32').std(ddof=0)
+            else:
+                avg = all_for_thresh[m].dropna().astype('float32').mean()
+                std = all_for_thresh[m].dropna().astype('float32').std(ddof=0)
+            extra_metrics_average.append(avg)
+            extra_metrics_std.append(std)
+
+    return default_metrics_average + extra_metrics_average, default_metrics_std + extra_metrics_std
+
+
+def compute_patientwise_fold_metrics(results, fold_number, best_threshold, best_overlap):
+    fold_results = results.loc[results['Fold'] == fold_number]
+    thresh_index = (np.round(fold_results['Threshold'], 1) == best_threshold)
+    all_for_thresh = fold_results.loc[thresh_index]
+    if len(all_for_thresh) == 0:
+        # Empty fold? Can indicate something went wrong, or was not computed properly beforehand
+        fold_average = [-1., -1., -1., -1., -1., -1.]
+        return fold_average
+
+    true_positives = fold_results.loc[thresh_index & (fold_results['PiW Dice'] >= best_overlap) & (fold_results['True Positive'] == True)]
+    false_positives = fold_results.loc[thresh_index & (fold_results['PiW Dice'] >= best_overlap) & (fold_results['True Positive'] == False)]
+    true_negatives = fold_results.loc[thresh_index & (fold_results['PiW Dice'] < best_overlap) & (fold_results['True Positive'] == False)]
+    false_negatives = fold_results.loc[thresh_index & (fold_results['PiW Dice'] < best_overlap) & (fold_results['True Positive'] == True)]
+    patient_wise_recall = len(true_positives) / (len(true_positives) + len(false_negatives) + 1e-6)
+    patient_wise_precision = len(true_positives) / (len(true_positives) + len(false_positives))
+    patient_wise_specificity = len(true_negatives) / (len(true_negatives) + len(false_positives))
+    patient_wise_f1 = 2 * len(true_positives) / ((2 * len(true_positives)) + len(false_positives) + len(false_negatives) + 1e-6)
+    accuracy = (len(true_positives) + len(true_negatives)) / (len(true_positives) + len(true_negatives) + len(false_positives) + len(false_negatives))
+    balanced_accuracy = (patient_wise_recall + patient_wise_specificity) / 2
+
+    # fold_number, len(np.unique(fold_results['Patient'].values))
+    patientwise_metrics = [patient_wise_recall, patient_wise_precision, patient_wise_specificity, patient_wise_f1,
+                           accuracy, balanced_accuracy]
+    return patientwise_metrics
 

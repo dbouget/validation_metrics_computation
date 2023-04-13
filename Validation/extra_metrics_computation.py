@@ -403,12 +403,16 @@ def compute_overall_metrics_correlation(folder, data=None, best_threshold=0.5, b
 
     results.replace('inf', np.nan, inplace=True)
     optimal_results = results.loc[results['Threshold'] == best_threshold]
-    # results_for_matrix_df = optimal_results.drop(['Patient', 'Fold', 'Threshold', '#GT', '#Det'], axis=1)
+    # results_for_matrix_df = optimal_results.drop(['Patient', 'Fold', 'Threshold', '#Det', 'Inst DICE', 'Inst Recall',
+    #                                               'Inst Precision', 'Largest foci Dice'], axis=1)
+    # results_for_matrix_df = results_for_matrix_df[['Dice', 'IOU', 'Jaccard', 'AUC', 'TPR', 'TNR', 'FPR', 'FNR', 'PPV',
+    #                                                'VS', 'VC', 'RAVD', 'GCE', 'MI', 'MCC', 'CKS', 'VOI', 'HD95',
+    #                                                'MahaD', 'ProbD','ASSD', 'ARI', 'OASSD', '#GT']]
     results_for_matrix_df = optimal_results.drop(['Patient', 'Fold', 'Threshold', '#Det', 'Inst DICE', 'Inst Recall',
-                                                  'Inst Precision', 'Largest foci Dice'], axis=1)
-    results_for_matrix_df = results_for_matrix_df[['Dice', 'IOU', 'Jaccard', 'AUC', 'TPR', 'TNR', 'FPR', 'FNR', 'PPV',
-                                                   'VS', 'VC', 'RAVD', 'GCE', 'MI', 'MCC', 'CKS', 'VOI', 'HD95',
-                                                   'MahaD', 'ProbD','ASSD', 'ARI', 'OASSD', '#GT']]
+                                                   'Inst Precision', 'Largest foci Dice', '#GT', 'FPR', 'FNR'], axis=1)
+    results_for_matrix_df = results_for_matrix_df[['Dice', 'TPR', 'TNR', 'PPV', 'IOU', 'GCE',
+                                                   'VS', 'RAVD', 'MI', 'VOI', 'CKS', 'AUC', 'VC', 'MCC', 'ProbD',
+                                                   'HD95', 'MahaD', 'ASSD', 'ARI', 'OASSD']]
     results_for_matrix_df = results_for_matrix_df.dropna()
     results_for_matrix_df = results_for_matrix_df.apply(pd.to_numeric)
     corr_matrix = results_for_matrix_df.corr()
@@ -421,6 +425,8 @@ def export_correlation_matrix_to_latex(folder, matrix):
     pfile = open(matrix_filename, 'w')
 
     pfile.write('\\begin{table}[h]\n')
+    pfile.write('\\caption{Metrics confusion matrix. The color intensity of each cell represents the strength of'
+                ' the correlation, where blue denotes direct correlation and red denotes inverse correlation.}\n')
     pfile.write('\\adjustbox{max width=\\textwidth}{\n')
     pfile.write('\\begin{tabular}{l'+('r' * matrix.shape[0]) + '}\n')
     pfile.write('\\toprule\n')

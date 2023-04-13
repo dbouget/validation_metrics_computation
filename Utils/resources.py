@@ -122,11 +122,14 @@ class SharedResources:
         self.validation_output_folder = ''
         self.validation_nb_folds = 5
         self.validation_split_way = 'two-way'
+        self.validation_metric_spaces = []
         self.validation_metric_names = []
         self.validation_detection_overlap_thresholds = []
-        self.validation_gt_files_suffix = ''
-        self.validation_prediction_files_suffix = ''
+        self.validation_gt_files_suffix = []
+        self.validation_prediction_files_suffix = []
         self.validation_tiny_objects_removal_threshold = 50
+        self.validation_class_names = []
+        self.validation_true_positive_volume_thresholds = []
 
         if self.config.has_option('Validation', 'input_folder'):
             if self.config['Validation']['input_folder'].split('#')[0].strip() != '':
@@ -144,6 +147,10 @@ class SharedResources:
             if self.config['Validation']['split_way'].split('#')[0].strip() != '':
                 self.validation_split_way = self.config['Validation']['split_way'].split('#')[0].strip()
 
+        if self.config.has_option('Validation', 'metrics_space'):
+            if self.config['Validation']['metrics_space'].split('#')[0].strip() != '':
+                self.validation_metric_spaces = [x.strip() for x in self.config['Validation']['metrics_space'].split('#')[0].strip().split(',')]
+
         if self.config.has_option('Validation', 'extra_metrics'):
             if self.config['Validation']['extra_metrics'].split('#')[0].strip() != '':
                 self.validation_metric_names = [x.strip() for x in self.config['Validation']['extra_metrics'].split('#')[0].strip().split(',')]
@@ -154,14 +161,22 @@ class SharedResources:
         if len(self.validation_detection_overlap_thresholds) == 0:
             self.validation_detection_overlap_thresholds = [0.]
 
-        if self.config.has_option('Validation', 'prediction_files_suffix'):
-            if self.config['Validation']['prediction_files_suffix'].split('#')[0].strip() != '':
-                self.validation_prediction_files_suffix = self.config['Validation']['prediction_files_suffix'].split('#')[0].strip()
-
         if self.config.has_option('Validation', 'gt_files_suffix'):
             if self.config['Validation']['gt_files_suffix'].split('#')[0].strip() != '':
-                self.validation_gt_files_suffix = self.config['Validation']['gt_files_suffix'].split('#')[0].strip()
+                self.validation_gt_files_suffix = [x.strip() for x in self.config['Validation']['gt_files_suffix'].split('#')[0].strip().split(',')]
+
+        if self.config.has_option('Validation', 'prediction_files_suffix'):
+            if self.config['Validation']['prediction_files_suffix'].split('#')[0].strip() != '':
+                self.validation_prediction_files_suffix = [x.strip() for x in self.config['Validation']['prediction_files_suffix'].split('#')[0].strip().split(',')]
+
+        if self.config.has_option('Validation', 'class_names'):
+            if self.config['Validation']['class_names'].split('#')[0].strip() != '':
+                self.validation_class_names = [x.strip() for x in self.config['Validation']['class_names'].split('#')[0].strip().split(',')]
 
         if self.config.has_option('Validation', 'tiny_objects_removal_threshold'):
             if self.config['Validation']['tiny_objects_removal_threshold'].split('#')[0].strip() != '':
                 self.validation_tiny_objects_removal_threshold = int(self.config['Validation']['tiny_objects_removal_threshold'].split('#')[0].strip())
+
+        if self.config.has_option('Validation', 'true_positive_volume_thresholds'):
+            if self.config['Validation']['true_positive_volume_thresholds'].split('#')[0].strip() != '':
+                self.validation_true_positive_volume_thresholds = [float(x.strip()) for x in self.config['Validation']['true_positive_volume_thresholds'].split('#')[0].strip().split(',')]

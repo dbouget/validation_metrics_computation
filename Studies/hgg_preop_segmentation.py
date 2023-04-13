@@ -8,6 +8,7 @@ from Utils.resources import SharedResources
 from Utils.io_converters import reload_optimal_validation_parameters
 from Validation.validation_utilities import compute_fold_average
 from Plotting.metric_versus_binned_boxplot import compute_binned_metric_over_metric_boxplot
+from Validation.extra_metrics_computation import compute_overall_metrics_correlation
 
 
 class HGGPreopSegmentationStudy:
@@ -33,9 +34,11 @@ class HGGPreopSegmentationStudy:
 
     def run(self):
         self.__retrieve_optimum_values()
+        # compute_overall_metrics_correlation(self.input_folder, best_threshold=self.optimal_threshold)
         self.__compute_and_plot_overall()
         if self.extra_patient_parameters is not None:
-            self.__compute_and_plot_metric_over_metric_categories(metric1='Dice', metric2='Volume', metric2_cutoffs=[30.])
+            self.__compute_and_plot_metric_over_metric_categories(metric1='Dice', metric2='Volume', metric2_cutoffs=[2.])
+            self.__compute_and_plot_metric_over_metric_categories(metric1='Dice', metric2='SpacZ', metric2_cutoffs=[2.])
 
     def __retrieve_optimum_values(self):
         study_filename = os.path.join(self.input_folder, 'Validation', 'optimal_dice_study.csv')
@@ -101,6 +104,9 @@ class HGGPreopSegmentationStudy:
             if self.extra_patient_parameters is None:
                 return
 
+            number_bins = 10
+            if metric2 == "SpacZ":
+                number_bins = 5
             total_thresholds = [np.round(x, 2) for x in list(np.unique(results['Threshold'].values))]
             nb_thresholds = len(np.unique(results['Threshold'].values))
             optimal_thresold_index = total_thresholds.index(self.optimal_threshold)
@@ -115,7 +121,7 @@ class HGGPreopSegmentationStudy:
             os.makedirs(folder, exist_ok=True)
             compute_binned_metric_over_metric_boxplot(folder=folder, data=optimal_results_per_patient,
                                                       metric1=metric1, metric2=metric2, criterion1=self.optimal_overlap,
-                                                      postfix='_overall' + suffix, number_bins=10)
+                                                      postfix='_overall' + suffix, number_bins=number_bins)
 
             # Fold-wise analysis #
             fold_base_folder = os.path.join(folder, 'fold_analysis')
@@ -138,7 +144,7 @@ class HGGPreopSegmentationStudy:
                 compute_binned_metric_over_metric_boxplot(folder=fold_folder, data=fold_optimal_results,
                                                           metric1=metric1, metric2=metric2,
                                                           criterion1=self.optimal_overlap,
-                                                          postfix='_fold' + str(f) + suffix, number_bins=10)
+                                                          postfix='_fold' + str(f) + suffix, number_bins=number_bins)
         except Exception as e:
             print('{}'.format(traceback.format_exc()))
 
@@ -174,6 +180,10 @@ class HGGPreopSegmentationStudy:
             optimal_results_per_cutoff['>' + str(metric2_cutoffs[-1])] = cat_optimal_results
 
             for category in optimal_results_per_cutoff.keys():
+                compute_fold_average(self.input_folder, data=optimal_results_per_cutoff[category],
+                                     best_threshold=self.optimal_threshold,
+                                     best_overlap=self.optimal_overlap, metrics=self.metric_names,
+                                     suffix=suffix + '_' + metric2 + '_' + category)
                 self.__compute_dice_confidence_intervals(data=optimal_results_per_cutoff[category],
                                                          suffix=suffix + '_' + metric2 + '_' + category)
                 self.__compute_results_metric_over_metric(data=optimal_results_per_cutoff[category], metric1=metric1,

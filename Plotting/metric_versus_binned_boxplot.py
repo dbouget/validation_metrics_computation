@@ -75,7 +75,8 @@ def compute_binned_metric_over_metric_boxplot(folder, data, metric1, metric2, cr
         sns_plot.figure.savefig(os.path.join(folder, 'boxplot_' + metric1 + '_over_' + metric2 + '_normal_bins' + postfix + '.png'),
                                 dpi=300, bbox_inches="tight")
 
-        binned, edges = pd.qcut(data[metric2], q=nb_bins, retbins=True, precision=2)
+        binned, edges = pd.qcut(data[metric2], q=nb_bins, retbins=True, precision=2, duplicates='drop')
+        nb_bins = len(edges) - 1
         binned = binned.apply(lambda x: pd.Interval(left=round(x.left, 2), right=round(x.right, 2)))
         equal_bins_metric1 = []
         equal_bins_selected_metric1 = []
