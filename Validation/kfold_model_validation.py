@@ -22,55 +22,7 @@ from Utils.resources import SharedResources
 from Utils.PatientMetricsStructure import PatientMetrics
 from Utils.io_converters import get_fold_from_file
 from Validation.validation_utilities import best_segmentation_probability_threshold_analysis, compute_fold_average
-from Validation.extra_metrics_computation import compute_extra_metrics, compute_overall_metrics_correlation
-
-
-# def compute_dice(volume1, volume2):
-#     dice = 0.
-#     if np.sum(volume1[volume2 == 1]) != 0:
-#         dice = (np.sum(volume1[volume2 == 1]) * 2.0) / (np.sum(volume1) + np.sum(volume2))
-#     return dice
-#
-#
-# def compute_dice_uncertain(volume1, volume2, epsilon=0.1):
-#     dice = (np.sum(volume1[volume2 == 1]) * 2.0 + epsilon) / (np.sum(volume1) + np.sum(volume2) + epsilon)
-#     return dice
-#
-#
-# def separate_dice_computation(args):
-#     """
-#     Dice computation method linked to the multiprocessing strategy. Effectively where the call to compute is made.
-#     :param args: list of arguments split from the lists given to the multiprocessing.Pool call.
-#     :return: list with the computed results for the current patient, at the given probability threshold.
-#     """
-#     t = np.round(args[0], 2)
-#     fold_number = args[1]
-#     gt = args[2]
-#     detection_ni = args[3]
-#     patient_id = args[4]
-#     results = []
-#
-#     detection = deepcopy(detection_ni.get_data())
-#     detection[detection < t] = 0
-#     detection[detection >= t] = 1
-#     detection = detection.astype('uint8')
-#     dice = compute_dice(gt, detection)
-#
-#     obj_val = InstanceSegmentationValidation(gt_image=gt, detection_image=detection)
-#     try:
-#         # obj_val.set_trace_parameters(self.output_folder, fold_number, patient, t)
-#         obj_val.spacing = detection_ni.header.get_zooms()
-#         # @TODO. Have to find a way to disable it from config file, can't compute it for like airways, too many small elements
-#         obj_val.run()
-#     except Exception as e:
-#         print('Issue computing instance segmentation parameters for patient {}'.format(patient_id))
-#         print(traceback.format_exc())
-#
-#     instance_results = obj_val.instance_detection_results
-#     results.append([fold_number, patient_id, t, dice] + instance_results + [len(obj_val.gt_candidates),
-#                                                                             len(obj_val.detection_candidates)])
-#
-#     return results
+from Validation.extra_metrics_computation import compute_patient_extra_metrics
 
 
 class ModelValidation:
@@ -97,19 +49,20 @@ class ModelValidation:
         print("Detection overlap: ", self.detection_overlap_thresholds)
         self.gt_files_suffix = SharedResources.getInstance().validation_gt_files_suffix
         self.prediction_files_suffix = SharedResources.getInstance().validation_prediction_files_suffix
+        self.patients_metrics = {}
 
     def run(self):
-        self.__generate_dice_scores()
+        self.__compute_metrics()
         class_optimal = best_segmentation_probability_threshold_analysis(self.input_folder,
                                                                          detection_overlap_thresholds=self.detection_overlap_thresholds)
-        # compute_extra_metrics(self.data_root, self.input_folder, nb_folds=self.fold_number, split_way=self.split_way,
-        #                       optimal_threshold=optimal_threshold, metrics=self.metric_names,
-        #                       gt_files_suffix=self.gt_files_suffix,
-        #                       prediction_files_suffix=self.prediction_files_suffix)
-        compute_fold_average(self.input_folder, class_optimal=class_optimal, metrics=self.metric_names)
+        self.__compute_extra_metrics(class_optimal=class_optimal)
+        compute_fold_average(self.input_folder, class_optimal=class_optimal, metrics=self.metric_names,
+                             true_positive_state=False)
+        compute_fold_average(self.input_folder, class_optimal=class_optimal, metrics=self.metric_names,
+                             true_positive_state=True)
         # compute_overall_metrics_correlation(self.input_folder, best_threshold=optimal_threshold)
 
-    def __generate_dice_scores(self):
+    def __compute_metrics(self):
         """
         Generate the Dice scores (and default instance detection metrics) for all the patients and 10 probability
         thresholds equally-spaced. All the computed results will be stored inside all_dice_scores.csv.
@@ -127,9 +80,10 @@ class ModelValidation:
             self.class_results_df[c] = []
         self.results_df_base_columns = ['Fold', 'Patient', 'Threshold']
         self.results_df_base_columns.extend(["PiW Dice", "PiW Recall", "PiW Precision", "PiW F1"])
-        self.results_df_base_columns.extend(["PaW Dice", "PaW Recall", "PaW Precision", "PaW F1"])
+        # self.results_df_base_columns.extend(["PaW Dice", "PaW Recall", "PaW Precision", "PaW F1"])
         self.results_df_base_columns.extend(["GT volume (ml)", "True Positive", "Detection volume (ml)"])
         self.results_df_base_columns.extend(["OW Dice", "OW Recall", "OW Precision", "OW F1", '#GT', '#Det'])
+        self.results_df_base_columns.extend(SharedResources.getInstance().validation_metric_names)
 
         if not os.path.exists(self.dice_output_filename):
             self.results_df = pd.DataFrame(columns=self.results_df_base_columns)
@@ -139,10 +93,18 @@ class ModelValidation:
             self.results_df = pd.read_csv(self.dice_output_filename)
             if self.results_df.columns[0] != 'Fold':
                 self.results_df = pd.read_csv(self.dice_output_filename, index_col=0)
+            missing_metrics = [x for x in SharedResources.getInstance().validation_metric_names if
+                               not x in list(self.results_df.columns)[1:]]
+            for m in missing_metrics:
+                self.results_df[m] = None
             for c in SharedResources.getInstance().validation_class_names:
                 self.class_results_df[c] = pd.read_csv(self.class_dice_output_filenames[c])
                 if self.class_results_df[c].columns[0] != 'Fold':
                     self.class_results_df[c] = pd.read_csv(self.class_dice_output_filenames[c], index_col=0)
+                missing_metrics = [x for x in SharedResources.getInstance().validation_metric_names if
+                                   not x in list(self.class_results_df[c].columns)[1:]]
+                for m in missing_metrics:
+                    self.class_results_df[c][m] = None
 
         self.results_df['Patient'] = self.results_df.Patient.astype(str)
         for c in SharedResources.getInstance().validation_class_names:
@@ -155,21 +117,22 @@ class ModelValidation:
                 test_set, _ = get_fold_from_file(filename=cross_validation_description_file, fold_number=fold)
             else:
                 val_set, test_set = get_fold_from_file(filename=cross_validation_description_file, fold_number=fold)
-            results = self.__generate_dice_scores_for_fold(data_list=test_set, fold_number=fold)
+            results = self.__compute_metrics_for_fold(data_list=test_set, fold_number=fold)
             results_per_folds.append(results)
 
-    def __generate_dice_scores_for_fold(self, data_list, fold_number):
+    def __compute_metrics_for_fold(self, data_list, fold_number):
         for i, patient in enumerate(tqdm(data_list)):
             uid = None
             try:
                 start = time.time()
-                # @TODO. Hard-coded, have to decide on naming convention....
-                # Working for files generated with DBUtils code, having a proper name.
+                # Option1.
+                # Working for files using the original naming conventions.
                 uid = patient.split('_')[1]
                 sub_folder_index = str(ceil(int(uid) / 200))  # patient.split('_')[0]
                 patient_extended = '_'.join(patient.split('_')[1:-1]).strip()
 
-                # For cross validation files with non-proper names
+                # Option2.
+                # For files not following the original naming conventions
                 # uid = patient.split('_')[0]
                 # sub_folder_index = str(ceil(int(uid) / 200))
                 # patient_extended = ""
@@ -177,100 +140,18 @@ class ModelValidation:
                 # Placeholder for holding all metrics for the current patient
                 patient_metrics = PatientMetrics(id=uid, class_names=SharedResources.getInstance().validation_class_names)
                 patient_metrics.init_from_file(self.output_folder)
+
+                success = self.__identify_patient_files(patient_metrics, sub_folder_index, fold_number)
+                self.patients_metrics[uid] = patient_metrics
+
                 # Checking if values have already been computed for the current patient to skip it if so.
                 if patient_metrics.is_complete():
                     continue
-
-                success = self.__identify_patient_files(patient_metrics, sub_folder_index, fold_number)
                 if not success:
                     print('Input files not found for patient {}\n'.format(uid))
                     continue
 
                 self.__generate_dice_scores_for_patient(patient_metrics, fold_number)
-
-                # # Checking if values have already been computed for the current patient to skip it if so.
-                # # In case values were not properly computed for the core part (i.e. first 10 columns without
-                # # extra-metrics), a recompute will be triggered.
-                # if len(self.results_df.loc[self.results_df['Patient'] == uid]) != 0:
-                #     if not None in self.results_df.loc[self.results_df['Patient'] == uid].values[0] and not np.isnan(
-                #             np.sum(self.results_df.loc[self.results_df['Patient'] == uid].values[0][3:10])):
-                #         continue
-                #
-                # # Annoying, but independent of extension
-                # # @TODO. must load images with SimpleITK to be completely generic.
-                # detection_image_base = os.path.join(self.input_folder, 'predictions', str(fold_number),
-                #                                   sub_folder_index + '_' + uid)
-                # detection_filename = None
-                # for _, _, files in os.walk(detection_image_base):
-                #     for f in files:
-                #         if self.prediction_files_suffix in f:
-                #             detection_filename = os.path.join(detection_image_base, f)
-                #     break
-                # if not os.path.exists(detection_filename):
-                #     continue
-                #
-                # # @TODO. Second piece added to make it work when names are wrong in the cross validation file.
-                # patient_extended = os.path.basename(detection_filename).split(self.prediction_files_suffix)[0][:-1]
-                # patient_image_base = os.path.join(self.data_root, sub_folder_index, uid, 'volumes', patient_extended)
-                # patient_image_filename = None
-                # for _, _, files in os.walk(os.path.dirname(patient_image_base)):
-                #     for f in files:
-                #         if os.path.basename(patient_image_base) in f:
-                #             patient_image_filename = os.path.join(os.path.dirname(patient_image_base), f)
-                #     break
-                #
-                # ground_truth_base = os.path.join(self.data_root, sub_folder_index, uid, 'segmentations', patient_extended)
-                # ground_truth_filename = None
-                # for _, _, files in os.walk(os.path.dirname(ground_truth_base)):
-                #     for f in files:
-                #         if os.path.basename(ground_truth_base) in f and self.gt_files_suffix in f:
-                #             ground_truth_filename = os.path.join(os.path.dirname(ground_truth_base), f)
-                #     break
-                #
-                # file_stats = os.stat(detection_filename)
-                # ground_truth_ni = nib.load(ground_truth_filename)
-                # if len(ground_truth_ni.shape) == 4:
-                #     ground_truth_ni = nib.four_to_three(ground_truth_ni)[0]
-                #
-                # if file_stats.st_size == 0:
-                #     nib.save(nib.Nifti1Image(np.zeros(ground_truth_ni.get_shape), affine=ground_truth_ni.affine),
-                #              detection_filename)
-                #
-                # detection_ni = nib.load(detection_filename)
-                # if detection_ni.shape != ground_truth_ni.shape:
-                #     continue
-                #
-                # gt = ground_truth_ni.get_data()
-                # gt[gt >= 1] = 1
-                #
-                # pat_results = []
-                # thr_range = np.arange(0.1, 1.1, 0.1)
-                # if SharedResources.getInstance().number_processes > 1:
-                #     pool = multiprocessing.Pool(processes=SharedResources.getInstance().number_processes)
-                #     pat_results = pool.map(separate_dice_computation, zip(thr_range,
-                #                                                           itertools.repeat(fold_number),
-                #                                                           itertools.repeat(gt),
-                #                                                           itertools.repeat(detection_ni),
-                #                                                           itertools.repeat(uid)
-                #                                                           )
-                #                            )
-                #     pool.close()
-                #     pool.join()
-                # else:
-                #     for thr_value in thr_range:
-                #         thr_res = separate_dice_computation([thr_value, fold_number, gt, detection_ni, uid])
-                #         pat_results.append(thr_res)
-                #
-                # for ind, th in enumerate(thr_range):
-                #     sub_df = self.results_df.loc[(self.results_df['Patient'] == uid) & (self.results_df['Fold'] == fold_number) & (self.results_df['Threshold'] == th)]
-                #     ind_values = np.asarray(pat_results).reshape((len(thr_range), len(self.results_df_base_columns)))[ind, :]
-                #     buff_df = pd.DataFrame(ind_values.reshape(1, len(self.results_df_base_columns)),
-                #                            columns=list(self.results_df_base_columns))
-                #     if len(sub_df) == 0:
-                #         self.results_df = self.results_df.append(buff_df, ignore_index=True)
-                #     else:
-                #         self.results_df.loc[sub_df.index.values[0], :] = list(ind_values)
-                # self.results_df.to_csv(self.dice_output_filename, index=False)
             except Exception as e:
                 print('Issue processing patient {}\n'.format(uid))
                 print(traceback.format_exc())
@@ -329,9 +210,10 @@ class ModelValidation:
             # If there's no ground truth, we assume the class to be empty for this patient and create an
             # empty ground truth volume.
             if ground_truth_filename is None or not os.path.exists(ground_truth_filename):
-                empty_gt = np.zeros(detection_ni.get_data().shape)
                 ground_truth_filename = os.path.join(os.path.dirname(detection_filename), uid + "_groundtruth_" + classes[c] + ".nii.gz")
-                nib.save(nib.Nifti1Image(empty_gt, detection_ni.affine), ground_truth_filename)
+                if not os.path.exists(ground_truth_filename):
+                    empty_gt = np.zeros(detection_ni.get_data().shape)
+                    nib.save(nib.Nifti1Image(empty_gt, detection_ni.affine), ground_truth_filename)
             else:
                 file_stats = os.stat(detection_filename)
                 ground_truth_ni = nib.load(ground_truth_filename)
@@ -428,3 +310,22 @@ class ModelValidation:
             else:
                 self.results_df.loc[sub_df.index.values[0], :] = list(ind_values)
         self.results_df.to_csv(self.dice_output_filename, index=False)
+
+    def __compute_extra_metrics(self, class_optimal: dict = {}):
+        """
+
+        """
+        classes = SharedResources.getInstance().validation_class_names
+        for c in classes:
+            optimal_values = class_optimal[c]['All']
+            for p in tqdm(self.patients_metrics):
+                pat_metrics = compute_patient_extra_metrics(self.patients_metrics[p], classes.index(c), optimal_values[1],
+                                                            SharedResources.getInstance().validation_metric_names)
+                self.patients_metrics[p].set_optimal_class_extra_metrics(classes.index(c), optimal_values[1], pat_metrics)
+
+                # Filling in the overall dataframe and dumping results to csv after each patient
+                for pm in pat_metrics:
+                    metric_name = pm[0]
+                    metric_value = pm[1]
+                    self.class_results_df[c].at[self.class_results_df[c].loc[(self.class_results_df[c]['Patient'] == self.patients_metrics[p].unique_id) & (self.class_results_df[c]['Threshold'] == optimal_values[1])].index.values[0], metric_name] = metric_value
+                self.class_results_df[c].to_csv(self.class_dice_output_filenames[c], index=False)

@@ -54,7 +54,7 @@ class InstanceSegmentationValidation:
         self.gt_candidates = []
         self.detection_candidates = []
         self.matching_results = []
-        self.instance_detection_results = [0.0, 0.0, 1.0, 0.0]
+        self.instance_detection_results = [-1., -1., -1., -1.]
         self.tiny_objects_removal_threshold = SharedResources.getInstance().validation_tiny_objects_removal_threshold
 
     def set_trace_parameters(self, output_folder, fold_number, patient, threshold):

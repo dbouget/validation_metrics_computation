@@ -13,8 +13,9 @@ import numpy as np
 import json
 import logging
 from typing import Union, Any, Tuple, List
-
 import pandas as pd
+
+from Utils.resources import SharedResources
 
 
 class PatientMetrics:
@@ -25,6 +26,7 @@ class PatientMetrics:
     _pixelwise_metrics = None
     _objectwise_metrics = None
     _extra_metrics = None
+    _class_names = None
     _class_metrics = None
 
     def __init__(self, id: str, class_names: List[str]) -> None:
@@ -33,6 +35,7 @@ class PatientMetrics:
         """
         self.__reset()
         self._unique_id = id
+        self._class_names = class_names
         self._class_metrics = {}
         for c in class_names:
             self._class_metrics[c] = ClassMetrics(c, self._unique_id)
@@ -50,10 +53,15 @@ class PatientMetrics:
         self._objectwise_metrics = None
         self._extra_metrics = None
         self._class_metrics = None
+        self._class_names = None
 
     @property
     def unique_id(self) -> str:
         return self._unique_id
+
+    @property
+    def extra_metrics(self) -> str:
+        return self._extra_metrics
 
     def init_from_file(self, study_folder: str):
         all_scores_filename = os.path.join(study_folder, 'all_dice_scores.csv')
@@ -73,15 +81,22 @@ class PatientMetrics:
         self._patientwise_metrics = []
         self._pixelwise_metrics = []
         self._objectwise_metrics = []
+        self._extra_metrics = []
         for thr in list(patient_class_scores["Threshold"].values):
             thr_results = patient_class_scores.loc[patient_class_scores["Threshold"] == thr].values[0]
             thr_val = thr_results[2]
             pixelwise_values = list(thr_results[3:7])
-            patientwise_values = list(thr_results[7:14])
-            objectwise_values = list(thr_results[14:])
+            patientwise_values = list(thr_results[7:10])
+            objectwise_values = list(thr_results[10:16])
+            extra_values = list(thr_results[16:])
+            [extra_values.append(None) for x in range(len(list(thr_results[16:])), len(SharedResources.getInstance().validation_metric_names))]
+            extra_values_description = list(scores_df.columns[16:])
+            [extra_values_description.append(x) for x in SharedResources.getInstance().validation_metric_names]
             self._pixelwise_metrics.append([thr_val] + pixelwise_values)
             self._patientwise_metrics.append([thr_val] + patientwise_values)
             self._objectwise_metrics.append([thr_val] + objectwise_values)
+            extra_values_cat = [[x, y] for x, y in zip(extra_values_description, extra_values)]
+            self._extra_metrics.append([thr_val] + extra_values_cat)
 
     def is_complete(self):
         """
@@ -109,6 +124,24 @@ class PatientMetrics:
 
     def get_class_metrics(self, class_name: str):
         return self._class_metrics[class_name].get_all_metrics()
+
+    def get_optimal_class_metrics(self, class_index: int, optimal_threshold: float):
+        class_name = self._class_names[class_index]
+        for i in range(len(self._class_metrics[class_name].get_all_metrics())):
+            if self._class_metrics[class_name].get_all_metrics()[i][0] == optimal_threshold:
+                return self._class_metrics[class_name].get_all_metrics()[i]
+        return None
+
+    def get_optimal_class_extra_metrics(self, class_index: int, optimal_threshold: float):
+        class_name = self._class_names[class_index]
+        for i in range(len(self._class_metrics[class_name].get_all_metrics())):
+            if self._class_metrics[class_name].get_all_metrics()[i][0] == optimal_threshold:
+                return self._class_metrics[class_name].get_extra_metrics()[i]
+        return None
+
+    def set_optimal_class_extra_metrics(self, class_index: int, optimal_threshold: float, metrics_values: List):
+        class_name = self._class_names[class_index]
+        self._class_metrics[class_name].set_extra_metrics(optimal_threshold, metrics_values)
 
 
 class ClassMetrics:
@@ -147,15 +180,18 @@ class ClassMetrics:
         self._patientwise_metrics = []
         self._pixelwise_metrics = []
         self._objectwise_metrics = []
+        self._extra_metrics = []
         for index in range(len(results)):
             thr_results = results[index][0]
             thr_val = thr_results[2]
             pixelwise_values = thr_results[3:7]
-            patientwise_values = thr_results[7:14]
-            objectwise_values = thr_results[14:]
+            patientwise_values = thr_results[7:10]
+            objectwise_values = thr_results[10:16]
+            extra_values = thr_results[16:]
             self._pixelwise_metrics.append([thr_val] + pixelwise_values)
             self._patientwise_metrics.append([thr_val] + patientwise_values)
             self._objectwise_metrics.append([thr_val] + objectwise_values)
+            self._extra_metrics.append([thr_val] + extra_values)
 
     def init_from_file(self, scores_filename: str) -> None:
         if not os.path.exists(scores_filename):
@@ -169,15 +205,32 @@ class ClassMetrics:
         self._patientwise_metrics = []
         self._pixelwise_metrics = []
         self._objectwise_metrics = []
+        self._extra_metrics = []
         for thr in list(patient_class_scores["Threshold"].values):
             thr_results = patient_class_scores.loc[patient_class_scores["Threshold"] == thr].values[0]
             thr_val = thr_results[2]
             pixelwise_values = list(thr_results[3:7])
-            patientwise_values = list(thr_results[7:14])
-            objectwise_values = list(thr_results[14:])
+            patientwise_values = list(thr_results[7:10])
+            objectwise_values = list(thr_results[10:16])
+            extra_values = list(thr_results[16:])
+            [extra_values.append(None) for x in range(len(list(thr_results[16:])), len(SharedResources.getInstance().validation_metric_names))]
+            extra_values_description = list(scores_df.columns[16:])
+            [extra_values_description.append(x) for x in SharedResources.getInstance().validation_metric_names if x not in extra_values_description]
             self._pixelwise_metrics.append([thr_val] + pixelwise_values)
             self._patientwise_metrics.append([thr_val] + patientwise_values)
             self._objectwise_metrics.append([thr_val] + objectwise_values)
+            extra_values_cat = [[x, y] for x, y in zip(extra_values_description, extra_values)]
+            self._extra_metrics.append([thr_val] + extra_values_cat)
 
     def get_all_metrics(self):
         return [[self._pixelwise_metrics[x][0]] + self._pixelwise_metrics[x][1:] + self._patientwise_metrics[x][1:] + self._objectwise_metrics[x][1:] for x in range(len(self._pixelwise_metrics))]
+
+    def get_extra_metrics(self):
+        return self._extra_metrics
+
+    def set_extra_metrics(self, optimal_threshold: float, metrics_values: List):
+        for i in range(len(self._extra_metrics)):
+            if self._extra_metrics[i][0] == optimal_threshold:
+                self._extra_metrics[i][1:] = metrics_values
+                return True
+        return False

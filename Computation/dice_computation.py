@@ -41,10 +41,7 @@ def separate_dice_computation(args):
     if "pixelwise" in SharedResources.getInstance().validation_metric_spaces:
         pixelwise_results = __pixelwise_computation(gt, detection)
 
-    patientwise_results = [-1., -1., -1., -1.]
     det_volume = np.round(np.count_nonzero(detection) * np.prod(detection_ni.header.get_zooms()) * 1e-3, 4)
-    # if "patientwise" in SharedResources.getInstance().validation_metric_spaces:
-    #     patientwise_results = __patientwise_computation(gt, detection)
 
     obj_val = InstanceSegmentationValidation(gt_image=gt, detection_image=detection)
     if "objectwise" in SharedResources.getInstance().validation_metric_spaces:
@@ -57,7 +54,7 @@ def separate_dice_computation(args):
             print(traceback.format_exc())
     instance_results = obj_val.instance_detection_results
 
-    results.append([fold_number, patient_id, t] + pixelwise_results + patientwise_results + volumes_extra +
+    results.append([fold_number, patient_id, t] + pixelwise_results + volumes_extra +
                    [det_volume] + instance_results + [len(obj_val.gt_candidates), len(obj_val.detection_candidates)])
 
     return results

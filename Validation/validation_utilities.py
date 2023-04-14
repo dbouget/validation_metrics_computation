@@ -176,7 +176,9 @@ def compute_fold_average_inner(folder, class_name, data=None, best_threshold=0.5
     else:
         results = deepcopy(data)
 
+    suffix = "tp" + suffix if true_positive_state else suffix
     results.replace('inf', np.nan, inplace=True)
+    results.replace(float('inf'), np.nan, inplace=True)
     results.replace('', np.nan, inplace=True)
     results.replace(' ', np.nan, inplace=True)
     unique_folds = np.unique(results['Fold'])
@@ -184,8 +186,8 @@ def compute_fold_average_inner(folder, class_name, data=None, best_threshold=0.5
     metrics_per_fold = []
 
     metric_names = list(results.columns[3:])
-    if metrics is not None:
-        metric_names.extend(metrics)
+    # if metrics is not None:
+    #     metric_names.extend(metrics)
 
     fold_average_columns = ['Fold', '# samples', 'Patient-wise recall', 'Patient-wise precision', 'Patient-wise specificity',
                             'Patient-wise F1', 'Patient-wise Accuracy', 'Patient-wise Balanced accuracy']
@@ -225,7 +227,7 @@ def compute_fold_average_inner(folder, class_name, data=None, best_threshold=0.5
 
     # Performing pooled estimates (taking into account the sample size for each fold) when relevant
     pooled_fold_averaged_results = [len(unique_folds), total_samples]
-    pw_index = 8
+    pw_index = 6  # Length of the initial fold_average_columns, without the first two elements.
     for m in range(total_fold_metrics_to_average.shape[1]):
         mean_final = 0
         std_final = 0
@@ -266,8 +268,9 @@ def compute_singe_fold_average_metrics(results, fold_number, best_threshold, bes
     if len(all_for_thresh) == 0:
         # Empty fold? Can indicate something went wrong, or was not computed properly beforehand
         return None
-    default_metrics_average = list(np.mean(all_for_thresh.values[:, 3:], axis=0))
-    default_metrics_std = [np.std(all_for_thresh.values[:, x], axis=0) for x in range(3, all_for_thresh.values.shape[1])]
+    upper_default_metrics_index = 16
+    default_metrics_average = list(np.mean(all_for_thresh.values[:, 3:upper_default_metrics_index], axis=0))
+    default_metrics_std = [np.std(all_for_thresh.values[:, x], axis=0) for x in range(3, upper_default_metrics_index)]
 
     extra_metrics_average = []
     extra_metrics_std = []
@@ -301,8 +304,8 @@ def compute_patientwise_fold_metrics(results, fold_number, best_threshold, best_
     true_negatives = fold_results.loc[thresh_index & (fold_results['PiW Dice'] < best_overlap) & (fold_results['True Positive'] == False)]
     false_negatives = fold_results.loc[thresh_index & (fold_results['PiW Dice'] < best_overlap) & (fold_results['True Positive'] == True)]
     patient_wise_recall = len(true_positives) / (len(true_positives) + len(false_negatives) + 1e-6)
-    patient_wise_precision = len(true_positives) / (len(true_positives) + len(false_positives))
-    patient_wise_specificity = len(true_negatives) / (len(true_negatives) + len(false_positives))
+    patient_wise_precision = len(true_positives) / (len(true_positives) + len(false_positives) + 1e-6)
+    patient_wise_specificity = len(true_negatives) / (len(true_negatives) + len(false_positives) + 1e-6)
     patient_wise_f1 = 2 * len(true_positives) / ((2 * len(true_positives)) + len(false_positives) + len(false_negatives) + 1e-6)
     accuracy = (len(true_positives) + len(true_negatives)) / (len(true_positives) + len(true_negatives) + len(false_positives) + len(false_negatives))
     balanced_accuracy = (patient_wise_recall + patient_wise_specificity) / 2
