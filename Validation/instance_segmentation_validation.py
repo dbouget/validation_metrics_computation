@@ -54,7 +54,7 @@ class InstanceSegmentationValidation:
         self.gt_candidates = []
         self.detection_candidates = []
         self.matching_results = []
-        self.instance_detection_results = [-1., -1., -1., -1.]
+        self.instance_detection_results = [None, None, None, None, None]  # Dice, Recall, Precision, F1, Largest Focus Dice
         self.tiny_objects_removal_threshold = SharedResources.getInstance().validation_tiny_objects_removal_threshold
 
     def set_trace_parameters(self, output_folder, fold_number, patient, threshold):
@@ -76,6 +76,19 @@ class InstanceSegmentationValidation:
         if len(self.detection_candidates) != 0:
             self.__pair_candidates()
             self.__compute_metrics()
+        else:
+            if len(self.gt_candidates) == 0:
+                self.instance_detection_results[0] = 1.
+                self.instance_detection_results[1] = 1.
+                self.instance_detection_results[2] = 1.
+                self.instance_detection_results[3] = 1.
+                self.instance_detection_results[4] = 0.
+            else:
+                self.instance_detection_results[0] = 0.
+                self.instance_detection_results[1] = 0.
+                self.instance_detection_results[2] = 1.
+                self.instance_detection_results[3] = 0.5
+                self.instance_detection_results[4] = 0.
 
         return 1
 
@@ -177,17 +190,23 @@ class InstanceSegmentationValidation:
             f.close()
 
     def __compute_metrics(self):
+        """
+        @TODO. Might need to improve the object-wise metrics computation, here again with TP/TN/FP/FN
+        :return:
+        """
         average_dice = 0.0
         largest_component_dice = 0.0
         recall = 0.0
         precision = 0.0
+        f1_score = 0.0
         if len(self.matching_results) != 0:
             array_matching = np.asarray(self.matching_results)
             average_dice = np.mean(array_matching, axis=0)[2]
             recall = len(np.unique(array_matching[:, 0])) / len(self.gt_candidates)
             precision = len(np.unique(array_matching[:, 1])) / len(self.detection_candidates)
+            f1_score = 2. * ((precision * recall) / (precision + recall))
         index_larger_component = [x.area for x in self.gt_candidates].index(np.max([x.area for x in self.gt_candidates]))
         matching_larger_component = [x[0] for x in self.matching_results].index(index_larger_component + 1) if (index_larger_component + 1) in [x[0] for x in self.matching_results] else -1
         if matching_larger_component != -1:
             largest_component_dice = self.matching_results[matching_larger_component][2]
-        self.instance_detection_results = [average_dice, recall, precision, largest_component_dice]
+        self.instance_detection_results = [average_dice, recall, precision, f1_score, largest_component_dice]

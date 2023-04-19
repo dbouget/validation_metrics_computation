@@ -84,10 +84,10 @@ def best_segmentation_probability_threshold_analysis_inner(folder, detection_ove
                 max_threshold = thresholds[thr]
                 max_overlap = obj
 
-    # Small trick to comply with further computation. Otherwise, patients with a 0% Dice detection would still be
-    # considered as true positives, which is a behaviour to avoid.
-    if max_overlap == 0.:
-        max_overlap = 0.01
+    # # Small trick to comply with further computation. Otherwise, patients with a 0% Dice detection would still be
+    # # considered as true positives, which is a behaviour to avoid.
+    # if max_overlap == 0.:
+    #     max_overlap = 0.01
     study_writer.writerow(['', '', '', '', '', '', '', ''])
     study_writer.writerow([max_overlap, max_threshold, '', '', '', '', '', ''])
     study_file.close()
@@ -299,10 +299,10 @@ def compute_patientwise_fold_metrics(results, fold_number, best_threshold, best_
         fold_average = [-1., -1., -1., -1., -1., -1.]
         return fold_average
 
-    true_positives = fold_results.loc[thresh_index & (fold_results['PiW Dice'] >= best_overlap) & (fold_results['True Positive'] == True)]
-    false_positives = fold_results.loc[thresh_index & (fold_results['PiW Dice'] >= best_overlap) & (fold_results['True Positive'] == False)]
-    true_negatives = fold_results.loc[thresh_index & (fold_results['PiW Dice'] < best_overlap) & (fold_results['True Positive'] == False)]
-    false_negatives = fold_results.loc[thresh_index & (fold_results['PiW Dice'] < best_overlap) & (fold_results['True Positive'] == True)]
+    true_positives = fold_results.loc[thresh_index & (fold_results['PiW Dice'] > best_overlap) & (fold_results['True Positive'] == True)]
+    false_positives = fold_results.loc[thresh_index & (fold_results['True Positive'] == False) & (fold_results['Detection volume (ml)'] > 0.)]
+    true_negatives = fold_results.loc[thresh_index & (fold_results['True Positive'] == False) & (fold_results['Detection volume (ml)'] == 0.)]
+    false_negatives = fold_results.loc[thresh_index & (fold_results['PiW Dice'] <= best_overlap) & (fold_results['True Positive'] == True)]
     patient_wise_recall = len(true_positives) / (len(true_positives) + len(false_negatives) + 1e-6)
     patient_wise_precision = len(true_positives) / (len(true_positives) + len(false_positives) + 1e-6)
     patient_wise_specificity = len(true_negatives) / (len(true_negatives) + len(false_positives) + 1e-6)

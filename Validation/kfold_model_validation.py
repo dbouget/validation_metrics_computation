@@ -82,7 +82,7 @@ class ModelValidation:
         self.results_df_base_columns.extend(["PiW Dice", "PiW Recall", "PiW Precision", "PiW F1"])
         # self.results_df_base_columns.extend(["PaW Dice", "PaW Recall", "PaW Precision", "PaW F1"])
         self.results_df_base_columns.extend(["GT volume (ml)", "True Positive", "Detection volume (ml)"])
-        self.results_df_base_columns.extend(["OW Dice", "OW Recall", "OW Precision", "OW F1", '#GT', '#Det'])
+        self.results_df_base_columns.extend(["OW Dice", "OW Recall", "OW Precision", "OW F1", "OW Dice Largest Object", '#GT', '#Det'])
         self.results_df_base_columns.extend(SharedResources.getInstance().validation_metric_names)
 
         if not os.path.exists(self.dice_output_filename):
@@ -273,20 +273,27 @@ class ModelValidation:
                     thr_res = separate_dice_computation([thr_value, fold_number, gt, detection_ni, uid, extra])
                     pat_results.append(thr_res)
 
-            patient_metrics.set_class_metrics(classes[c], pat_results)
+            patient_metrics.set_class_regular_metrics(classes[c], pat_results)
             # Filling in the csv files on disk for faster resume
             class_results_filename = self.class_dice_output_filenames[classes[c]]
             for ind, th in enumerate(thr_range):
+                th = np.round(th, 2)
                 sub_df = self.class_results_df[classes[c]].loc[
                     (self.class_results_df[classes[c]]['Patient'] == uid) & (self.class_results_df[classes[c]]['Fold'] == fold_number) & (
                             self.class_results_df[classes[c]]['Threshold'] == th)]
-                ind_values = np.asarray(pat_results[ind])
-                buff_df = pd.DataFrame(ind_values.reshape(1, len(self.results_df_base_columns)),
-                                       columns=list(self.results_df_base_columns))
+                # ind_values = np.asarray(pat_results[ind])
+                # buff_df = pd.DataFrame(ind_values.reshape(1, len(self.results_df_base_columns)),
+                #                        columns=list(self.results_df_base_columns))
                 if len(sub_df) == 0:
-                    self.class_results_df[classes[c]] = self.class_results_df[classes[c]].append(buff_df, ignore_index=True)
+                    extra_metrics = [None] * len(SharedResources.getInstance().validation_metric_names)
+                    ind_values = np.asarray(pat_results[ind][0] + extra_metrics)
+                    buff_df = pd.DataFrame(ind_values.reshape(1, len(self.results_df_base_columns)),
+                                           columns=list(self.results_df_base_columns))
+                    self.class_results_df[classes[c]] = self.class_results_df[classes[c]].append(buff_df,
+                                                                                                 ignore_index=True)
                 else:
-                    self.class_results_df[classes[c]].loc[sub_df.index.values[0], :] = list(ind_values)
+                    ind_values = pat_results[ind][0] + list(self.class_results_df[classes[c]].loc[sub_df.index.values[0], :].values[len(pat_results[ind][0]):])
+                    self.class_results_df[classes[c]].loc[sub_df.index.values[0], :] = ind_values
             self.class_results_df[classes[c]].to_csv(class_results_filename, index=False)
 
         # Should compute the class macro-average results if multiple classes
@@ -294,21 +301,28 @@ class ModelValidation:
         class_results = []
         for c in classes:
             pat_class_results = patient_metrics.get_class_metrics(c)
-            class_results.append(pat_class_results)
-        class_averaged_results = np.average(np.asarray(class_results)[:, :, 1:], axis=0)
+            pat_class_extra_metrics = patient_metrics.get_class_extra_metrics_without_header(c)
+            final_pat_class_res = [pat_class_results[x] + pat_class_extra_metrics[x] for x in range(len(thr_range))]
+            class_results.append(final_pat_class_res)
+        class_averaged_results = np.average(np.asarray(class_results).astype('float32')[:, :, 1:], axis=0)
 
         # Filling in the csv files on disk for faster resume
         for ind, th in enumerate(thr_range):
+            th = np.round(th, 2)
             sub_df = self.results_df.loc[
                 (self.results_df['Patient'] == uid) & (self.results_df['Fold'] == fold_number) & (
                             self.results_df['Threshold'] == th)]
-            ind_values = np.asarray([fold_number, uid, np.round(th, 2)] + list(class_averaged_results[ind]))
-            buff_df = pd.DataFrame(ind_values.reshape(1, len(self.results_df_base_columns)),
-                                   columns=list(self.results_df_base_columns))
+            # ind_values = np.asarray([fold_number, uid, np.round(th, 2)] + list(class_averaged_results[ind]))
+            # buff_df = pd.DataFrame(ind_values.reshape(1, len(self.results_df_base_columns)),
+            #                        columns=list(self.results_df_base_columns))
             if len(sub_df) == 0:
+                ind_values = np.asarray([fold_number, uid, np.round(th, 2)] + list(class_averaged_results[ind]))
+                buff_df = pd.DataFrame(ind_values.reshape(1, len(self.results_df_base_columns)),
+                                       columns=list(self.results_df_base_columns))
                 self.results_df = self.results_df.append(buff_df, ignore_index=True)
             else:
-                self.results_df.loc[sub_df.index.values[0], :] = list(ind_values)
+                ind_values = [fold_number, uid, np.round(th, 2)] + list(class_averaged_results[ind])
+                self.results_df.loc[sub_df.index.values[0], :] = ind_values
         self.results_df.to_csv(self.dice_output_filename, index=False)
 
     def __compute_extra_metrics(self, class_optimal: dict = {}):

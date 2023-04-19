@@ -87,10 +87,10 @@ class PatientMetrics:
             thr_val = thr_results[2]
             pixelwise_values = list(thr_results[3:7])
             patientwise_values = list(thr_results[7:10])
-            objectwise_values = list(thr_results[10:16])
-            extra_values = list(thr_results[16:])
-            [extra_values.append(None) for x in range(len(list(thr_results[16:])), len(SharedResources.getInstance().validation_metric_names))]
-            extra_values_description = list(scores_df.columns[16:])
+            objectwise_values = list(thr_results[10:17])
+            extra_values = list(thr_results[17:])
+            [extra_values.append(None) for x in range(len(list(thr_results[17:])), len(SharedResources.getInstance().validation_metric_names))]
+            extra_values_description = list(scores_df.columns[17:])
             [extra_values_description.append(x) for x in SharedResources.getInstance().validation_metric_names]
             self._pixelwise_metrics.append([thr_val] + pixelwise_values)
             self._patientwise_metrics.append([thr_val] + patientwise_values)
@@ -103,10 +103,19 @@ class PatientMetrics:
         @TODO. Will require much deeper checks to see if any value is missing and a recompute triggered
         :return:
         """
-        if self._pixelwise_metrics is None:
-            return False
+        status = False
+        complete_pixelwise_metrics = True not in [-1. in x for x in
+                                                  self._pixelwise_metrics] if self._pixelwise_metrics is not None else False
+        complete_objectwise_metrics = True not in [-1. in x for x in
+                                                  self._objectwise_metrics] if self._objectwise_metrics is not None else False
+        if 'objectwise' not in SharedResources.getInstance().validation_metric_spaces:
+            status = complete_pixelwise_metrics
         else:
-            return True
+            status = complete_pixelwise_metrics & complete_objectwise_metrics
+
+        for c in list(self._class_metrics.keys()):
+            status = status & self._class_metrics[c].is_complete()
+        return status
 
     def set_patient_filenames(self, filenames: dict) -> None:
         self._ground_truth_filepaths = []
@@ -119,11 +128,17 @@ class PatientMetrics:
     def get_class_filenames(self, class_index: int) -> List[str]:
         return [self._ground_truth_filepaths[class_index], self._prediction_filepaths[class_index]]
 
-    def set_class_metrics(self, class_name: str, results: list):
+    def set_class_regular_metrics(self, class_name: str, results: list):
         self._class_metrics[class_name].set_results(results)
 
     def get_class_metrics(self, class_name: str):
         return self._class_metrics[class_name].get_all_metrics()
+
+    def get_class_extra_metrics(self, class_name: str):
+        return self._class_metrics[class_name].get_extra_metrics()
+
+    def get_class_extra_metrics_without_header(self, class_name: str):
+        return self._class_metrics[class_name].get_extra_metrics_without_header()
 
     def get_optimal_class_metrics(self, class_index: int, optimal_threshold: float):
         class_name = self._class_names[class_index]
@@ -177,25 +192,29 @@ class ClassMetrics:
         return self._unique_id
 
     def set_results(self, results):
+        """
+        Updates the internal values only for the "regular" metrics (i.e. excluding the extra metrics)
+        :param results:
+        :return:
+        """
         self._patientwise_metrics = []
         self._pixelwise_metrics = []
         self._objectwise_metrics = []
-        self._extra_metrics = []
         for index in range(len(results)):
             thr_results = results[index][0]
             thr_val = thr_results[2]
             pixelwise_values = thr_results[3:7]
             patientwise_values = thr_results[7:10]
-            objectwise_values = thr_results[10:16]
-            extra_values = thr_results[16:]
+            objectwise_values = thr_results[10:17]
+            extra_values = thr_results[17:]
             self._pixelwise_metrics.append([thr_val] + pixelwise_values)
             self._patientwise_metrics.append([thr_val] + patientwise_values)
             self._objectwise_metrics.append([thr_val] + objectwise_values)
-            self._extra_metrics.append([thr_val] + extra_values)
 
     def init_from_file(self, scores_filename: str) -> None:
         if not os.path.exists(scores_filename):
             return
+
         scores_df = pd.read_csv(scores_filename)
         scores_df['Patient'] = scores_df.Patient.astype(str)
         if len(scores_df.loc[scores_df["Patient"] == self._patient_id]) == 0:
@@ -211,16 +230,32 @@ class ClassMetrics:
             thr_val = thr_results[2]
             pixelwise_values = list(thr_results[3:7])
             patientwise_values = list(thr_results[7:10])
-            objectwise_values = list(thr_results[10:16])
-            extra_values = list(thr_results[16:])
-            [extra_values.append(None) for x in range(len(list(thr_results[16:])), len(SharedResources.getInstance().validation_metric_names))]
-            extra_values_description = list(scores_df.columns[16:])
+            objectwise_values = list(thr_results[10:17])
+            extra_values = list(thr_results[17:])
+            [extra_values.append(None) for x in range(len(list(thr_results[17:])), len(SharedResources.getInstance().validation_metric_names))]
+            extra_values_description = list(scores_df.columns[17:])
             [extra_values_description.append(x) for x in SharedResources.getInstance().validation_metric_names if x not in extra_values_description]
             self._pixelwise_metrics.append([thr_val] + pixelwise_values)
             self._patientwise_metrics.append([thr_val] + patientwise_values)
             self._objectwise_metrics.append([thr_val] + objectwise_values)
             extra_values_cat = [[x, y] for x, y in zip(extra_values_description, extra_values)]
             self._extra_metrics.append([thr_val] + extra_values_cat)
+
+    def is_complete(self):
+        """
+
+        :return:
+        """
+        status = False
+        complete_pixelwise_metrics = True not in [-1. in x for x in
+                                                  self._pixelwise_metrics] if self._pixelwise_metrics is not None else False
+        complete_objectwise_metrics = True not in [-1. in x for x in
+                                                  self._objectwise_metrics] if self._objectwise_metrics is not None else False
+        if 'objectwise' not in SharedResources.getInstance().validation_metric_spaces:
+            status = complete_pixelwise_metrics
+        else:
+            status = complete_pixelwise_metrics & complete_objectwise_metrics
+        return status
 
     def get_all_metrics(self):
         return [[self._pixelwise_metrics[x][0]] + self._pixelwise_metrics[x][1:] + self._patientwise_metrics[x][1:] + self._objectwise_metrics[x][1:] for x in range(len(self._pixelwise_metrics))]
@@ -234,3 +269,9 @@ class ClassMetrics:
                 self._extra_metrics[i][1:] = metrics_values
                 return True
         return False
+
+    def get_extra_metrics_without_header(self):
+        if self._extra_metrics:
+            return [x[1][1::2] for x in self._extra_metrics]
+        else:
+            return [[None]] * len(self._pixelwise_metrics)
