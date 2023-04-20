@@ -1,6 +1,6 @@
 from Utils.resources import SharedResources
 from Studies.hgg_preop_segmentation import *
-from Studies.hgg_postop_segmentation import *
+# from Studies.hgg_postop_segmentation import *
 
 
 class StudyConnector:
@@ -14,6 +14,6 @@ class StudyConnector:
         if self.perform_study == 'hgg_preop_seg':
             processor = HGGPreopSegmentationStudy()
             processor.run()
-        elif self.perform_study == 'hgg_postop_seg':
-            processor = HGGPostOpSegmentationStudy()
-            processor.run()
+        # elif self.perform_study == 'hgg_postop_seg':
+        #     processor = HGGPostOpSegmentationStudy()
+        #     processor.run()
