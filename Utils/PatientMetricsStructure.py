@@ -101,10 +101,10 @@ class PatientMetrics:
             thr_val = thr_results[2]
             pixelwise_values = list(thr_results[3:7])
             patientwise_values = list(thr_results[7:10])
-            objectwise_values = list(thr_results[10:17])
-            extra_values = list(thr_results[17:])
-            [extra_values.append(None) for x in range(len(list(thr_results[17:])), len(SharedResources.getInstance().validation_metric_names))]
-            extra_values_description = list(scores_df.columns[17:])
+            objectwise_values = list(thr_results[10:SharedResources.getInstance().upper_default_metrics_index])
+            extra_values = list(thr_results[SharedResources.getInstance().upper_default_metrics_index:])
+            [extra_values.append(None) for x in range(len(list(thr_results[SharedResources.getInstance().upper_default_metrics_index:])), len(SharedResources.getInstance().validation_metric_names))]
+            extra_values_description = list(scores_df.columns[SharedResources.getInstance().upper_default_metrics_index:])
             [extra_values_description.append(x) for x in SharedResources.getInstance().validation_metric_names]
             self._pixelwise_metrics.append([thr_val] + pixelwise_values)
             self._patientwise_metrics.append([thr_val] + patientwise_values)
@@ -225,8 +225,8 @@ class ClassMetrics:
             thr_val = thr_results[2]
             pixelwise_values = thr_results[3:7]
             patientwise_values = thr_results[7:10]
-            objectwise_values = thr_results[10:17]
-            extra_values = thr_results[17:]
+            objectwise_values = thr_results[10:SharedResources.getInstance().upper_default_metrics_index]
+            extra_values = thr_results[SharedResources.getInstance().upper_default_metrics_index:]
             self._pixelwise_metrics.append([thr_val] + pixelwise_values)
             self._patientwise_metrics.append([thr_val] + patientwise_values)
             self._objectwise_metrics.append([thr_val] + objectwise_values)
@@ -250,10 +250,10 @@ class ClassMetrics:
             thr_val = thr_results[2]
             pixelwise_values = list(thr_results[3:7])
             patientwise_values = list(thr_results[7:10])
-            objectwise_values = list(thr_results[10:17])
-            extra_values = list(thr_results[17:])
-            [extra_values.append(None) for x in range(len(list(thr_results[17:])), len(SharedResources.getInstance().validation_metric_names))]
-            extra_values_description = list(scores_df.columns[17:])
+            objectwise_values = list(thr_results[10:SharedResources.getInstance().upper_default_metrics_index])
+            extra_values = list(thr_results[SharedResources.getInstance().upper_default_metrics_index:])
+            [extra_values.append(None) for x in range(len(list(thr_results[SharedResources.getInstance().upper_default_metrics_index:])), len(SharedResources.getInstance().validation_metric_names))]
+            extra_values_description = list(scores_df.columns[SharedResources.getInstance().upper_default_metrics_index:])
             [extra_values_description.append(x) for x in SharedResources.getInstance().validation_metric_names if x not in extra_values_description]
             self._pixelwise_metrics.append([thr_val] + pixelwise_values)
             self._patientwise_metrics.append([thr_val] + patientwise_values)

@@ -34,6 +34,7 @@ class SharedResources:
         self.__parse_default_parameters()
         self.__parse_validation_parameters()
         self.__parse_studies_parameters()
+        self.upper_default_metrics_index = 17  # Single place for holding this attribute, "safer" approach
 
     def __parse_default_parameters(self):
         """
