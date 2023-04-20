@@ -21,6 +21,7 @@ from Utils.resources import SharedResources
 class PatientMetrics:
     _unique_id = ""  # Internal unique identifier for the patient
     _patient_id = ""  # Unique identifier for the patient (might be multiple times the same patient in different folds)
+    _fold_number = None  # Fold integer to which the patient belongs to
     _ground_truth_filepaths = None
     _prediction_filepaths = None
     _patientwise_metrics = None
@@ -30,17 +31,18 @@ class PatientMetrics:
     _class_names = None
     _class_metrics = None
 
-    def __init__(self, id: str, patient_id: str, class_names: List[str]) -> None:
+    def __init__(self, id: str, patient_id: str, fold_number: int, class_names: List[str]) -> None:
         """
 
         """
         self.__reset()
         self._unique_id = id
         self._patient_id = patient_id
+        self._fold_number = fold_number
         self._class_names = class_names
         self._class_metrics = {}
         for c in class_names:
-            self._class_metrics[c] = ClassMetrics(c, self._patient_id)
+            self._class_metrics[c] = ClassMetrics(c, self._patient_id, fold_number=self._fold_number)
 
     def __reset(self):
         """
@@ -49,6 +51,7 @@ class PatientMetrics:
         """
         self._unique_id = ""
         self._patient_id = ""
+        self._fold_number = None
         self._prediction_filepaths = None
         self._ground_truth_filepaths = None
         self._patientwise_metrics = None
@@ -85,10 +88,10 @@ class PatientMetrics:
             return
         scores_df = pd.read_csv(all_scores_filename)
         scores_df['Patient'] = scores_df.Patient.astype(str)
-        if len(scores_df.loc[scores_df["Patient"] == self._patient_id]) == 0:
+        if len(scores_df.loc[(scores_df["Patient"] == self._patient_id) & (scores_df["Fold"] == self._fold_number)]) == 0:
             return
 
-        patient_class_scores = scores_df.loc[scores_df["Patient"] == self._patient_id]
+        patient_class_scores = scores_df.loc[(scores_df["Patient"] == self._patient_id) & (scores_df["Fold"] == self._fold_number)]
         self._patientwise_metrics = []
         self._pixelwise_metrics = []
         self._objectwise_metrics = []
@@ -107,7 +110,10 @@ class PatientMetrics:
             self._patientwise_metrics.append([thr_val] + patientwise_values)
             self._objectwise_metrics.append([thr_val] + objectwise_values)
             extra_values_cat = [[x, y] for x, y in zip(extra_values_description, extra_values)]
-            self._extra_metrics.append([thr_val] + extra_values_cat)
+            if len(extra_values_cat) != 0:
+                self._extra_metrics.append([thr_val] + extra_values_cat)
+        if len(self._extra_metrics) == 0:
+            self._extra_metrics = None
 
     def is_complete(self):
         """
@@ -173,18 +179,20 @@ class PatientMetrics:
 class ClassMetrics:
     _unique_id = ""  # Internal unique identifier for the class
     _patient_id = None
+    _fold_number = None
     _patientwise_metrics = None
     _pixelwise_metrics = None
     _objectwise_metrics = None
     _extra_metrics = None
 
-    def __init__(self, id: str, patient_id: str) -> None:
+    def __init__(self, id: str, patient_id: str, fold_number: int) -> None:
         """
 
         """
         self.__reset()
         self._unique_id = id
         self._patient_id = patient_id
+        self._fold_number = fold_number
 
     def __reset(self):
         """
@@ -193,6 +201,7 @@ class ClassMetrics:
         """
         self._unique_id = ""
         self._patient_id = None
+        self._fold_number = None
         self._patientwise_metrics = None
         self._pixelwise_metrics = None
         self._objectwise_metrics = None
@@ -228,15 +237,15 @@ class ClassMetrics:
 
         scores_df = pd.read_csv(scores_filename)
         scores_df['Patient'] = scores_df.Patient.astype(str)
-        if len(scores_df.loc[scores_df["Patient"] == self._patient_id]) == 0:
+        if len(scores_df.loc[(scores_df["Patient"] == self._patient_id) & (scores_df["Fold"] == self._fold_number)]) == 0:
             return
 
-        patient_class_scores = scores_df.loc[scores_df["Patient"] == self._patient_id]
+        patient_class_scores = scores_df.loc[(scores_df["Patient"] == self._patient_id) & (scores_df["Fold"] == self._fold_number)]
         self._patientwise_metrics = []
         self._pixelwise_metrics = []
         self._objectwise_metrics = []
         self._extra_metrics = []
-        for thr in list(patient_class_scores["Threshold"].values):
+        for thr in list(np.unique(patient_class_scores["Threshold"].values)):
             thr_results = patient_class_scores.loc[patient_class_scores["Threshold"] == thr].values[0]
             thr_val = thr_results[2]
             pixelwise_values = list(thr_results[3:7])
@@ -250,7 +259,10 @@ class ClassMetrics:
             self._patientwise_metrics.append([thr_val] + patientwise_values)
             self._objectwise_metrics.append([thr_val] + objectwise_values)
             extra_values_cat = [[x, y] for x, y in zip(extra_values_description, extra_values)]
-            self._extra_metrics.append([thr_val] + extra_values_cat)
+            if len(extra_values_cat) != 0:
+                self._extra_metrics.append([thr_val] + extra_values_cat)
+        if len(self._extra_metrics) == 0:
+            self._extra_metrics = None
 
     def is_complete(self):
         """
@@ -285,4 +297,5 @@ class ClassMetrics:
         if self._extra_metrics:
             return [x[1][1::2] for x in self._extra_metrics]
         else:
-            return [[None]] * len(self._pixelwise_metrics)
+            #return [[None]] * len(self._pixelwise_metrics)
+            return [[None] * len(SharedResources.getInstance().validation_metric_names)] * len(self._pixelwise_metrics)

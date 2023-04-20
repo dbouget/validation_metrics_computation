@@ -55,7 +55,8 @@ class ModelValidation:
         self.__compute_metrics()
         class_optimal = best_segmentation_probability_threshold_analysis(self.input_folder,
                                                                          detection_overlap_thresholds=self.detection_overlap_thresholds)
-        self.__compute_extra_metrics(class_optimal=class_optimal)
+        if len(SharedResources.getInstance().validation_metric_names) != 0:
+            self.__compute_extra_metrics(class_optimal=class_optimal)
         compute_fold_average(self.input_folder, class_optimal=class_optimal, metrics=self.metric_names,
                              true_positive_state=False)
         compute_fold_average(self.input_folder, class_optimal=class_optimal, metrics=self.metric_names,
@@ -125,21 +126,21 @@ class ModelValidation:
             uid = None
             try:
                 start = time.time()
-                # Option1.
-                # Working for files using the original naming conventions.
-                pid = patient.split('_')[1]
-                sub_folder_index = str(ceil(int(pid) / 200))  # patient.split('_')[0]
-                patient_extended = '_'.join(patient.split('_')[1:-1]).strip()
+                # # Option1.
+                # # Working for files using the original naming conventions.
+                # pid = patient.split('_')[1]
+                # sub_folder_index = str(ceil(int(pid) / 200))  # patient.split('_')[0]
+                # patient_extended = '_'.join(patient.split('_')[1:-1]).strip()
 
                 # Option2.
                 # For files not following the original naming conventions
-                # pid = patient.split('_')[0]
-                # sub_folder_index = str(ceil(int(pid) / 200))
-                # patient_extended = ""
+                pid = patient.split('_')[0]
+                sub_folder_index = str(ceil(int(pid) / 200))
+                patient_extended = ""
 
                 uid = str(fold_number) + '_' + pid
                 # Placeholder for holding all metrics for the current patient
-                patient_metrics = PatientMetrics(id=uid, patient_id=pid,
+                patient_metrics = PatientMetrics(id=uid, patient_id=pid, fold_number=fold_number,
                                                  class_names=SharedResources.getInstance().validation_class_names)
                 patient_metrics.init_from_file(self.output_folder)
 
@@ -304,7 +305,9 @@ class ModelValidation:
         for c in classes:
             pat_class_results = patient_metrics.get_class_metrics(c)
             pat_class_extra_metrics = patient_metrics.get_class_extra_metrics_without_header(c)
-            final_pat_class_res = [pat_class_results[x] + pat_class_extra_metrics[x] for x in range(len(thr_range))]
+            final_pat_class_res = [pat_class_results[x] for x in range(len(thr_range))]
+            if len(SharedResources.getInstance().validation_metric_names) != 0:
+                final_pat_class_res = [pat_class_results[x] + pat_class_extra_metrics[x] for x in range(len(thr_range))]
             class_results.append(final_pat_class_res)
         class_averaged_results = np.average(np.asarray(class_results).astype('float32')[:, :, 1:], axis=0)
 
