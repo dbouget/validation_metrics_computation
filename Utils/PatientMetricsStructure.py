@@ -20,6 +20,7 @@ from Utils.resources import SharedResources
 
 class PatientMetrics:
     _unique_id = ""  # Internal unique identifier for the patient
+    _patient_id = ""  # Unique identifier for the patient (might be multiple times the same patient in different folds)
     _ground_truth_filepaths = None
     _prediction_filepaths = None
     _patientwise_metrics = None
@@ -29,16 +30,17 @@ class PatientMetrics:
     _class_names = None
     _class_metrics = None
 
-    def __init__(self, id: str, class_names: List[str]) -> None:
+    def __init__(self, id: str, patient_id: str, class_names: List[str]) -> None:
         """
 
         """
         self.__reset()
         self._unique_id = id
+        self._patient_id = patient_id
         self._class_names = class_names
         self._class_metrics = {}
         for c in class_names:
-            self._class_metrics[c] = ClassMetrics(c, self._unique_id)
+            self._class_metrics[c] = ClassMetrics(c, self._patient_id)
 
     def __reset(self):
         """
@@ -46,6 +48,7 @@ class PatientMetrics:
         An instance or non-static variables are different for different objects (every object has a copy).
         """
         self._unique_id = ""
+        self._patient_id = ""
         self._prediction_filepaths = None
         self._ground_truth_filepaths = None
         self._patientwise_metrics = None
@@ -58,6 +61,14 @@ class PatientMetrics:
     @property
     def unique_id(self) -> str:
         return self._unique_id
+
+    @property
+    def patient_id(self) -> str:
+        return self._patient_id
+
+    @patient_id.setter
+    def patient_id(self, patient_id: str) -> None:
+        self._patient_id = patient_id
 
     @property
     def extra_metrics(self) -> str:
@@ -74,10 +85,10 @@ class PatientMetrics:
             return
         scores_df = pd.read_csv(all_scores_filename)
         scores_df['Patient'] = scores_df.Patient.astype(str)
-        if len(scores_df.loc[scores_df["Patient"] == self._unique_id]) == 0:
+        if len(scores_df.loc[scores_df["Patient"] == self._patient_id]) == 0:
             return
 
-        patient_class_scores = scores_df.loc[scores_df["Patient"] == self._unique_id]
+        patient_class_scores = scores_df.loc[scores_df["Patient"] == self._patient_id]
         self._patientwise_metrics = []
         self._pixelwise_metrics = []
         self._objectwise_metrics = []

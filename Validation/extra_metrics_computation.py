@@ -21,7 +21,8 @@ def compute_patient_extra_metrics(patient_object, class_index, optimal_threshold
     extra_metrics_results = []
     try:
         metric_values = [x[1] for x in patient_object.get_optimal_class_extra_metrics(class_index, optimal_threshold)[1:]]
-        if None not in metric_values:
+        if False not in [x == x for x in metric_values]:
+            # If all metric values have been computed, i.e., no nan or None etc...
             return patient_object.get_optimal_class_extra_metrics(class_index, optimal_threshold)[1:]
 
         ground_truth_ni = nib.load(patient_object._ground_truth_filepaths[class_index])
@@ -92,7 +93,7 @@ def parallel_metric_computation(args):
     :return: list with metric name and computed metric value.
     """
     metric = args[0]
-    metric_value = args[1][1]
+    metric_value = args[1] #args[1][1]
     gt = args[2]
     detection = args[3]
     det_header = args[4]

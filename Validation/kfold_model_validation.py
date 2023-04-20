@@ -127,18 +127,20 @@ class ModelValidation:
                 start = time.time()
                 # Option1.
                 # Working for files using the original naming conventions.
-                uid = patient.split('_')[1]
-                sub_folder_index = str(ceil(int(uid) / 200))  # patient.split('_')[0]
+                pid = patient.split('_')[1]
+                sub_folder_index = str(ceil(int(pid) / 200))  # patient.split('_')[0]
                 patient_extended = '_'.join(patient.split('_')[1:-1]).strip()
 
                 # Option2.
                 # For files not following the original naming conventions
-                # uid = patient.split('_')[0]
-                # sub_folder_index = str(ceil(int(uid) / 200))
+                # pid = patient.split('_')[0]
+                # sub_folder_index = str(ceil(int(pid) / 200))
                 # patient_extended = ""
 
+                uid = str(fold_number) + '_' + pid
                 # Placeholder for holding all metrics for the current patient
-                patient_metrics = PatientMetrics(id=uid, class_names=SharedResources.getInstance().validation_class_names)
+                patient_metrics = PatientMetrics(id=uid, patient_id=pid,
+                                                 class_names=SharedResources.getInstance().validation_class_names)
                 patient_metrics.init_from_file(self.output_folder)
 
                 success = self.__identify_patient_files(patient_metrics, sub_folder_index, fold_number)
@@ -163,7 +165,7 @@ class ModelValidation:
         Asserts the existence of the raw files on disk for computing the metrics for the current patient.
         :return:
         """
-        uid = patient_metrics.unique_id
+        uid = patient_metrics.patient_id
         classes = SharedResources.getInstance().validation_class_names
         nb_classes = len(classes)
         patient_filenames = {}
@@ -236,7 +238,7 @@ class ModelValidation:
         Compute the basic metrics for all classes of the current patient
         :return:
         """
-        uid = patient_metrics.unique_id
+        uid = patient_metrics.patient_id
         classes = SharedResources.getInstance().validation_class_names
         nb_classes = len(classes)
         patient_filenames = {}
@@ -329,6 +331,7 @@ class ModelValidation:
         """
 
         """
+        print("Computing extra metrics for all patients.\n")
         classes = SharedResources.getInstance().validation_class_names
         for c in classes:
             optimal_values = class_optimal[c]['All']
@@ -341,5 +344,5 @@ class ModelValidation:
                 for pm in pat_metrics:
                     metric_name = pm[0]
                     metric_value = pm[1]
-                    self.class_results_df[c].at[self.class_results_df[c].loc[(self.class_results_df[c]['Patient'] == self.patients_metrics[p].unique_id) & (self.class_results_df[c]['Threshold'] == optimal_values[1])].index.values[0], metric_name] = metric_value
+                    self.class_results_df[c].at[self.class_results_df[c].loc[(self.class_results_df[c]['Patient'] == self.patients_metrics[p].patient_id) & (self.class_results_df[c]['Threshold'] == optimal_values[1])].index.values[0], metric_name] = metric_value
                 self.class_results_df[c].to_csv(self.class_dice_output_filenames[c], index=False)
