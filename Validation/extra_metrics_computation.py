@@ -20,10 +20,11 @@ from Utils.resources import SharedResources
 def compute_patient_extra_metrics(patient_object, class_index, optimal_threshold, metrics: List[str] = []):
     extra_metrics_results = []
     try:
-        metric_values = [x[1] for x in patient_object.get_optimal_class_extra_metrics(class_index, optimal_threshold)[1:]]
-        if False not in [x == x for x in metric_values]:
-            # If all metric values have been computed, i.e., no nan or None etc...
-            return patient_object.get_optimal_class_extra_metrics(class_index, optimal_threshold)[1:]
+        if patient_object.get_optimal_class_extra_metrics(class_index, optimal_threshold)[1:] is not None:
+            metric_values = [x[1] for x in patient_object.get_optimal_class_extra_metrics(class_index, optimal_threshold)[1:]]
+            if False not in [x == x for x in metric_values]:
+                # If all metric values have been computed, i.e., no nan or None etc...
+                return patient_object.get_optimal_class_extra_metrics(class_index, optimal_threshold)[1:]
 
         ground_truth_ni = nib.load(patient_object._ground_truth_filepaths[class_index])
         detection_ni = nib.load(patient_object._prediction_filepaths[class_index])

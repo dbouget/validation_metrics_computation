@@ -1,4 +1,7 @@
 from __future__ import division
+
+import traceback
+
 import numpy as np
 import os
 import sys
@@ -199,14 +202,17 @@ class InstanceSegmentationValidation:
         recall = 0.0
         precision = 0.0
         f1_score = 0.0
-        if len(self.matching_results) != 0:
-            array_matching = np.asarray(self.matching_results)
-            average_dice = np.mean(array_matching, axis=0)[2]
-            recall = len(np.unique(array_matching[:, 0])) / len(self.gt_candidates)
-            precision = len(np.unique(array_matching[:, 1])) / len(self.detection_candidates)
-            f1_score = 2. * ((precision * recall) / (precision + recall))
-        index_larger_component = [x.area for x in self.gt_candidates].index(np.max([x.area for x in self.gt_candidates]))
-        matching_larger_component = [x[0] for x in self.matching_results].index(index_larger_component + 1) if (index_larger_component + 1) in [x[0] for x in self.matching_results] else -1
-        if matching_larger_component != -1:
-            largest_component_dice = self.matching_results[matching_larger_component][2]
+        try:
+            if len(self.matching_results) != 0:
+                array_matching = np.asarray(self.matching_results)
+                average_dice = np.mean(array_matching, axis=0)[2]
+                recall = len(np.unique(array_matching[:, 0])) / len(self.gt_candidates)
+                precision = len(np.unique(array_matching[:, 1])) / len(self.detection_candidates)
+                f1_score = 2. * ((precision * recall) / (precision + recall))
+                index_larger_component = [x.area for x in self.gt_candidates].index(np.max([x.area for x in self.gt_candidates]))
+                matching_larger_component = [x[0] for x in self.matching_results].index(index_larger_component + 1) if (index_larger_component + 1) in [x[0] for x in self.matching_results] else -1
+                if matching_larger_component != -1:
+                    largest_component_dice = self.matching_results[matching_larger_component][2]
+        except Exception as e:
+            print(traceback.format_exc())
         self.instance_detection_results = [average_dice, recall, precision, f1_score, largest_component_dice]
