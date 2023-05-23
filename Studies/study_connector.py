@@ -1,19 +1,15 @@
 from Utils.resources import SharedResources
-from Studies.hgg_preop_segmentation import *
-# from Studies.hgg_postop_segmentation import *
+from Studies.SegmentationStudy import *
 
 
 class StudyConnector:
     """
-    Instantiate the proper class corresponding to the manually-input study name.
+    Instantiate the proper study class corresponding to the user choice from the configuration file.
     """
     def __init__(self):
         self.perform_study = SharedResources.getInstance().studies_task
 
     def run(self):
-        if self.perform_study == 'hgg_preop_seg':
-            processor = HGGPreopSegmentationStudy()
+        if self.perform_study == 'segmentation':
+            processor = SegmentationStudy()
             processor.run()
-        # elif self.perform_study == 'hgg_postop_seg':
-        #     processor = HGGPostOpSegmentationStudy()
-        #     processor.run()

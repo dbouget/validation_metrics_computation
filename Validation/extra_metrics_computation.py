@@ -273,6 +273,7 @@ def compute_specific_metric_value(metric, gt, detection, tp, tn, fp, fn, gt_ni_h
 
 def compute_overall_metrics_correlation(folder, data=None, best_threshold=0.5, best_overlap=0.0):
     """
+    @TODO. DEPRECATED. Should be updated to match the multi-class possibility, and with non hard-coded metric names
 
     :param folder:
     :param metric_names:

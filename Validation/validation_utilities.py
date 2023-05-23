@@ -153,7 +153,7 @@ def compute_fold_average(folder, data=None, class_optimal={}, metrics=[], suffix
     optimal_tag = 'All' if not true_positive_state else 'True Positive'
     for c in classes:
         optimal_values = class_optimal[c][optimal_tag]
-        compute_fold_average_inner(folder, class_name=c, best_threshold=optimal_values[1],
+        compute_fold_average_inner(folder, data=data, class_name=c, best_threshold=optimal_values[1],
                                    best_overlap=optimal_values[0], metrics=metrics, suffix=suffix,
                                    true_positive_state=true_positive_state)
 

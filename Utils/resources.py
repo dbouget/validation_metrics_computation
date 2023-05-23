@@ -78,6 +78,7 @@ class SharedResources:
         self.studies_task = ''
         self.studies_study_name = None
         self.studies_extra_parameters_filename = ''
+        self.studies_class_names = []
 
         if self.config.has_option('Studies', 'input_folder'):
             if self.config['Studies']['input_folder'].split('#')[0].strip() != '':
@@ -98,6 +99,11 @@ class SharedResources:
         if self.config.has_option('Studies', 'extra_parameters_filename'):
             if self.config['Studies']['extra_parameters_filename'].split('#')[0].strip() != '':
                 self.studies_extra_parameters_filename = self.config['Studies']['extra_parameters_filename'].split('#')[0].strip()
+
+        if self.config.has_option('Studies', 'class_names'):
+            if self.config['Studies']['class_names'].split('#')[0].strip() != '':
+                self.studies_class_names = [x.strip() for x in
+                                               self.config['Studies']['class_names'].split('#')[0].strip().split(',')]
 
     def __parse_validation_parameters(self):
         """

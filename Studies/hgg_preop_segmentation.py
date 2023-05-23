@@ -33,6 +33,10 @@ class HGGPreopSegmentationStudy:
         self.optimal_threshold = None
 
     def run(self):
+        """
+        @TODO. Must iterate over all classes now, to load the proper files...
+        :return:
+        """
         self.__retrieve_optimum_values()
         # compute_overall_metrics_correlation(self.input_folder, best_threshold=self.optimal_threshold)
         self.__compute_and_plot_overall()
