@@ -218,23 +218,23 @@ def compute_specific_metric_value(metric, gt, detection, tp, tn, fp, fn, gt_ni_h
         metric_value = cohen_kappa_score(gt.flatten(), detection.flatten())
     elif metric == 'HD95':
         metric_value = math.inf
-        if np.max(detection) == 1:  # Computation does not work if no binary object in the array
+        if np.max(gt) == 1 and np.max(detection) == 1:  # Computation does not work if no binary object in the array
             metric_value = hd95(detection, gt, voxelspacing=det_ni_header.get_zooms(), connectivity=1)
     elif metric == 'ASSD':
         metric_value = math.inf
-        if np.max(detection) == 1:  # Computation does not work if no binary object in the array
+        if np.max(gt) == 1 and np.max(detection) == 1:  # Computation does not work if no binary object in the array
             metric_value = assd(detection, gt, voxelspacing=det_ni_header.get_zooms(), connectivity=1)
     elif metric == 'OASSD':
         metric_value = math.inf
-        if np.max(detection) == 1:  # Computation does not work if no binary object in the array
+        if np.max(gt) == 1 and np.max(detection) == 1:  # Computation does not work if no binary object in the array
             metric_value = obj_assd(detection, gt, voxelspacing=det_ni_header.get_zooms(), connectivity=1)
     elif metric == 'RAVD':
         metric_value = math.inf
-        if np.max(detection) == 1:  # Computation does not work if no binary object in the array
+        if np.max(gt) == 1 and np.max(detection) == 1:  # Computation does not work if no binary object in the array
             metric_value = ravd(detection, gt)
     elif metric == 'VC':
         metric_value = math.inf
-        if np.max(detection) == 1:  # Computation does not work if no binary object in the array
+        if np.max(gt) == 1 and np.max(detection) == 1:  # Computation does not work if no binary object in the array
             metric_value, pval = volume_correlation(detection, gt)
     elif metric == 'MahaD':
         metric_value = math.inf

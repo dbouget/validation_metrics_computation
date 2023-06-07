@@ -88,8 +88,6 @@ class ModelValidation:
 
         if not os.path.exists(self.dice_output_filename):
             self.results_df = pd.DataFrame(columns=self.results_df_base_columns)
-            for c in SharedResources.getInstance().validation_class_names:
-                self.class_results_df[c] = pd.DataFrame(columns=self.results_df_base_columns)
         else:
             self.results_df = pd.read_csv(self.dice_output_filename)
             if self.results_df.columns[0] != 'Fold':
@@ -98,7 +96,11 @@ class ModelValidation:
                                not x in list(self.results_df.columns)[1:]]
             for m in missing_metrics:
                 self.results_df[m] = None
-            for c in SharedResources.getInstance().validation_class_names:
+
+        for c in SharedResources.getInstance().validation_class_names:
+            if not os.path.exists(self.class_dice_output_filenames[c]):
+                self.class_results_df[c] = pd.DataFrame(columns=self.results_df_base_columns)
+            else:
                 self.class_results_df[c] = pd.read_csv(self.class_dice_output_filenames[c])
                 if self.class_results_df[c].columns[0] != 'Fold':
                     self.class_results_df[c] = pd.read_csv(self.class_dice_output_filenames[c], index_col=0)
@@ -126,17 +128,17 @@ class ModelValidation:
             uid = None
             try:
                 start = time.time()
-                # # Option1.
-                # # Working for files using the original naming conventions.
-                # pid = patient.split('_')[1]
-                # sub_folder_index = str(ceil(int(pid) / 200))  # patient.split('_')[0]
-                # patient_extended = '_'.join(patient.split('_')[1:-1]).strip()
+                # Option1.
+                # Working for files using the original naming conventions.
+                pid = patient.split('_')[1]
+                sub_folder_index = str(ceil(int(pid) / 200))  # patient.split('_')[0]
+                patient_extended = '_'.join(patient.split('_')[1:-1]).strip()
 
-                # Option2.
-                # For files not following the original naming conventions
-                pid = patient.split('_')[0]
-                sub_folder_index = str(ceil(int(pid) / 200))
-                patient_extended = ""
+                # # Option2.
+                # # For files not following the original naming conventions
+                # pid = patient.split('_')[0]
+                # sub_folder_index = str(ceil(int(pid) / 200))
+                # patient_extended = ""
 
                 uid = str(fold_number) + '_' + pid
                 # Placeholder for holding all metrics for the current patient
@@ -208,6 +210,26 @@ class ModelValidation:
                     if os.path.basename(ground_truth_base) in f and gt_suffix in f:
                         ground_truth_filename = os.path.join(os.path.dirname(ground_truth_base), f)
                 break
+
+            # Specific actions for remapping BraTS results to match the whole tumor and tumor core categories
+            if SharedResources.getInstance().validation_use_brats_data and (classes[c] == 'whole' or classes[c] == 'core'):
+                ground_truth_filename = os.path.join(detection_image_base, patient_extended + '_' + gt_suffix)
+            # The ground truth for the BraTS images is stored a bit differently
+            elif SharedResources.getInstance().validation_use_brats_data and classes[c] == 'tumor':
+                raw_gt = nib.load(ground_truth_filename).get_data()[:]
+                ground_truth_filename = os.path.join(os.path.dirname(detection_filename), uid + "_groundtruth_tumor.nii.gz")
+                if not os.path.exists(ground_truth_filename):
+                    new_gt = np.zeros(detection_ni.get_data().shape)
+                    new_gt[raw_gt == 1] = 1
+                    nib.save(nib.Nifti1Image(new_gt, detection_ni.affine), ground_truth_filename)
+                tmp_filename = os.path.join(os.path.dirname(detection_filename), uid + "_groundtruth_necrosis.nii.gz")
+                if not os.path.exists(tmp_filename):
+                    new_gt = np.zeros(detection_ni.get_data().shape)
+                    new_gt[raw_gt == 2] = 1
+                    new_gt[raw_gt == 1] = 0
+                    nib.save(nib.Nifti1Image(new_gt, detection_ni.affine), tmp_filename)
+            elif SharedResources.getInstance().validation_use_brats_data and classes[c] == 'necrosis':
+                ground_truth_filename = os.path.join(os.path.dirname(detection_filename), uid + "_groundtruth_necrosis.nii.gz")
 
             detection_ni = nib.load(detection_filename)
             # If there's no ground truth, we assume the class to be empty for this patient and create an

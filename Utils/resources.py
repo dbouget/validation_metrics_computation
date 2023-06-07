@@ -137,6 +137,7 @@ class SharedResources:
         self.validation_tiny_objects_removal_threshold = 50
         self.validation_class_names = []
         self.validation_true_positive_volume_thresholds = []
+        self.validation_use_brats_data = []
 
         if self.config.has_option('Validation', 'input_folder'):
             if self.config['Validation']['input_folder'].split('#')[0].strip() != '':
@@ -187,3 +188,7 @@ class SharedResources:
         if self.config.has_option('Validation', 'true_positive_volume_thresholds'):
             if self.config['Validation']['true_positive_volume_thresholds'].split('#')[0].strip() != '':
                 self.validation_true_positive_volume_thresholds = [float(x.strip()) for x in self.config['Validation']['true_positive_volume_thresholds'].split('#')[0].strip().split(',')]
+
+        if self.config.has_option('Validation', 'use_brats_data'):
+            if self.config['Validation']['use_brats_data'].split('#')[0].strip() != '':
+                self.validation_use_brats_data = True if self.config['Validation']['use_brats_data'].split('#')[0].strip().lower() == 'true' else False
