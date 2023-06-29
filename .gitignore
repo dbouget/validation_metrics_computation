@@ -20,3 +20,5 @@ numpy
 *.vscode
 /home
 /Atlases
+/wheels
+/http

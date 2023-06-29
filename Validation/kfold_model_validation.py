@@ -250,6 +250,7 @@ class ModelValidation:
                              detection_filename)
 
                 if detection_ni.shape != ground_truth_ni.shape:
+                    print("The inputs prediction and ground truth files have different shapes. Please fix!")
                     return False
 
             patient_filenames[classes[c]] = [ground_truth_filename, detection_filename]
