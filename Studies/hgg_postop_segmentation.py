@@ -64,12 +64,13 @@ class HGGPostopSegmentationStudy:
             # volume_figure_fname = Path(self.input_folder, 'Validation', 'volume_cutoff.png')
             # self.__compute_and_plot_volume_cutoff_results(volume_cutoff_range=[0., 0.5], optimal_cutoff=0.175, save_fname=volume_figure_fname)
             results_cutoff = self.__compute_results_cutoff_volume(cutoff_volume=0.175)
+            results_cutoff = self.__compute_volume_error(results_cutoff)
             results_cutoff.to_csv(Path(self.input_folder, 'Validation', 'all_dice_scores_volume_cutoff.csv'), index=False)
             compute_fold_average(self.input_folder, results_cutoff, best_threshold=self.optimal_threshold,
-                                 best_overlap=self.optimal_overlap,
+                                 best_overlap=self.optimal_overlap, metrics=['Absolute volume error', 'True preop volume', 'True postop volume', 'Predicted postop volume'],
                                  suffix='volume_cutoff', output_folder=str(self.output_folder))
-            results_cutoff = self.__compute_EOR(results_cutoff, crop_to_zero=True)
-            self.__study_volume_and_EOR(results_cutoff)
+            # results_cutoff = self.__compute_EOR(results_cutoff, crop_to_zero=True)
+            # self.__study_volume_and_EOR(results_cutoff)
 
     def __retrieve_optimum_values(self):
         study_filename = os.path.join(self.input_folder, 'Validation', 'optimal_dice_study.csv')
@@ -322,6 +323,19 @@ class HGGPostopSegmentationStudy:
         if crop_to_zero:
             data.loc[(data['True EOR'] < 0), 'True EOR'] = 0.0
             data.loc[(data['Predicted EOR type 1'] < 0), 'Predicted EOR type 1'] = 0.0
+
+        return data
+
+    def __compute_volume_error(self, results):
+        data = deepcopy(results)
+        abs_volume_error = np.array(np.abs(results.loc[:, 'True postop volume'] - results.loc[:, 'Predicted postop volume']))
+        data['Absolute volume error'] = abs_volume_error
+
+        # Need to handle exceptions with division by zero correctly to compute the relative error as we have a lot of
+        # small volumes - just keeping the absolute error for now
+        # rel_volume_error = np.array(np.divide(abs_volume_error, results.loc[:, 'True postop volume']))
+        # index_rel_vol_err = np.where((abs_volume_error > 0) & (results.loc[:, 'True postop volume'] == 0))
+        # rel_volume_error[np.where((abs_volume_error > 0) & (results.loc[:, 'True postop volume'] == 0))] = 1
 
         return data
 

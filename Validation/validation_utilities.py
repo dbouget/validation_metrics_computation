@@ -308,6 +308,8 @@ def compute_fold_average(folder, data=None, best_threshold=0.5, best_overlap=0.0
     for m in metric_names:
         if m in results.columns.values or 'Dice' in m:
             fold_average_columns.extend([m + '_mean', m + '_std'])
+        if m == 'Absolute volume error':
+            fold_average_columns.extend([m + '_median'])
 
     # Regarding the overlap threshold, should the patient discarded for recall be
     # used for other metrics computation?
@@ -364,6 +366,7 @@ def compute_fold_average(folder, data=None, best_threshold=0.5, best_overlap=0.0
                     avg = all_for_thresh[m].dropna().astype('float32').mean()
                     std = all_for_thresh[m].dropna().astype('float32').std(ddof=0)
                 fold_average.extend([avg, std])
+
             elif m == 'Dice-TP':
                 true_positives = all_for_thresh.loc[(all_for_thresh['Dice'] >= best_overlap) &
                                                     (all_for_thresh['#GT'] > 0)]
@@ -380,6 +383,10 @@ def compute_fold_average(folder, data=None, best_threshold=0.5, best_overlap=0.0
                 avg = negatives['Dice'].astype('float32').mean()
                 std = negatives['Dice'].astype('float32').std()
                 fold_average.extend([avg, std])
+
+            if m == 'Absolute volume error':
+                median = all_for_thresh[m].dropna().astype('float32').median()
+                fold_average.extend([median])
 
         metrics_per_fold.append(fold_average)
 
@@ -424,10 +431,17 @@ def compute_fold_average(folder, data=None, best_threshold=0.5, best_overlap=0.0
             std_final = math.sqrt((1 / (total_samples - 1)) * (std_final - (total_samples * math.pow(mean_final, 2))))
             fold_averaged_results.extend([mean_final, std_final])
             fold_averaged_results_df_columns.extend([m + '_mean', m + '_std'])
+            if m == 'Absolute volume error':
+                # Take the median over all samples
+                thresh_index = (np.round(results['Threshold'], 1) == best_threshold)
+                all_for_thresh = results.loc[thresh_index]
+                median = all_for_thresh[m].dropna().astype('float32').median()
+                fold_averaged_results.extend([median])
+                fold_averaged_results_df_columns.extend([m + '_median'])
 
     fold_averaged_results_df = pd.DataFrame(np.asarray(fold_averaged_results).reshape((1, len(fold_averaged_results))),
                                             columns=fold_averaged_results_df_columns)
     output_filename = os.path.join(output_folder, 'overall_metrics_average.csv') if suffix == '' else os.path.join(output_folder, 'overall_metrics_average_' + suffix + '.csv')
     fold_averaged_results_df.to_csv(output_filename, index=False)
-    export_mean_std_df_to_latex(output_folder, data=fold_averaged_results_df, suffix='overall_metrics_average_' + suffix)
-    export_mean_std_df_to_latex_paper(output_folder, data=fold_averaged_results_df, suffix='overall_metrics_average_' + suffix)
+    # export_mean_std_df_to_latex(output_folder, data=fold_averaged_results_df, suffix='overall_metrics_average_' + suffix)
+    # export_mean_std_df_to_latex_paper(output_folder, data=fold_averaged_results_df, suffix='overall_metrics_average_' + suffix)
