@@ -103,10 +103,10 @@ class ModelValidation:
                                                                                               detection_overlap_thresholds=self.detection_overlap_thresholds)
 
         compute_fold_average(self.input_folder, best_threshold=optimal_threshold, best_overlap=optimal_overlap)
-        # compute_extra_metrics(self.data_root, self.input_folder, nb_folds=self.fold_number, split_way=self.split_way,
-        #                       optimal_threshold=optimal_threshold, metrics=self.metric_names[5:],
-        #                       gt_files_suffix=self.gt_files_suffix,
-        #                       prediction_files_suffix=self.prediction_files_suffix)
+        compute_extra_metrics(self.data_root, self.input_folder, nb_folds=self.fold_number, split_way=self.split_way,
+                              optimal_threshold=optimal_threshold, metrics=self.metric_names[5:],
+                              gt_files_suffix=self.gt_files_suffix,
+                              prediction_files_suffix=self.prediction_files_suffix)
         # compute_overall_metrics_correlation(self.input_folder, best_threshold=optimal_threshold)
 
     def __generate_dice_scores(self):

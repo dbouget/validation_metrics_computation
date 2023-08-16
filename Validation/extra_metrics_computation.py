@@ -331,7 +331,7 @@ def compute_specific_metric_value(metric, gt, detection, tp, tn, fp, fn, gt_ni_h
         metric_value = cohen_kappa_score(gt.flatten(), detection.flatten())
     elif metric == 'HD95':
         metric_value = math.inf
-        if np.max(detection) == 1:  # Computation does not work if no binary object in the array
+        if np.max(detection) == 1 and np.max(gt) == 1:  # Computation does not work if no binary object in the array
             metric_value = hd95(detection, gt, voxelspacing=det_ni_header.get_zooms(), connectivity=1)
     elif metric == 'ASSD':
         metric_value = math.inf
