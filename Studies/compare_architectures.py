@@ -6,6 +6,7 @@ import nibabel as nib
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import sklearn.metrics
 from scipy.interpolate import interp1d
 import SimpleITK as sitk
 from Utils.io_converters import reload_optimal_validation_parameters
@@ -18,7 +19,12 @@ from pathlib import Path
 import seaborn as sns
 import re
 from .hgg_postop_segmentation import threshold_volume_and_compute_classification_metrics
-
+from scipy.stats import norm, mannwhitneyu, wilcoxon
+from statsmodels.stats.contingency_tables import mcnemar
+from statsmodels.stats.multicomp import pairwise_tukeyhsd
+import random
+from Utils.statistics import pooled_std, pooled_mean
+from copy import deepcopy
 
 class CompareArchitecturesStudy:
     """
@@ -39,11 +45,13 @@ class CompareArchitecturesStudy:
             self.output_dir.mkdir(parents=True)
 
         self.arch_names = ['nnU-Net', 'AGU-Net']
-        self.input_study_dirs = [Path('/home/ragnhild/Data/Neuro/Studies/PostopSegmentation/NetworkValidation/Alexandros_experiments/compare_nnUNet_501-505'),
-                                 Path('/home/ragnhild/Data/Neuro/Studies/PostopSegmentation/NetworkValidation/AGU-Net_compare_exp1_5')]
+        # self.input_study_dirs = [Path('/home/ragnhild/Data/Neuro/Studies/PostopSegmentation/NetworkValidation/Alexandros_experiments/compare_nnUNet_501-505'),
+        #                          Path('/home/ragnhild/Data/Neuro/Studies/PostopSegmentation/NetworkValidation/TRD_experiments/AGU-Net_compare_exp1_5')]
+        self.input_study_dirs = [Path('/home/ragnhild/Data/Neuro/Studies/PostopSegmentation/NetworkValidation/Alexandros_experiments'),
+                                 Path('/home/ragnhild/Data/Neuro/Studies/PostopSegmentation/NetworkValidation/TRD_experiments')]
 
         #self.studies = ['Ams_Trd_T1c', 'Ams_Trd_T1c_T1w', 'Ams_Trd_T1c_T1w_FLAIR', 'All_T1c_T1w_preop']
-        self.studies_lists = [['501', '502', '503', '504', '505'], #'504',
+        self.studies_lists = [['901', '902', '903', '904', '905'], #'504',
             ['run2_exp1_T1c', 'run2_exp2_T1c_T1w', 'run2_exp3_T1c_T1w_flair', 'run2_exp4_T1c_T1w_preop', 'run2_exp5_T1c_T1w_flair_preop']]
         # self.studies_lists = [['505'], ['run2_exp5_T1c_T1w_flair_preop']]
         # self.studies_description = ['T1ce', 'T1ce+T1w', 'T1ce+T1w+FLAIR', 'T1ce+T1w+Preop T1ce', 'T1ce+T1w+FLAIR+Preop T1ce'] #
@@ -68,20 +76,36 @@ class CompareArchitecturesStudy:
         self.interrater_study_filepath = Path(self.output_dir, 'interrater_study.csv')
 
     def run(self):
-        for subdir in self.subdirs:
-            self._run_subdir(subdir)
-        self._create_tables_segmentation()
-        self._create_tables_classification()
+        # for subdir in self.subdirs:
+        #     self.run_subdir(subdir)
+        # self._create_tables_segmentation()
+        # self._create_tables_classification()
         # self.create_interrater_consensus_segmentations()
         # self.interrater_study()
         # self.interrater_study_summary()
         # self.visualize_interrater_results()
+
+        ### Statistical tests ###
+        # Segmentation
+        # self.mannwhitneyutest_segmentation(study_number_nnunet=1, study_number_agunet=1)
+        # self.tukey(0)
+        # self.tukey(1)
+        ## TODO: add confints on valset
+        # self.confint_segmentation_cv()
+
+        # self.classification_confints_bootstrapping_testset()
+        # self.confint_classification_cv()
+
+        self.equivalence_tests_interrater_study()
         return
 
     def _create_tables_segmentation(self):
         self.write_cutoff_results_latex(metrics=['Dice-P', 'Dice-TP', 'Object-wise recall',
                                                  'Object-wise precision', 'Object-wise F1'],
                                         suffix='seg_scores_DiceP_Dice_TP_obj-wise_Rec_Prec_F1', subdirs=self.subdirs)
+        self.write_cutoff_results_latex(metrics=['Dice-P', 'Dice-TP', 'Patient-wise recall postop',
+                                                 'Patient-wise precision postop', 'HD95', 'Absolute volume error'],
+                                        suffix='seg_scores_diceP-diceTP-Rec-Prec-HD95-VolErr', subdirs=self.subdirs)
 
     def _create_tables_classification(self):
         self.write_cutoff_results_latex(
@@ -89,78 +113,314 @@ class CompareArchitecturesStudy:
                      'Patient-wise F1 postop', 'Balanced accuracy'],
             suffix='classif_scores-Rec-Prec-Spec-F1-bAcc', subdirs=self.subdirs)
 
-    def _run_subdir(self, subdir):
+    def confint_segmentation_cv(self):
+        print("\nConf ints for segmentation on cross-validation set")
+        for arch, arch_name in enumerate(self.arch_names):
+            print(f"Confidence intervals for architecture {arch_name}:")
+            for study, study_name in enumerate(self.studies_lists[arch]):
+                results = self.load_optimal_results(arch=arch, study=study_name, subdir='Validation')
+                positive_index = (results['#GT'].values >= 1)
+                results = results.loc[positive_index]
+                # Create vector for each fold
+                dice_scores = []
+                for fold in np.unique(results['Fold']):
+                    fold_result = results.loc[results['Fold'] == fold, 'Dice'].values
+                    dice_scores.append(fold_result)
+
+                confint = self.pooled_interval(dice_scores)
+                # confint, theta, theta_hat = self.BCa_interval(arch, study)
+                print(f"\tConfig {self.studies_description[study]}, confint = [{confint[0]:.4f}, {confint[1]:.4f}]")
+
+    def pooled_interval(self, list_fold_scores):
+        counts = np.array([len(scores) for scores in list_fold_scores])
+        means = np.array([np.mean(scores) for scores in list_fold_scores])
+        stds = np.array([np.std(scores) for scores in list_fold_scores])
+
+        pooled_m = pooled_mean(means, counts)
+        pooled_s = pooled_std(stds, counts)
+        interval_width = 1.96*pooled_s/np.sqrt(np.sum(counts))
+        return [pooled_m - interval_width, pooled_m + interval_width]
+
+    def mannwhitneyutest_segmentation(self, study_number_nnunet, study_number_agunet):
+        # Should only be run for the test-set
+        best_model_nnunet = self.studies_lists[0][study_number_nnunet]
+        best_model_agunet = self.studies_lists[1][study_number_agunet]
+
+        results_nnunet = self.load_optimal_results(arch=0, study=best_model_nnunet, subdir='Test')
+        results_agunet = self.load_optimal_results(arch=1, study=best_model_agunet, subdir='Test')
+
+        if not np.array_equal(results_agunet.loc[:, 'Patient'], results_nnunet.loc[:, 'Patient']):
+            results_agunet = results_agunet.set_index('Patient')
+            results_agunet = results_agunet.reindex(results_nnunet['Patient'])
+            results_agunet = results_agunet.reset_index()
+
+        positive_index = (results_agunet['#GT'].values >= 1)
+        mannwhit_res = mannwhitneyu(results_agunet.loc[positive_index, 'Dice'].values,
+                                results_nnunet.loc[positive_index, 'Dice'].values)
+        print(f"Wilcoxon test for comparing models nnU-Net {self.studies_description[study_number_nnunet]} and " \
+              f"AGU-Net {self.studies_description[study_number_agunet]}")
+        print(mannwhit_res)
+
+    def tukey(self, arch):
+        print(f"\nRunning Tukey-HSD for comparing inputs for architecture {self.arch_names[arch]}")
+        all_results = []
+
+        for study, study_name in enumerate(self.studies_lists[arch]):
+            results = self.load_optimal_results(arch=arch, study=study_name, subdir='Test')
+            all_results.append(results)
+
+        positive_index = (all_results[0]['#GT'].values >= 1)
+        all_dice_scores_pos = [res.loc[positive_index, 'Dice'].values for res in all_results]
+
+        m_comp = tukey_hsd(all_dice_scores_pos, self.studies_description, all_dice_scores_pos[0].shape, alpha=0.05)
+        latex_table = m_comp._results_table.as_latex_tabular()
+        latex_table_filepath = Path(self.output_dir, f'tukey_results_{self.arch_names[arch]}.txt')
+        with open(latex_table_filepath, 'w+') as pfile:
+            pfile.write(latex_table)
+
+        print(m_comp)
+
+    def classification_confints_bootstrapping_testset(self):
+        means = []
+        confints = []
+        for arch, arch_name in enumerate(self.arch_names):
+            print(f"\nConfidence intervals for architecture {arch_name}:")
+            means.append([])
+            confints.append([])
+            for study, study_name in enumerate(self.studies_lists[arch]):
+                confint, theta, theta_hat = self.BCa_interval(arch, study)
+                means[arch].append(theta_hat)
+                confints[arch].append(confint)
+                print(f"\tConfig {self.studies_description[study]}, theta_hat = {theta_hat:.4f},  confint = [{confint[0]:.4f}, {confint[1]:.4f}]")
+        self._create_latex_table_confints(means, confints, 'classification_confints_bootstrap_test.txt')
+
+    def BCa_interval(self, arch=0, study=0):
+        model = self.studies_lists[arch][study]
+        results = self.load_optimal_results(arch=arch, study=model, subdir='Test')
+        pred, gt = create_prediction_vector(results)
+        confint, theta, theta_hat = BCa_interval_macro_metric(gt.copy(), pred.copy(), balanced_accuracy, B=10000, q=0.975)
+        return confint, theta, theta_hat # this is what you care about
+
+    def confint_classification_cv(self):
+        print("\nConf ints for classification on cross-validation set")
+        means = []
+        confints = []
+        for arch, arch_name in enumerate(self.arch_names):
+            means.append([])
+            confints.append([])
+            print(f"Confidence intervals for architecture {arch_name}:")
+            for study, study_name in enumerate(self.studies_lists[arch]):
+                metrics_filepath = Path(self.input_study_dirs[arch], study_name, 'Validation',
+                                        'folds_metrics_average_volume_cutoff.csv')
+                results = pd.read_csv(str(metrics_filepath))
+                baccs = results['Balanced accuracy']
+                counts = results['# samples']
+
+                mean = pooled_mean(baccs, counts)
+                std = np.std(baccs)
+                interval_width = 1.96*std/np.sqrt(len(baccs))
+                confint = [mean - interval_width, mean + interval_width]
+
+                means[arch].append(mean)
+                confints[arch].append(confint)
+
+                print(f"\tConfig {self.studies_description[study]}, mean bacc = [{mean:.4f}], confint = [{confint[0]:.4f}, {confint[1]:.4f}]")
+        self._create_latex_table_confints(means, confints, 'classification_confints_cv.txt')
+
+    def _create_latex_table_confints(self, means, confints, output_fname):
+        latex_table_filepath = Path(self.output_dir, output_fname)
+        with open(latex_table_filepath, "w+") as pfile:
+            pfile.write("\\begin{center} \n\\begin{tabular}{ccS[table-format = 1.1]\n")
+            pfile.write("\t@{\\quad[\\,}S[table-format = -1.3]@{,\\,}S[table-format = -1.3]@{\\,]} \n\t}\n")
+            pfile.write("\tArch & Config  & \\multicolumn{1}{c@{\\quad\\space}}{mean} & \\multicolumn{2}{c}{CI} \\\ \n \t\\hline \n")
+            for arch, arch_name in enumerate(self.arch_names):
+                for study, config_name in enumerate(self.studies_description):
+                    pfile.write(f"\t{arch_name} & {config_name} & {means[arch][study]:.3f} & {confints[arch][study][0]:.3f} & {confints[arch][study][1]:.3f} \\\ \n")
+                pfile.write("\t\\hline\n")
+            pfile.write("\\end{tabular}\n\\end{center}")
+
+    def equivalence_tests_interrater_study(self):
+        results = pd.read_csv(self.interrater_study_filepath)
+        results.replace('inf', 0, inplace=True)
+        results.replace('', 0, inplace=True)
+        results.replace(' ', 0, inplace=True)
+
+        # Results for positive cases
+        results = results.loc[results['residual_tumor'] == 1]
+
+        annotators = ['nov1', 'nov2', 'nov3', 'nov4', 'exp1', 'exp2', 'exp3', 'exp4']
+        avg_annotators = ['nov-avg', 'exp-avg', 'all-avg']
+        grouped_annotators = [[a for a in annotators if 'nov' in a],
+                              [a for a in annotators if 'exp' in a],
+                              annotators.copy()]
+        models = ['nnU-Net_B', 'AGU-Net_B']
+        references = ['ground_truth_segmentation', 'strict-consensus-all-annotators']
+        ref_short = {'ground_truth_segmentation': 'Ground truth',
+                     'strict-consensus-all-annotators': 'Consensus'}
+        results = results[results['annotator/model'].isin(annotators + models)]
+        results.sort_values(by=['pid'], inplace=True)
+        metric = "Jaccard"
+        latex_table_rows = []
+        for ref in references:
+            ref_results = results.loc[results['reference'] == ref]
+            for model in models:
+                model_res = ref_results.loc[ref_results['annotator/model'] == model]
+                print(f"Mann-Whitney U tests for model {model}")
+                model_tabname = model.replace('_', ' ')
+                for annotator in annotators:
+                    annot_res = ref_results.loc[ref_results['annotator/model'] == annotator]
+                    test_result = mannwhitneyu(model_res[metric].values, annot_res[metric].values)
+                    # print(np.all(np.array_equal(model_res['pid'].values, annot_res['pid'].values)))
+                    print(f"\t Compared against annotator {annotator}: ", test_result)
+                    latex_table_rows.append(f"{ref_short[ref]} & {model_tabname} & {annotator} & " +
+                                            f"${np.mean(model_res[metric].values):.3f} \\pm {np.std(model_res[metric].values):.3f}$ & " +
+                                            f"${np.mean(annot_res[metric].values):.3f} \\pm {np.std(annot_res[metric].values):.3f}$ & " +
+                                            f"{test_result.statistic:.1f} & {test_result.pvalue:.3f} \\\ ")
+                # Compare models against averages over groups
+                for group_name, group in zip(avg_annotators, grouped_annotators):
+                    group_results = ref_results.loc[ref_results['annotator/model'].isin(group)]
+                    results_grouped_mean = group_results.groupby('pid').mean()[metric]
+                    test_result = mannwhitneyu(model_res[metric].values, results_grouped_mean.values)
+                    latex_table_rows.append(f"{ref_short[ref]} & {model_tabname} & {group_name} & " +
+                                            f"${np.mean(model_res[metric].values):.3f} \\pm {np.std(model_res[metric].values):.3f}$ & " +
+                                            f"${np.mean(results_grouped_mean.values):.3f} \\pm {np.std(results_grouped_mean.values):.3f}$ & " +
+                                            f"{test_result.statistic:.1f} & {test_result.pvalue:.3f} \\\ ")
+        self._create_latex_table_interrater_tests(latex_table_rows, 'latex_table_interrater_tests.txt')
+        print("OK")
+    def _create_latex_table_interrater_tests(self, latex_table_rows, output_fname):
+        latex_table_filepath = Path(self.output_dir, output_fname)
+        with open(latex_table_filepath, "w+") as pfile:
+            pfile.write("\\begin{tabular}{cccccc}\n")
+            pfile.write("\tRef & Model / config & Annotator & Arch mean +- std & Annotator mean +- std  & Statistic & p-value \\\ \n")
+            pfile.write("\t\\hline\n")
+            for row in latex_table_rows:
+                pfile.write("\t" + row +"\n")
+            pfile.write("\\end{tabular}")
+        return None
+
+    def mcnemar_test(self):
+        best_model_nnunet = self.studies_lists[0][1]
+        best_model_agunet = self.studies_lists[1][1]
+        # best_model_agunet2 = self.studies_lists[1][2]
+
+        results_nnunet = self.load_optimal_results(arch=0, study=best_model_nnunet, subdir='Test')
+        results_agunet = self.load_optimal_results(arch=1, study=best_model_agunet, subdir='Test')
+        # results_nnunet = self.load_optimal_results(arch=1, study=best_model_agunet2, subdir='Test')
+
+        if not np.array_equal(results_agunet.loc[:, 'Patient'], results_nnunet.loc[:, 'Patient']):
+            results_agunet = results_agunet.set_index('Patient')
+            results_agunet = results_agunet.reindex(results_nnunet['Patient'])
+            results_agunet = results_agunet.reset_index()
+
+        pred1, gt1 = create_prediction_vector(results_nnunet)
+        pred2, gt2 = create_prediction_vector(results_agunet)
+
+        pv = bootstrap_t_test(pred1, pred2, gt1, nboot=10000, direction="greater")
+        print(pv)
+
+        exit()
+
+        ctable = self.__construct_contingency_table_mcnemar(results_nnunet, results_agunet)
+        test_result = mcnemar(ctable)
+        print("OK")
+
+    def __construct_contingency_table_mcnemar(self, res_model_1, res_model_2):
+        hit_model_1 = self.__construct_hit_vector_classificaiton(res_model_1)
+        hit_model_2 = self.__construct_hit_vector_classificaiton(res_model_2)
+        ctable = np.zeros((2, 2))
+
+        for i in range(2):
+           for j in range(2):
+               ctable[i, j] = len(np.where(np.logical_and(hit_model_1 == i, hit_model_2 == j))[0])
+
+        return np.transpose(ctable)
+
+    def __construct_hit_vector_classificaiton(self, results):
+        correct_classification = np.zeros(results.shape[0])
+        index_tp = results.loc[(results['#GT'] > 0) & (results['#Det'] > 0)].index
+        index_tn = results.loc[(results['#GT'] == 0) & (results['#Det'] == 0)].index
+        correct_classification[index_tp] = 1
+        correct_classification[index_tn] = 1
+        return correct_classification
+
+    def run_subdir(self, subdir):
 
         output_dir = Path(self.output_dir, subdir)
         output_dir.mkdir(exist_ok=True)
 
-        self.folds_metrics_average_list = []
-        self.overall_metrics_average_list = []
+        self.read_results_subdir_all_exp(subdir)
 
-        for i in range(len(self.input_study_dirs)):
-            self.read_results_arch(i, subdir=subdir)
+        # for i in range(len(self.input_study_dirs)):
+        #     self.read_results_arch(i, subdir=subdir)
 
         print("OK")
-        self.write_cutoff_results_latex(metrics=['Dice-P', 'Dice-TP', 'Patient-wise recall postop',
-                                                 'Patient-wise precision postop',  'Specificity', 'Patient-wise F1 postop'],
-                                        suffix='diceP-diceTP-Rec-Prec-Spec-F1', subdirs=[subdir])
-        self.write_cutoff_results_latex(metrics=['Dice-P', 'Dice-TP', 'Patient-wise recall postop',
-                                                 'Patient-wise precision postop', 'Specificity',
-                                                 'Patient-wise F1 postop', 'Balanced accuracy'],
-                                        suffix='diceP-diceTP-Rec-Prec-Spec-F1-bAcc', subdirs=[subdir])
-        self.write_cutoff_results_latex(metrics=['Dice-P', 'Dice-TP', 'Object-wise recall',
-                                                 'Object-wise precision', 'Object-wise F1'],
-                                        suffix='seg_scores_DiceP_Dice_TP_obj-wise_Rec_Prec_F1', subdirs=[subdir])
+        self.write_cutoff_results_latex(metrics=['Dice-P', 'Dice-TP', 'HD95', 'Absolute volume error'],
+                                        suffix='diceP-diceTP-HD95-VolErr', subdirs=[subdir])
+        # self.write_cutoff_results_latex(metrics=['Dice-P', 'Dice-TP', 'Patient-wise recall postop',
+        #                                          'Patient-wise precision postop',  'Specificity', 'Patient-wise F1 postop'],
+        #                                 suffix='diceP-diceTP-Rec-Prec-Spec-F1', subdirs=[subdir])
+        # self.write_cutoff_results_latex(metrics=['Dice-P', 'Dice-TP', 'Patient-wise recall postop',
+        #                                          'Patient-wise precision postop', 'Specificity',
+        #                                          'Patient-wise F1 postop', 'Balanced accuracy'],
+        #                                 suffix='diceP-diceTP-Rec-Prec-Spec-F1-bAcc', subdirs=[subdir])
+        # self.write_cutoff_results_latex(metrics=['Dice-P', 'Dice-TP', 'Object-wise recall',
+        #                                          'Object-wise precision', 'Object-wise F1'],
+        #                                 suffix='seg_scores_DiceP_Dice_TP_obj-wise_Rec_Prec_F1', subdirs=[subdir])
         self.write_cutoff_results_latex(metrics=['Patient-wise recall postop', 'Patient-wise precision postop', 'Specificity',
                                                  'Patient-wise F1 postop', 'Balanced accuracy'],
                                         suffix='classif_scores-Rec-Prec-Spec-F1-bAcc', subdirs=[subdir])
         self.plot_all_metrics(subdir=subdir)
 
-    def read_results_arch(self, arch_index, subdir=''):
-        self.folds_metrics_average_list.append([])
-        self.overall_metrics_average_list.append([])
+    def read_results_subdir_all_exp(self, subdir=''):
+        self.folds_metrics_average_list = []
+        self.overall_metrics_average_list = []
+        self.results_list = []
+        self.results_cutoff_list = []
 
+        for arch_index in range(len(self.input_study_dirs)):
+            self.folds_metrics_average_list.append([])
+            self.overall_metrics_average_list.append([])
+            self.results_list.append([])
+            self.results_cutoff_list.append([])
+
+            for study in self.studies_lists[arch_index]:
+                folds_metrics_filepath = Path(self.input_study_dirs[arch_index], study, subdir,
+                                              f'folds_metrics_average_volume_cutoff.csv')
+                metrics = pd.read_csv(str(folds_metrics_filepath))
+                self.folds_metrics_average_list[arch_index].append(metrics)
+
+                overall_metrics_filepath = Path(self.input_study_dirs[arch_index], study, subdir,
+                                              f'overall_metrics_average_volume_cutoff.csv')
+                metrics = pd.read_csv(str(overall_metrics_filepath))
+                self.overall_metrics_average_list[arch_index].append(metrics)
+
+                results_filepath = Path(self.input_study_dirs[arch_index], study, subdir, 'all_dice_scores_clean.csv')
+                metrics = pd.read_csv(str(results_filepath))
+                self.results_list[arch_index].append(metrics)
+
+                results_cutoff_filepath = Path(self.input_study_dirs[arch_index], study, subdir, 'all_dice_scores_volume_cutoff.csv')
+                metrics = pd.read_csv(str(results_cutoff_filepath))
+                self.results_cutoff_list[arch_index].append(metrics)
+
+    def load_optimal_results(self, arch, study, subdir):
+        metrics_filepath = Path(self.input_study_dirs[arch], study, subdir, 'all_dice_scores_volume_cutoff.csv')
+        results = pd.read_csv(str(metrics_filepath))
+        _, optimal_threshold = self.__retrieve_optimum_values(arch, study)
+        results.replace('inf', np.nan, inplace=True)
+        results.replace('', np.nan, inplace=True)
+        results.replace(' ', np.nan, inplace=True)
+        thresh_index = (np.round(results['Threshold'], 1) == optimal_threshold)
+        optimal_results = results.loc[thresh_index]
+        return optimal_results
+
+    def read_dice_scores(self, arch_index, study_index, subdir=''):
+        self.all_dice_scores_list.append([])
         for study in self.studies_lists[arch_index]:
-            folds_metrics_filepath = Path(self.input_study_dirs[arch_index], subdir,
-                                          f'folds_metrics_average_{study}_minimal_overlap_cutoff.csv')
-            metrics = pd.read_csv(str(folds_metrics_filepath))
-            self.folds_metrics_average_list[arch_index].append(metrics)
-
-            overall_metrics_filepath = Path(self.input_study_dirs[arch_index], subdir,
-                                          f'overall_metrics_average_{study}_minimal_overlap_cutoff.csv')
-            metrics = pd.read_csv(str(overall_metrics_filepath))
-            self.overall_metrics_average_list[arch_index].append(metrics)
-
-    def compute_results_minimal_dataset_overlap_cutoff(self, subdir=''):
-        all_pids = [res.Patient for res in self.results_list]
-        all_pids_cutoff = [res.Patient for res in self.results_cutoff_list]
-        results_minimal_filtered = []
-        results_minimal_filtered_cutoff = []
-
-        for i, (res, res_cutoff) in enumerate(zip(self.results_list, self.results_cutoff_list)):
-            results_filtered = deepcopy(res)
-            results_filtered_cutoff = deepcopy(res_cutoff)
-
-            for pids_list in all_pids:
-                results_filtered = results_filtered[results_filtered.Patient.isin(pids_list)]
-
-            for pids_list in all_pids_cutoff:
-                results_filtered_cutoff = results_filtered_cutoff[results_filtered_cutoff.Patient.isin(pids_list)]
-
-            results_minimal_filtered.append(results_filtered)
-            optimal_overlap, optimal_threshold = self.__retrieve_optimum_values(self.studies[i])
-            compute_fold_average(self.output_dir, data=results_filtered, best_threshold=optimal_threshold,
-                                 best_overlap=optimal_overlap,
-                                 suffix=f'{self.studies[i]}_minimal_overlap', dice_fixed_metric=True,
-                                 output_folder=str(Path(self.output_dir, subdir)))
-
-            results_minimal_filtered_cutoff.append(results_filtered_cutoff)
-            compute_fold_average(self.output_dir, data=results_filtered_cutoff, best_threshold=optimal_threshold,
-                                 best_overlap=optimal_overlap,
-                                 suffix=f'{self.studies[i]}_minimal_overlap_cutoff', dice_fixed_metric=True,
-                                 output_folder=str(Path(self.output_dir, subdir)))
-
-            #results_min_filtered_thresh =
+            all_dice_scores_filepath = Path(self.input_study_dirs[arch_index].parent,
+                                            self.studies_lists[arch_index][study_index],
+                                            subdir, f'all_dice_scores_clean.csv')
+            metrics = pd.read_csv(str(all_dice_scores_filepath))
+            self.all_dice_scores_list[arch_index].append(metrics)
 
     def write_cutoff_results_latex(self, metrics=['Dice', 'Dice-TP', 'Dice-P', 'Patient-wise recall postop',
                                                  'Patient-wise precision postop', 'Patient-wise F1 postop'],
@@ -172,27 +432,36 @@ class CompareArchitecturesStudy:
         n_arch = len(self.studies_lists)
 
         for i in range(len(self.studies_lists[0])):
-            pfile.write(f"\\midrule \n")
+            pfile.write(f"\\hline \n")
             for k, subdir in enumerate(subdirs):
                 for j in range(n_arch):
                     # output_string = self.arch_names[j] + " & " + self.studies_description[i] + " & " + self.subdir_labels[k]
                     output_string = ""
-                    output_string += "\\multirow{4}{1}{" + self.studies_description[i] + "}" if j == 0 and k == 0 else ""
-                    output_string += " & \\multirow{2}{1}{" + self.subdir_labels[k] + "}" if j == 0 else " & "
+                    output_string += "\\multirow{4}{*}{" + self.studies_description[i] + "}" if j == 0 and k == 0 else ""
+                    output_string += " & \\multirow{2}{*}{" + self.subdir_labels[k] + "}" if j == 0 else " & "
                     output_string += " & " + self.arch_names[j]
 
-                    fname = Path(self.input_study_dirs[j].parent, self.studies_lists[j][i], subdir, f'overall_metrics_average_volume_cutoff.csv')
+                    fname = Path(self.input_study_dirs[j], self.studies_lists[j][i], subdir, f'overall_metrics_average_volume_cutoff.csv')
                     results = pd.read_csv(fname)
 
                     for m in metrics:
-                        if results.loc[0, m + '_std'] > 0:
-                            output_string += f" & {results.loc[0, m + '_mean'] * 100:.2f}$\pm${results.loc[0, m + '_std'] * 100:.2f}"
+                        if m in ['HD95', 'Absolute volume error']:
+                            scaling_factor = 1
                         else:
-                            output_string += f" & {results.loc[0, m + '_mean'] * 100:.2f}"
+                            scaling_factor = 100
+                        if results.loc[0, m + '_std'] > 0:
+                            output_string += f" & {results.loc[0, m + '_mean'] * scaling_factor:.2f}$\pm${results.loc[0, m + '_std'] * scaling_factor:.2f}"
+                        else:
+                            output_string += f" & {results.loc[0, m + '_mean'] * scaling_factor:.2f}"
 
-                    pfile.write(output_string + "\\\ \n")
+                    pfile.write(output_string + "\\tabularnewline \n")
         pfile.close()
 
+    def __retrieve_optimum_values(self, arch, study):
+        study_filename = os.path.join(self.input_study_dirs[arch], study, 'Validation', 'optimal_dice_study.csv')
+        if not os.path.exists(study_filename):
+            raise ValueError('The validation task must be run prior to this.')
+        return reload_optimal_validation_parameters(study_filename=study_filename)
     def plot_all_metrics(self, subdir=''):
         dice_metrics = ['Dice', 'Dice-P', 'Dice-TP', 'Dice-N']
         dice_xticks = ['Global Dice', 'Dice - Positives (True pos + false neg)', 'Dice - True positives', 'Dice - Negatives (True neg + false pos)']
@@ -380,7 +649,7 @@ class CompareArchitecturesStudy:
                 # Get segmentations
                 segmentations = self.__load_evaluator_segmentations(pid, db_index, patient, ref_ni, annotation_folder,
                                                                     all_annotators)
-
+                segmentations['ground_truth_segmentation'] = [deepcopy(references['ground_truth_segmentation']), 0.5]
                 # If any of them does not exist - compute reference volume + res tumor
                 ref_volume, ref_residual_tumor = compute_volume_residual_tumor(ref_ni,
                                                                                threshold_segmentation(ref_ni, 0.5))
@@ -476,22 +745,23 @@ class CompareArchitecturesStudy:
         # Load all segmentations from models
         for i, arch in enumerate(self.arch_names):
             # for j, study in enumerate(self.studies_lists[i]):
-            j = 4
+            # j = 4
             for j, study in enumerate(self.studies_lists[i]):
                 # Find prediction file
-                prediction_dir = Path(self.input_study_dirs[i].parent, study, 'test_predictions', '0')
+                prediction_dir = Path(self.input_study_dirs[i], study, 'test_predictions', '0')
                 self.arch_names = ['nnU-Net', 'AGU-Net']
                 if arch == 'AGU-Net':
                     patient_folder = Path(prediction_dir, f'{db_index}_{pid}')
                     prediction_file = [f for f in patient_folder.iterdir() if f.is_file() and 'pred_tumor' in f.name][0]
                 else:
-                    nnunet_index = patient['nnU-Net_ID'].values[0]
-                    patient_folder = Path(prediction_dir, f'index0_{nnunet_index}')
-                    prediction_file = [f for f in patient_folder.iterdir() if f.is_file() and 'predictions' in f.name][0]
+                    # nnunet_index = patient['nnU-Net_ID'].values[0]
+                    # patient_folder = Path(prediction_dir, '0', f'{nnunet_index}')
+                    patient_folder = Path(prediction_dir, f'HGG_{pid}')
+                    prediction_file = [f for f in patient_folder.iterdir() if f.is_file() and 'pred_tumor' in f.name][0]
 
                 pred_ni = nib.load(prediction_file)
                 # Load optimal threshold and threshold predictions
-                optimal_dice_study = Path(self.input_study_dirs[i].parent, study, 'Validation',
+                optimal_dice_study = Path(self.input_study_dirs[i], study, 'Validation',
                                           'optimal_dice_study.csv')
                 optimal_overlap, optimal_threshold = reload_optimal_validation_parameters(study_filename=optimal_dice_study)
                 segmentations_thresholds[f"{arch}_{self.studies_description[j]}"] = [pred_ni, optimal_threshold]
@@ -572,18 +842,20 @@ class CompareArchitecturesStudy:
 
     def visualize_interrater_results(self, references=[], evaluators=[]):
         # Results to plot
-        evaluators = ['exp1', 'exp2', 'exp3', 'exp4', 'nov1', 'nov2', 'nov3', 'nov4',
-                      'AGU-Net_E', 'nnU-Net_E']
+        evaluators = ['nov1', 'nov2', 'nov3', 'nov4', 'exp1', 'exp2', 'exp3', 'exp4',
+                      'nnU-Net_B', 'AGU-Net_B']
         references = ['ground_truth_segmentation', 'strict-consensus-all-annotators']
 
         # Plot parameters
         palettes = [sns.color_palette("light:seagreen", n_colors=6),
                     sns.color_palette("light:b", n_colors=6),
-                    sns.color_palette("light:m", n_colors=7)]
+                    sns.color_palette("light:m", n_colors=7),
+                    sns.color_palette("light:#fdae6b", n_colors=6)]
 
         palette = {f'nov{i + 1}': palettes[0][i+1] for i in range(4)}
         palette.update({f'exp{i+1}': palettes[1][i+1] for i in range(4)})
-        palette.update({'AGU-Net_E': palettes[2][2], 'nnU-Net_E': palettes[2][3]})
+        palette.update({'AGU-Net_B': palettes[2][2], 'nnU-Net_B': palettes[2][3]})
+        palette.update({'ground_truth_segmentation': palettes[3][2],  'strict-consensus-all-annotators': palettes[3][2]})
         figsize = (18, 8)
         tick_fontsize = 16
         label_fontsize = tick_fontsize + 1
@@ -603,22 +875,29 @@ class CompareArchitecturesStudy:
         if len(evaluators) == 0:
             evaluators = np.unique(results['annotator/model'])
 
-        results = results[results['annotator/model'].isin(evaluators)]
+        # results = results[results['annotator/model'].isin(evaluators)]
 
         reference_names = {'strict-consensus-all-annotators': "Consensus agreement annotation",
                            'ground_truth_segmentation': "Ground truth annotation"}
-
+        ref_short = {'ground_truth_segmentation': 'Ground truth',
+                     'strict-consensus-all-annotators': 'Consensus'}
         if all_refs_one_fig:
             fig, axes = plt.subplots(1, 2, figsize=figsize)
             b_list = []
             for i, ref in enumerate(references):
-                ref_results = results.loc[results['reference'] == ref]
+                evaluators_w_ref = evaluators + [ev for ev in references if ev != ref]
+                eval_results = results.loc[results['annotator/model'].isin(evaluators_w_ref)]
+                sort_dict = {annot: i for i, annot in enumerate(evaluators_w_ref)}
+                eval_results = eval_results.sort_values(by=['annotator/model'], key=lambda x: x.map(sort_dict))
+                ref_results = eval_results.loc[eval_results['reference'] == ref]
                 ref_results_positive = ref_results.loc[ref_results['residual_tumor'] == 1]
 
                 b_list.append(sns.boxplot(ax=axes[i], data=ref_results_positive, x='annotator/model', y='Jaccard',
                                 palette=palette))
 
-                b_list[i].set_xticklabels(b_list[i].get_xticklabels(), rotation=45, fontsize=tick_fontsize)
+                xticks = evaluators_w_ref.copy()
+                xticks[-1] = ref_short[xticks[-1]]
+                b_list[i].set_xticklabels(xticks, rotation=45, fontsize=tick_fontsize)
                 b_list[i].set(ylim=(0, 1))
                 b_list[i].set_yticklabels(np.round(b_list[i].get_yticks(), 1), fontsize=tick_fontsize)
                 b_list[i].set_xlabel("Annotator / Model", fontsize=label_fontsize)
@@ -669,3 +948,128 @@ def compute_volume_residual_tumor(segmentation_ni, segmentation):
     volume_seg_ml = compute_tumor_volume(segmentation, voxel_size)
     res_tumor = 1 if volume_seg_ml > 0.175 else 0
     return volume_seg_ml, res_tumor
+
+def tukey_hsd (lst, ind, n, alpha=0.05):
+    data_arr = np.hstack(lst)
+    ind_arr = np.repeat(ind, n)
+    return pairwise_tukeyhsd(data_arr, ind_arr, alpha=alpha)
+
+def sample(data):
+    sample = [random.choice(data) for _ in np.arange(len(data))]
+    return sample
+
+def create_prediction_vector(results):
+    pred = np.zeros(results.shape[0])
+    pred[results.loc[(results['#Det'] > 0)].index] = 1
+
+    gt = np.zeros(results.shape[0])
+    gt[results.loc[(results['#GT'] > 0)].index] = 1
+    return pred, gt
+
+def test_statistic(pred1, pred2, gt):
+    # bacc1 = sklearn.metrics.balanced_accuracy_score(gt, pred1)
+    # bacc2 = sklearn.metrics.balanced_accuracy_score(gt, pred2)
+    bacc1 = balanced_accuracy(gt, pred1)
+    bacc2 = balanced_accuracy(gt, pred2)
+    return bacc1 - bacc2
+
+def balanced_accuracy(gt, pred):
+    tp = len(np.where(np.logical_and(gt==1, pred==1))[0])
+    fn = len(np.where(np.logical_and(gt==1, pred==0))[0])
+    fp = len(np.where(np.logical_and(gt==0, pred==1))[0])
+    tn = len(np.where(np.logical_and(gt==0, pred==0))[0])
+    sensitivity = tp / (tp + fn)
+    specificity = 1 if (tn + fp) == 0 else tn / (tn + fp)
+    return (sensitivity + specificity) / 2
+
+def bootstrap_t_test(pred1, pred2, gt, nboot = 1000, direction = "less"):
+    mu_pred1 = balanced_accuracy(gt, pred1)
+    mu_pred2 = balanced_accuracy(gt, pred2)
+    tobs = mu_pred2 - mu_pred1
+
+    print(mu_pred1, mu_pred2, tobs)
+
+    N = len(pred1)
+    #tboot = np.zeros(nboot)
+    tboot = []
+    for i in np.arange(nboot):
+        current_random_indices = np.random.choice(np.arange(N), N, replace=True)
+        curr_pred1 = pred1[current_random_indices]
+        curr_pred2 = pred2[current_random_indices]
+        curr_gt = gt[current_random_indices]
+
+        boot_mu_pred1 = balanced_accuracy(curr_gt, curr_pred1)
+        boot_mu_pred2 = balanced_accuracy(curr_gt, curr_pred2)
+        boot_tobs = boot_mu_pred2 - boot_mu_pred1
+
+        #print(boot_mu_pred1, boot_mu_pred2, boot_tobs, np.mean([boot_mu_pred1, boot_mu_pred2]))
+
+        tboot.append(boot_mu_pred2 - np.mean([boot_mu_pred1, boot_mu_pred2]))
+
+        #tboot.append(test_statistic(curr_pred1, curr_pred2, curr_gt) - )
+
+        #sboot = sample(Z)
+        #sboot = pd.DataFrame(np.array(sboot), columns=['treat', 'vals', 'gt'])
+        #tboot[i] = test_statistic(sboot['vals'][sboot['treat'] == 1], np.mean(sboot['vals'][sboot['treat'] == 0]),
+                                  #)
+        #tboot[i] = np.mean(sboot['vals'][sboot['treat'] == 1]) - np.mean(sboot['vals'][sboot['treat'] == 0]) - tstat
+
+    tboot = np.asarray(tboot)
+    print(tboot)
+    print(tobs)
+    if direction == "greater":
+        pvalue = np.sum(tboot >= tobs) / nboot
+    elif direction == "less":
+        pvalue = np.sum(tboot <= tobs) / nboot
+    elif direction == "both":
+        pvalue = np.sum(np.abs(tboot) >= tobs) / nboot
+    else:
+        print('Enter a valid arg for direction')
+    return pvalue
+    # print('The p-value is %f' % (pvalue))
+
+
+def BCa_interval_macro_metric(pred, gt, func, B=1000, q=0.975):
+    theta_hat = func(pred, gt)
+
+    N = len(pred)
+    order = np.array(range(N))
+    order_boot = np.random.choice(order, size=(B, N), replace=True)
+    pred_boot = pred[order_boot]
+    gt_boot = gt[order_boot]
+
+    # bootstrap
+    theta_hat_boot = []
+    for i in range(pred_boot.shape[0]):
+        theta_hat_boot.append(func(pred_boot[i], gt_boot[i]))
+    theta_hat_boot = np.asarray(theta_hat_boot)
+    #theta_hat_boot = np.array([func(pred_boot[i]) for i in range(X_boot.shape[0])])
+
+    # 1) find jackknife estimates
+    tmp = np.transpose(np.reshape(np.repeat(order, repeats=len(order)), (len(order), len(order))))  # make NxN matrix
+    tmp_mat = tmp[~np.eye(tmp.shape[0], dtype=bool)].reshape(tmp.shape[0], -1)
+    #X_tmp_mat = X[tmp_mat]
+    pred_tmp_mat = pred[tmp_mat]
+    gt_tmp_mat = gt[tmp_mat]
+
+    #jk_theta = np.array([func(X_tmp_mat[i]) for i in range(X_tmp_mat.shape[0])])
+    jk_theta = np.array([func(pred_tmp_mat[i], gt_tmp_mat[i]) for i in range(pred_tmp_mat.shape[0])])
+    phi_jk = np.mean(jk_theta) - jk_theta  # jackknife estimates
+
+    # 2) Find a
+    a = 1 / 6 * np.sum(phi_jk ** 3) / np.sum(phi_jk ** 2) ** (3 / 2)
+
+    # 3) Find b
+    b = norm.ppf(np.sum(theta_hat_boot < theta_hat) / B)  # inverse standard normal
+
+    # 4) Find gamma values -> limits
+    def gamma1_func(a, b, q):
+        return norm.cdf(b + (b + norm.ppf(1 - q)) / (1 - a * (b + norm.ppf(1 - q))))
+
+    def gamma2_func(a, b, q):
+        return norm.cdf(b + (b + norm.ppf(q)) / (1 - a * (b + norm.ppf(q))))
+
+    # 5) get confidence interval of BCa
+    CI_BCa = np.percentile(theta_hat_boot, [100 * gamma1_func(a, b, q), 100 * gamma2_func(a, b, q)])
+
+    return CI_BCa, theta_hat_boot, theta_hat

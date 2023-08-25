@@ -7,6 +7,7 @@ import traceback
 from Utils.resources import SharedResources
 from Utils.io_converters import reload_optimal_validation_parameters
 from Validation.validation_utilities import compute_fold_average
+from Validation.extra_metrics_computation import compute_extra_metrics
 from Plotting.metric_versus_binned_boxplot import compute_binned_metric_over_metric_boxplot_postop
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -29,6 +30,7 @@ class HGGPostopSegmentationStudy:
         self.output_folder.mkdir(exist_ok=True)
 
         self.metric_names = []
+        self.extra_metric_names = SharedResources.getInstance().validation_metric_names
         self.extra_patient_parameters = None
         if Path(SharedResources.getInstance().studies_extra_parameters_filename).exists():
             self.extra_patient_parameters = pd.read_csv(SharedResources.getInstance().studies_extra_parameters_filename)
@@ -57,17 +59,17 @@ class HGGPostopSegmentationStudy:
         self.__read_results()
 
         # self.export_data_validation_study()
-
-        self.__compute_and_plot_overall()
+        # self.__compute_and_plot_overall()
         if self.extra_patient_parameters is not None:
             # self.__compute_and_plot_metric_over_metric_categories(data=self.results, metric1='Dice', metric2='True postop volume', metric2_cutoffs=[1.])
             # volume_figure_fname = Path(self.input_folder, 'Validation', 'volume_cutoff.png')
             # self.__compute_and_plot_volume_cutoff_results(volume_cutoff_range=[0., 0.5], optimal_cutoff=0.175, save_fname=volume_figure_fname)
             results_cutoff = self.__compute_results_cutoff_volume(cutoff_volume=0.175)
-            results_cutoff = self.__compute_volume_error(results_cutoff)
+            results_cutoff = self.compute_volume_error(results_cutoff)
             results_cutoff.to_csv(Path(self.input_folder, 'Validation', 'all_dice_scores_volume_cutoff.csv'), index=False)
             compute_fold_average(self.input_folder, results_cutoff, best_threshold=self.optimal_threshold,
-                                 best_overlap=self.optimal_overlap, metrics=['Absolute volume error', 'True preop volume', 'True postop volume', 'Predicted postop volume'],
+                                 best_overlap=self.optimal_overlap, metrics=['HD95', 'Absolute volume error', 'True preop volume',
+                                                                             'True postop volume', 'Predicted postop volume'],
                                  suffix='volume_cutoff', output_folder=str(self.output_folder))
             # results_cutoff = self.__compute_EOR(results_cutoff, crop_to_zero=True)
             # self.__study_volume_and_EOR(results_cutoff)
@@ -86,6 +88,20 @@ class HGGPostopSegmentationStudy:
 
             if self.convert_ids:
                 results = self.__convert_patient_ids(results)
+
+            extra_metrics_filepath = Path(self.input_folder, 'Validation', 'extra_metrics_results_per_patient_thr' +
+                                          str(int(self.optimal_threshold * 100.)) + '.csv')
+
+            if extra_metrics_filepath.exists():
+                extra_metrics = pd.read_csv(extra_metrics_filepath)
+                extra_metrics['Threshold'] = self.optimal_threshold * np.ones(shape=len(extra_metrics))
+                extra_metrics = extra_metrics[["Patient", "Threshold"] + self.extra_metric_names]
+                for em in self.extra_metric_names:
+                    if em in results.columns:
+                        results.drop(em, axis=1, inplace=True)
+                cols = results.columns.tolist() + self.extra_metric_names
+                results = pd.merge(results, extra_metrics, on=["Patient", "Threshold"], how='left')
+                results = results[cols]
 
             dice_thresholds = [np.round(x, 1) for x in list(np.unique(results['Threshold'].values))]
             nb_thresholds = len(dice_thresholds)
@@ -131,7 +147,12 @@ class HGGPostopSegmentationStudy:
 
         # Update results
         results['Patient_old_IDs'] = deepcopy(results['Patient'])
-        results['Patient'] = results['Patient'].map(self.id_dict)
+        if 'HGG' in results['Patient'][0]:
+            results['Patient'] = results['Patient'].map(lambda x: x.split('_')[1])
+        else:
+            results['Patient'] = results['Patient'].map(self.id_dict)
+
+        results['Patient'] = results['Patient'].astype(int)
         results.dropna(axis='index', inplace=True)
         return results
 
@@ -326,7 +347,7 @@ class HGGPostopSegmentationStudy:
 
         return data
 
-    def __compute_volume_error(self, results):
+    def compute_volume_error(self, results):
         data = deepcopy(results)
         abs_volume_error = np.array(np.abs(results.loc[:, 'True postop volume'] - results.loc[:, 'Predicted postop volume']))
         data['Absolute volume error'] = abs_volume_error

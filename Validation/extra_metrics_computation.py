@@ -17,7 +17,8 @@ from Utils.resources import SharedResources
 
 
 def compute_extra_metrics(data_root, study_folder, nb_folds, split_way, optimal_threshold, metrics: list = [],
-                          gt_files_suffix='', prediction_files_suffix=''):
+                          gt_files_suffix='', prediction_files_suffix='', cv_filename='cross_validation_folds.txt',
+                          validation_folder_name='Validation', predictions_folder_name='predictions'):
     """
     Compute a bunch of metrics for the current validation study, assuming a binary case for now. All the computed
     results will be stored inside a specific extra_metrics_results_per_patient.csv and then merged with the main
@@ -31,14 +32,14 @@ def compute_extra_metrics(data_root, study_folder, nb_folds, split_way, optimal_
     :param metrics:
     :return:
     """
-    cross_validation_file = os.path.join(study_folder, 'cross_validation_folds.txt')
-    all_results_file = os.path.join(study_folder, 'Validation', 'all_dice_scores.csv')
+    cross_validation_file = os.path.join(study_folder, cv_filename)
+    all_results_file = os.path.join(study_folder, validation_folder_name, 'all_dice_scores.csv')
     all_results_df = pd.read_csv(all_results_file)
     all_results_df['Threshold'] = all_results_df['Threshold'].round(decimals=2)
 
     # Creating a specific output file for the given optimal probability threshold, even though the threshold should
     # not change over time.
-    output_filename = os.path.join(study_folder, 'Validation', 'extra_metrics_results_per_patient_thr' +
+    output_filename = os.path.join(study_folder, validation_folder_name, 'extra_metrics_results_per_patient_thr' +
                                    str(int(optimal_threshold * 100.)) + '.csv')
     if not os.path.exists(output_filename):
         os.makedirs(os.path.dirname(output_filename), exist_ok=True)
@@ -91,7 +92,7 @@ def compute_extra_metrics(data_root, study_folder, nb_folds, split_way, optimal_
                         if os.path.basename(ground_truth_base) in f and gt_files_suffix in f:
                             ground_truth_filename = os.path.join(os.path.dirname(ground_truth_base), f)
                     break
-                detection_filename = os.path.join(study_folder, 'predictions', str(fold), sub_folder_index + '_' + uid,
+                detection_filename = os.path.join(study_folder, predictions_folder_name, str(fold), sub_folder_index + '_' + uid,
                                                   os.path.basename(patient_image_filename).split('.')[0] + '-' +
                                                   prediction_files_suffix)
 

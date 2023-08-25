@@ -21,9 +21,9 @@ from Validation.extra_metrics_computation import compute_extra_metrics, compute_
 from Validation.kfold_model_validation import separate_dice_computation
 from Studies.hgg_postop_segmentation import threshold_volume_and_compute_classification_metrics, plot_classification_metrics_volume_cutoffs
 from pyCompare import blandAltman
+from Studies.hgg_postop_segmentation import HGGPostopSegmentationStudy
 
-
-class HGGPostopTestsetInference:
+class HGGPostopTestsetInference(HGGPostopSegmentationStudy):
     """
     Study for residual tumor segmentation from high-grade gliomas (the core tumor) in T1 MRIs.
     """
@@ -39,9 +39,12 @@ class HGGPostopTestsetInference:
             self.output_folder = os.path.join(self.input_folder, 'Test')
         os.makedirs(self.output_folder, exist_ok=True)
 
+        self.cross_validation_filename = "cross_validation_folds.txt" # 'VUmc_external_test_set_fivefolds.txt' # For AGU-Net
+
         self.fold_number = SharedResources.getInstance().test_nb_folds
         self.metric_names = ['Dice', 'Inst DICE', 'Inst Recall', 'Inst Precision', 'Largest foci Dice']
         self.metric_names.extend(SharedResources.getInstance().test_metric_names)
+        self.extra_metric_names = SharedResources.getInstance().test_metric_names
         self.detection_overlap_thresholds = SharedResources.getInstance().test_detection_overlap_thresholds
         print("Detection overlap: ", self.detection_overlap_thresholds)
         self.gt_files_suffix = SharedResources.getInstance().test_gt_files_suffix
@@ -72,21 +75,35 @@ class HGGPostopTestsetInference:
     def run(self):
         self.__generate_dice_scores()
         self.__retrieve_optimum_values()
+        # compute_extra_metrics(self.data_root, self.input_folder, nb_folds=self.fold_number, split_way='two-way',
+        #                       optimal_threshold=self.optimal_threshold, metrics=self.metric_names[5:],
+        #                       gt_files_suffix=self.gt_files_suffix,
+        #                       prediction_files_suffix=self.prediction_files_suffix,
+        #                       cv_filename=self.cross_validation_filename,
+        #                       validation_folder_name='Test', predictions_folder_name='test_predictions')
         self.__read_results()
-        self.__drop_exclude_ids()
-        self.__compute_and_plot_overall()
+        # self.__drop_exclude_ids()
+        # self.__compute_and_plot_overall()
 
         if self.extra_patient_parameters is not None:
             # self.__compute_and_plot_metric_over_metric_categories(data=self.results, metric1='Dice', metric2='True postop volume', metric2_cutoffs=[1.])
             # volume_figure_fname = Path(self.output_folder, 'volume_cutoff.png')
             # self.__compute_and_plot_volume_cutoff_results(volume_cutoff_range=[0., 0.5], optimal_cutoff=0.175, save_fname=volume_figure_fname)
             results_cutoff = self.__compute_results_cutoff_volume(cutoff_volume=0.175)
+            # results_cutoff.to_csv(Path(self.output_folder, 'all_dice_scores_volume_cutoff.csv'), index=False)
+            # compute_fold_average(self.input_folder, results_cutoff, best_threshold=self.optimal_threshold,
+            #                      best_overlap=self.optimal_overlap,
+            #                      suffix='volume_cutoff', output_folder=self.output_folder)
+
+            results_cutoff = self.compute_volume_error(results_cutoff)
             results_cutoff.to_csv(Path(self.output_folder, 'all_dice_scores_volume_cutoff.csv'), index=False)
             compute_fold_average(self.input_folder, results_cutoff, best_threshold=self.optimal_threshold,
                                  best_overlap=self.optimal_overlap,
-                                 suffix='volume_cutoff', output_folder=self.output_folder)
-            results_cutoff = self.__compute_EOR(results_cutoff, crop_to_zero=True)
-            self.__study_volume_and_EOR(results_cutoff)
+                                 metrics=['HD95', 'Absolute volume error', 'True preop volume', 'True postop volume',
+                                          'Predicted postop volume'],
+                                 suffix='volume_cutoff', output_folder=str(self.output_folder))
+            # results_cutoff = self.__compute_EOR(results_cutoff, crop_to_zero=True)
+            # self.__study_volume_and_EOR(results_cutoff)
 
     def __retrieve_optimum_values(self):
         study_filename = os.path.join(self.input_folder, 'Validation', 'optimal_dice_study.csv')
@@ -102,6 +119,20 @@ class HGGPostopTestsetInference:
 
             if self.convert_ids:
                 results = self.__convert_patient_ids(results)
+
+            extra_metrics_filepath = Path(self.input_folder, 'Test', 'extra_metrics_results_per_patient_thr' +
+                                          str(int(self.optimal_threshold * 100.)) + '.csv')
+
+            if extra_metrics_filepath.exists():
+                extra_metrics = pd.read_csv(extra_metrics_filepath)
+                extra_metrics['Threshold'] = self.optimal_threshold * np.ones(shape=len(extra_metrics))
+                extra_metrics = extra_metrics[["Patient", "Threshold"] + self.extra_metric_names]
+                for em in self.extra_metric_names:
+                    if em in results.columns:
+                        results.drop(em, axis=1, inplace=True)
+                cols = results.columns.tolist() + self.extra_metric_names
+                results = pd.merge(results, extra_metrics, on=["Patient", "Threshold"], how='left')
+                results = results[cols]
 
             dice_thresholds = [np.round(x, 1) for x in list(np.unique(results['Threshold'].values))]
             nb_thresholds = len(dice_thresholds)
@@ -127,24 +158,29 @@ class HGGPostopTestsetInference:
             print('{}'.format(traceback.format_exc()))
 
     def __convert_patient_ids(self, results):
-        id_mapping_file = SharedResources.getInstance().test_id_mapping
-        base_id_column = SharedResources.getInstance().test_base_id_column
-        new_id_column = SharedResources.getInstance().test_new_id_column
-
-        if not Path(id_mapping_file).exists():
-            print(f"Error converting patient IDs, ID mapping file {id_mapping_file} not found")
-            return results
-
-        id_mapping = pd.read_csv(id_mapping_file)
-        if base_id_column not in id_mapping.columns or new_id_column not in id_mapping.columns:
-            print(f"Error converting patient IDs, base id or new id columns {base_id_column}, {new_id_column} missing from id mapping")
-
-        # Create ID dict
-        self.id_dict = {id_row[base_id_column]: id_row[new_id_column] for row_name, id_row in id_mapping.iterrows()}
-
         # Update results
         results['Patient_old_IDs'] = deepcopy(results['Patient'])
-        results['Patient'] = results['Patient'].map(self.id_dict)
+        if 'HGG' in results['Patient'][0]:
+            results['Patient'] = results['Patient'].map(lambda x: x.split('_')[1])
+        else:
+            id_mapping_file = SharedResources.getInstance().test_id_mapping
+            base_id_column = SharedResources.getInstance().test_base_id_column
+            new_id_column = SharedResources.getInstance().test_new_id_column
+
+            if not Path(id_mapping_file).exists():
+                print(f"Error converting patient IDs, ID mapping file {id_mapping_file} not found")
+                return results
+
+            id_mapping = pd.read_csv(id_mapping_file)
+            if base_id_column not in id_mapping.columns or new_id_column not in id_mapping.columns:
+                print(
+                    f"Error converting patient IDs, base id or new id columns {base_id_column}, {new_id_column} missing from id mapping")
+
+            # Create ID dict
+            self.id_dict = {id_row[base_id_column]: id_row[new_id_column] for row_name, id_row in id_mapping.iterrows()}
+
+            results['Patient'] = results['Patient'].map(self.id_dict)
+        results['Patient'] = results['Patient'].astype(int)
         results.dropna(axis='index', inplace=True)
         return results
 
@@ -324,7 +360,8 @@ class HGGPostopTestsetInference:
         @TODO. Include an override flag to recompute anyway.
         :return:
         """
-        cross_validation_description_file = os.path.join(self.input_folder, 'VUmc_external_test_set_fivefolds.txt')
+        cross_validation_description_file = os.path.join(self.input_folder, self.cross_validation_filename)
+
         self.results_df = []
         self.dice_output_filename = os.path.join(self.output_folder, 'all_dice_scores.csv')
         if not os.path.exists(self.dice_output_filename):
@@ -340,7 +377,11 @@ class HGGPostopTestsetInference:
         results_per_folds = []
 
         print('\nProcessing test set (fold 0), generating dice scores.\n')
-        test_set, _ = get_fold_from_file(filename=cross_validation_description_file, fold_number=0)
+        #
+        if self.cross_validation_filename == 'cross_validation_folds.txt':
+            _, test_set = get_fold_from_file(filename=cross_validation_description_file, fold_number=0)
+        else:
+            test_set, _ = get_fold_from_file(filename=cross_validation_description_file, fold_number=0)
 
         results = self.__generate_dice_scores_for_fold(data_list=test_set, fold_number=0)
         results_per_folds.append(results)
@@ -352,9 +393,14 @@ class HGGPostopTestsetInference:
             try:
                 # @TODO. Hard-coded, have to decide on naming convention....
                 # start = time.time()
-                uid = patient.split('_')[1]
-                sub_folder_index = patient.split('_')[0]
-                patient_extended = '_'.join(patient.split('_')[1:]).strip().replace('_sample', '')
+                if 'HGG' in patient:
+                    uid = patient
+                    sub_folder_index = None
+                    patient_extended = '_'.join(patient.split('_')[0:]).strip().replace('_sample', '')
+                else:
+                    uid = patient.split('_')[1]
+                    sub_folder_index = patient.split('_')[0]
+                    patient_extended = '_'.join(patient.split('_')[1:]).strip().replace('_sample', '')
 
                 # Checking if values have already been computed for the current patient to skip it if so.
                 # In case values were not properly computed for the core part (i.e. first 10 columns without

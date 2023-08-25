@@ -290,6 +290,7 @@ def compute_fold_average(folder, data=None, best_threshold=0.5, best_overlap=0.0
     else:
         results = deepcopy(data)
 
+    results.replace(np.inf, np.nan, inplace=True)
     results.replace('inf', np.nan, inplace=True)
     results.replace('', np.nan, inplace=True)
     results.replace(' ', np.nan, inplace=True)
