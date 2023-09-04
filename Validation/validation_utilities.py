@@ -323,7 +323,7 @@ def compute_fold_average(folder, data=None, best_threshold=0.5, best_overlap=0.0
             metrics_per_fold.append(fold_average)
             continue
 
-        nb_missed_tumors = len(fold_results.loc[thresh_index & (fold_results['Dice'] < best_overlap)])
+        nb_missed_tumors = len(fold_results.loc[thresh_index & (fold_results['#GT'] > 0) & (fold_results['Dice'] < best_overlap)])
         nb_tumors = len(fold_results.loc[thresh_index & (fold_results['#GT'] > 0)])
         patient_wise_recall = 1 - (nb_missed_tumors / nb_tumors) #1 - (nb_missed_tumors/len(all_for_thresh))
         patient_wise_precision = fold_results.loc[thresh_index & (fold_results['#Det'] > 0)]['Inst Precision'].mean() # all_for_thresh.loc[all_for_thresh['#Det'] > 0]['Inst Precision'].mean()

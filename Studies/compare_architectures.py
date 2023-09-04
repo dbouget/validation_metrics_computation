@@ -103,9 +103,9 @@ class CompareArchitecturesStudy:
         self.write_cutoff_results_latex(metrics=['Dice-P', 'Dice-TP', 'Object-wise recall',
                                                  'Object-wise precision', 'Object-wise F1'],
                                         suffix='seg_scores_DiceP_Dice_TP_obj-wise_Rec_Prec_F1', subdirs=self.subdirs)
-        self.write_cutoff_results_latex(metrics=['Dice-P', 'Dice-TP', 'Patient-wise recall postop',
-                                                 'Patient-wise precision postop', 'HD95', 'Absolute volume error'],
-                                        suffix='seg_scores_diceP-diceTP-Rec-Prec-HD95-VolErr', subdirs=self.subdirs)
+        self.write_cutoff_results_latex(metrics=['Dice-P', 'Dice-TP', 'Patient-wise recall',
+                                                 'Patient-wise precision postop', 'HD95', 'Absolute volume error_median'],
+                                        suffix='seg_scores_diceP-diceTP-Rec-Prec-HD95-AVEmedian', subdirs=self.subdirs)
 
     def _create_tables_classification(self):
         self.write_cutoff_results_latex(
@@ -262,6 +262,7 @@ class CompareArchitecturesStudy:
         metric = "Jaccard"
         latex_table_rows = []
         for ref in references:
+            latex_table_rows = []
             ref_results = results.loc[results['reference'] == ref]
             for model in models:
                 model_res = ref_results.loc[ref_results['annotator/model'] == model]
@@ -272,7 +273,7 @@ class CompareArchitecturesStudy:
                     test_result = mannwhitneyu(model_res[metric].values, annot_res[metric].values)
                     # print(np.all(np.array_equal(model_res['pid'].values, annot_res['pid'].values)))
                     print(f"\t Compared against annotator {annotator}: ", test_result)
-                    latex_table_rows.append(f"{ref_short[ref]} & {model_tabname} & {annotator} & " +
+                    latex_table_rows.append(f"{model_tabname} & {annotator} & " +
                                             f"${np.mean(model_res[metric].values):.3f} \\pm {np.std(model_res[metric].values):.3f}$ & " +
                                             f"${np.mean(annot_res[metric].values):.3f} \\pm {np.std(annot_res[metric].values):.3f}$ & " +
                                             f"{test_result.statistic:.1f} & {test_result.pvalue:.3f} \\\ ")
@@ -281,20 +282,24 @@ class CompareArchitecturesStudy:
                     group_results = ref_results.loc[ref_results['annotator/model'].isin(group)]
                     results_grouped_mean = group_results.groupby('pid').mean()[metric]
                     test_result = mannwhitneyu(model_res[metric].values, results_grouped_mean.values)
-                    latex_table_rows.append(f"{ref_short[ref]} & {model_tabname} & {group_name} & " +
+                    latex_table_rows.append(f"{model_tabname} & {group_name} & " +
                                             f"${np.mean(model_res[metric].values):.3f} \\pm {np.std(model_res[metric].values):.3f}$ & " +
                                             f"${np.mean(results_grouped_mean.values):.3f} \\pm {np.std(results_grouped_mean.values):.3f}$ & " +
                                             f"{test_result.statistic:.1f} & {test_result.pvalue:.3f} \\\ ")
-        self._create_latex_table_interrater_tests(latex_table_rows, 'latex_table_interrater_tests.txt')
+                latex_table_rows.append('\\hline')
+            self._create_latex_table_interrater_tests(latex_table_rows, f'interrater_tests_ref_{ref_short[ref]}.txt')
         print("OK")
     def _create_latex_table_interrater_tests(self, latex_table_rows, output_fname):
         latex_table_filepath = Path(self.output_dir, output_fname)
         with open(latex_table_filepath, "w+") as pfile:
             pfile.write("\\begin{tabular}{cccccc}\n")
-            pfile.write("\tRef & Model / config & Annotator & Arch mean +- std & Annotator mean +- std  & Statistic & p-value \\\ \n")
-            pfile.write("\t\\hline\n")
+            pfile.write("\\toprule\n")
+            pfile.write("\t\\textbf{Model - config} & \\textbf{Annotator} & \\textbf{Model Mean $\pm$ Std} " + \
+                        "& \\textbf{Annotator Mean $\pm$ Std}  \\textbf{Statistic} & \\textbf{p-value} \\\ \n")
+            pfile.write("\t\\midrule\n")
             for row in latex_table_rows:
                 pfile.write("\t" + row +"\n")
+            pfile.write("\\bottomrule\n")
             pfile.write("\\end{tabular}")
         return None
 
@@ -445,12 +450,15 @@ class CompareArchitecturesStudy:
                     results = pd.read_csv(fname)
 
                     for m in metrics:
-                        if m in ['HD95', 'Absolute volume error']:
+                        if m in ['HD95', 'Absolute volume error', 'Absolute volume error_median']:
                             scaling_factor = 1
                         else:
                             scaling_factor = 100
-                        if results.loc[0, m + '_std'] > 0:
+
+                        if (m + '_std' in results.columns) and (results.loc[0, m + '_std'] > 0):
                             output_string += f" & {results.loc[0, m + '_mean'] * scaling_factor:.2f}$\pm${results.loc[0, m + '_std'] * scaling_factor:.2f}"
+                        elif m == 'Absolute volume error_median':
+                            output_string += f" & {results.loc[0, m] * scaling_factor:.2f}"
                         else:
                             output_string += f" & {results.loc[0, m + '_mean'] * scaling_factor:.2f}"
 
@@ -843,7 +851,7 @@ class CompareArchitecturesStudy:
     def visualize_interrater_results(self, references=[], evaluators=[]):
         # Results to plot
         evaluators = ['nov1', 'nov2', 'nov3', 'nov4', 'exp1', 'exp2', 'exp3', 'exp4',
-                      'nnU-Net_B', 'AGU-Net_B']
+                      'nnU-Net_D', 'AGU-Net_E']
         references = ['ground_truth_segmentation', 'strict-consensus-all-annotators']
 
         # Plot parameters
@@ -854,7 +862,7 @@ class CompareArchitecturesStudy:
 
         palette = {f'nov{i + 1}': palettes[0][i+1] for i in range(4)}
         palette.update({f'exp{i+1}': palettes[1][i+1] for i in range(4)})
-        palette.update({'AGU-Net_B': palettes[2][2], 'nnU-Net_B': palettes[2][3]})
+        palette.update({evaluators[-1]: palettes[2][2], evaluators[-2]: palettes[2][3]})
         palette.update({'ground_truth_segmentation': palettes[3][2],  'strict-consensus-all-annotators': palettes[3][2]})
         figsize = (18, 8)
         tick_fontsize = 16
