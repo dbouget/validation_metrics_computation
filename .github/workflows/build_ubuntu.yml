@@ -19,10 +19,10 @@ jobs:
             CMD_BUILD: python setup.py bdist_wheel --plat-name manylinux1_x86_64
     steps:
       - uses: actions/checkout@v3
-      - name: Set up Python 3.7
+      - name: Set up Python 3.8
         uses: actions/setup-python@v4
         with:
-          python-version: "3.7"
+          python-version: "3.8"
 
       - name: Collect submodules
         uses: actions/checkout@v3
@@ -49,7 +49,7 @@ jobs:
     strategy:
       matrix:
         os: [ ubuntu-20.04, ubuntu-22.04 ]
-        python-version: [ "3.7", "3.8", "3.9", "3.10", "3.11" ]
+        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12"]
     runs-on: ${{ matrix.os }}
 
     steps:
