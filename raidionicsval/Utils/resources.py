@@ -49,13 +49,14 @@ class SharedResources:
 
         self.validation_input_folder = ''
         self.validation_output_folder = ''
+        self.validation_gt_files_suffix = []
+        self.validation_prediction_files_suffix = []
+        self.validation_use_index_naming_convention = True
         self.validation_nb_folds = 5
         self.validation_split_way = 'two-way'
         self.validation_metric_spaces = []
         self.validation_metric_names = []
         self.validation_detection_overlap_thresholds = []
-        self.validation_gt_files_suffix = []
-        self.validation_prediction_files_suffix = []
         self.validation_tiny_objects_removal_threshold = 50
         self.validation_class_names = []
         self.validation_true_positive_volume_thresholds = []
@@ -162,6 +163,20 @@ class SharedResources:
             if self.config['Validation']['output_folder'].split('#')[0].strip() != '':
                 self.validation_output_folder = self.config['Validation']['output_folder'].split('#')[0].strip()
 
+        if self.config.has_option('Validation', 'gt_files_suffix'):
+            if self.config['Validation']['gt_files_suffix'].split('#')[0].strip() != '':
+                self.validation_gt_files_suffix = [x.strip() for x in self.config['Validation']['gt_files_suffix'].split('#')[0].strip().split(',')]
+
+        if self.config.has_option('Validation', 'prediction_files_suffix'):
+            if self.config['Validation']['prediction_files_suffix'].split('#')[0].strip() != '':
+                self.validation_prediction_files_suffix = [x.strip() for x in self.config['Validation']['prediction_files_suffix'].split('#')[0].strip().split(',')]
+
+        if self.config.has_option('Validation', 'use_index_naming_convention'):
+            if self.config['Validation']['use_index_naming_convention'].split('#')[0].strip() != '':
+                self.validation_use_index_naming_convention = True \
+                    if self.config['Validation']['use_index_naming_convention'].split('#')[0].strip().lower() == 'true'\
+                    else False
+
         if self.config.has_option('Validation', 'nb_folds'):
             if self.config['Validation']['nb_folds'].split('#')[0].strip() != '':
                 self.validation_nb_folds = int(self.config['Validation']['nb_folds'].split('#')[0].strip())
@@ -183,14 +198,6 @@ class SharedResources:
                 self.validation_detection_overlap_thresholds = [float(x) for x in self.config['Validation']['detection_overlap_thresholds'].split('#')[0].strip().split(',')]
         if len(self.validation_detection_overlap_thresholds) == 0:
             self.validation_detection_overlap_thresholds = [0.]
-
-        if self.config.has_option('Validation', 'gt_files_suffix'):
-            if self.config['Validation']['gt_files_suffix'].split('#')[0].strip() != '':
-                self.validation_gt_files_suffix = [x.strip() for x in self.config['Validation']['gt_files_suffix'].split('#')[0].strip().split(',')]
-
-        if self.config.has_option('Validation', 'prediction_files_suffix'):
-            if self.config['Validation']['prediction_files_suffix'].split('#')[0].strip() != '':
-                self.validation_prediction_files_suffix = [x.strip() for x in self.config['Validation']['prediction_files_suffix'].split('#')[0].strip().split(',')]
 
         if self.config.has_option('Validation', 'class_names'):
             if self.config['Validation']['class_names'].split('#')[0].strip() != '':

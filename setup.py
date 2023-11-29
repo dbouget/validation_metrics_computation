@@ -14,6 +14,7 @@ setup(
         include=[
             'raidionicsval',
             'raidionicsval.Computation',
+            'raidionicsval.Validation',
             'raidionicsval.Plotting',
             'raidionicsval.Studies',
             'raidionicsval.Utils',
