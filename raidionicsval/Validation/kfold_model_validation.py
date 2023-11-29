@@ -118,7 +118,6 @@ class ModelValidation:
         for i, patient in enumerate(tqdm(data_list)):
             uid = None
             try:
-                start = time.time()
                 # Option1. Working for files using the original naming conventions.
                 if SharedResources.getInstance().validation_use_index_naming_convention:
                     pid = patient.split('_')[1]
@@ -169,10 +168,10 @@ class ModelValidation:
 
             # Annoying, but independent of extension
             # @TODO. must load images with SimpleITK to be completely generic.
-            detection_image_base = os.path.join(self.input_folder, 'predictions', str(fold_number),
-                                                folder_index + '_' + uid)
-            if folder_index is None:
-                detection_image_base = os.path.join(self.input_folder, 'predictions', str(fold_number), uid)
+            detection_image_base = os.path.join(self.input_folder, 'predictions', str(fold_number), uid)
+            if folder_index is not None:
+               detection_image_base = os.path.join(self.input_folder, 'predictions', str(fold_number),
+                                                   folder_index + '_' + uid)
 
             detection_filename = None
             for _, _, files in os.walk(detection_image_base):
@@ -185,11 +184,11 @@ class ModelValidation:
                 return False
 
             # @TODO. Second piece added to make it work when names are wrong in the cross validation file.
-            patient_extended = os.path.basename(detection_filename).split(pred_suffix)[0][:-1]
-            patient_image_base = os.path.join(self.data_root, folder_index, uid, 'volumes', patient_extended)
-            if folder_index is None:
-                patient_extended = uid
-                patient_image_base = os.path.join(self.data_root, uid, patient_extended)
+            patient_extended = uid
+            patient_image_base = os.path.join(self.data_root, uid, patient_extended)
+            if folder_index is not None:
+                patient_extended = os.path.basename(detection_filename).split(pred_suffix)[0][:-1]
+                patient_image_base = os.path.join(self.data_root, folder_index, uid, 'volumes', patient_extended)
 
             patient_image_filename = None
             for _, _, files in os.walk(os.path.dirname(patient_image_base)):
@@ -198,9 +197,10 @@ class ModelValidation:
                         patient_image_filename = os.path.join(os.path.dirname(patient_image_base), f)
                 break
 
-            ground_truth_base = os.path.join(self.data_root, folder_index, uid, 'segmentations', patient_extended)
-            if folder_index is None:
-                ground_truth_base = os.path.join(self.data_root, uid, patient_extended)
+            ground_truth_base = os.path.join(self.data_root, uid, patient_extended)
+            if folder_index is not None:
+                ground_truth_base = os.path.join(self.data_root, folder_index, uid, 'segmentations', patient_extended)
+
             ground_truth_filename = None
             for _, _, files in os.walk(os.path.dirname(ground_truth_base)):
                 for f in files:

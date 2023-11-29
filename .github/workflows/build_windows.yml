@@ -49,7 +49,7 @@ jobs:
     strategy:
       matrix:
         os: [ windows-2019, windows-2022 ]
-        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12"]
+        python-version: ["3.8", "3.9", "3.10", "3.11"]
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -73,5 +73,5 @@ jobs:
       - name: Clone repo
         uses: actions/checkout@v1
 
-#      - name: Segmentation pipeline unit test
-#        run: cd ${{github.workspace}}/tests && python segmentation_pipeline_test.py
+      - name: k-fold cross-validation unit test
+        run: cd ${{github.workspace}}/tests && python validation_pipeline_test.py

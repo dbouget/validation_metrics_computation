@@ -72,5 +72,5 @@ jobs:
       - name: Clone repo
         uses: actions/checkout@v1
 
-#      - name: Segmentation pipeline unit test
-#        run: cd ${{github.workspace}}/tests && python3 segmentation_pipeline_test.py
+      - name: k-fold cross-validation unit test
+        run: cd ${{github.workspace}}/tests && python validation_pipeline_test.py
