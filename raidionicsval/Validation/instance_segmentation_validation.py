@@ -1,7 +1,5 @@
 from __future__ import division
-
 import traceback
-
 import numpy as np
 import os
 import h5py
@@ -198,7 +196,7 @@ class InstanceSegmentationValidation:
         average_dice = 0.0
         largest_component_dice = 0.0
         recall = 0.0
-        precision = 0.0
+        precision = 1.0
         f1_score = 0.0
         try:
             if len(self.matching_results) != 0:
@@ -211,6 +209,8 @@ class InstanceSegmentationValidation:
                 matching_larger_component = [x[0] for x in self.matching_results].index(index_larger_component + 1) if (index_larger_component + 1) in [x[0] for x in self.matching_results] else -1
                 if matching_larger_component != -1:
                     largest_component_dice = self.matching_results[matching_larger_component][2]
+                if len(self.gt_candidates) == 0 and len(self.detection_candidates) > 0:
+                    precision = 0
         except Exception as e:
             print(traceback.format_exc())
         self.instance_detection_results = [average_dice, recall, precision, f1_score, largest_component_dice]

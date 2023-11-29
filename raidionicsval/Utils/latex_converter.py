@@ -3,8 +3,7 @@ import numpy as np
 
 
 def export_df_to_latex(folder, data, suffix=''):
-    matrix_filename = os.path.join(folder, 'Validation', 'df_latex.txt') if suffix == '' else os.path.join(folder, 'Validation',
-                                                                                                       'df_' + suffix + '_latex.txt')
+    matrix_filename = os.path.join(folder, 'df_latex.txt') if suffix == '' else os.path.join(folder, 'df_' + suffix + '_latex.txt')
     columns = data.columns.values
     pfile = open(matrix_filename, 'w')
     pfile.write('\\begin{table}[h]\n')
@@ -29,8 +28,8 @@ def export_df_to_latex(folder, data, suffix=''):
 
 
 def export_df_to_latex_paper(folder, data, suffix=''):
-    matrix_filename = os.path.join(folder, 'Validation', 'df_latex_paper.txt') if suffix == '' else \
-        os.path.join(folder, 'Validation', 'df_' + suffix + '_latex_paper.txt')
+    matrix_filename = os.path.join(folder, 'df_latex_paper.txt') if suffix == '' else \
+        os.path.join(folder, 'df_' + suffix + '_latex_paper.txt')
     columns = ['Fold', '\# Samples', 'Dice', 'Dice-TP', 'F1-score', 'Recall', 'Precision', 'F1-score', 'Recall', 'Precision']
     df_columns = ['Patient-wise F1', 'Patient-wise recall', 'Patient-wise precision', 'Object-wise F1', 'Object-wise recall', 'Object-wise precision'] #'Fold', '# Samples', 'Dice', 'Dice-TP',
     pfile = open(matrix_filename, 'w')
@@ -58,7 +57,7 @@ def export_df_to_latex_paper(folder, data, suffix=''):
 
 
 def export_mean_std_df_to_latex(folder, data, suffix=''):
-    matrix_filename = os.path.join(folder, 'Validation', 'mean_std_df_latex.txt') if suffix == '' else os.path.join(folder, 'Validation',
+    matrix_filename = os.path.join(folder, 'mean_std_df_latex.txt') if suffix == '' else os.path.join(folder,
                                                                                                        'mean_std_df_' + suffix + '_latex.txt')
     columns = data.columns.values[1:]
     pfile = open(matrix_filename, 'w')
@@ -85,7 +84,7 @@ def export_mean_std_df_to_latex(folder, data, suffix=''):
 
 
 def export_mean_std_df_to_latex_paper(folder, data, suffix=''):
-    matrix_filename = os.path.join(folder, 'Validation', 'mean_std_df_latex_paper.txt') if suffix == '' else os.path.join(folder, 'Validation',
+    matrix_filename = os.path.join(folder, 'mean_std_df_latex_paper.txt') if suffix == '' else os.path.join(folder,
                                                                                                        'mean_std_df_' + suffix + '_latex_paper.txt')
     columns = ['Dice', 'Dice-TP', 'F1-score', 'Recall', 'Precision', 'F1-score', 'Recall', 'Precision']
     df_columns = ['Patient-wise F1', 'Patient-wise recall', 'Patient-wise precision', 'Object-wise F1', 'Object-wise recall', 'Object-wise precision'] #'Fold', '# Samples', 'Dice', 'Dice-TP',
