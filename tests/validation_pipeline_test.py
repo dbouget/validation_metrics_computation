@@ -70,7 +70,7 @@ def validation_pipeline_test():
         val_config.set('Validation', 'tiny_objects_removal_threshold', '25')
         val_config.set('Validation', 'true_positive_volume_thresholds', '0.1')
         val_config.set('Validation', 'use_brats_data', 'false')
-        config_filename = os.path.join(output_dir, 'config.ini')
+        config_filename = os.path.join(test_dir, 'config.ini')
         with open(config_filename, 'w') as outfile:
             val_config.write(outfile)
 
