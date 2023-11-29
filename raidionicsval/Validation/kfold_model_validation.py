@@ -1,28 +1,19 @@
-import os
-import subprocess, shutil
 import multiprocessing
 import itertools
-import traceback
 
-import numpy as np
-import csv
 import time
-import nibabel as nib
-from nibabel import four_to_three
-from copy import deepcopy
 import pandas as pd
 from math import ceil
 
-from setuptools.command.setopt import option_base
 from tqdm import tqdm
 
-from Computation.dice_computation import separate_dice_computation
-from Validation.instance_segmentation_validation import *
-from Utils.resources import SharedResources
-from Utils.PatientMetricsStructure import PatientMetrics
-from Utils.io_converters import get_fold_from_file
-from Validation.validation_utilities import best_segmentation_probability_threshold_analysis, compute_fold_average
-from Validation.extra_metrics_computation import compute_patient_extra_metrics
+from ..Computation.dice_computation import separate_dice_computation
+from ..Validation.instance_segmentation_validation import *
+from ..Utils.resources import SharedResources
+from ..Utils.PatientMetricsStructure import PatientMetrics
+from ..Utils.io_converters import get_fold_from_file
+from ..Validation.validation_utilities import best_segmentation_probability_threshold_analysis, compute_fold_average
+from ..Validation.extra_metrics_computation import compute_patient_extra_metrics
 
 
 class ModelValidation:

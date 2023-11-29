@@ -8,13 +8,9 @@ import pandas as pd
 import nibabel as nib
 import numpy as np
 from typing import List
-from tqdm import tqdm
-from medpy.metric.binary import hd95, volume_correlation, assd, ravd, obj_assd
-from sklearn.metrics import mutual_info_score, jaccard_score, normalized_mutual_info_score, adjusted_rand_score,\
-    roc_auc_score, matthews_corrcoef, cohen_kappa_score
-from sklearn.metrics.cluster import rand_score
-from Utils.io_converters import get_fold_from_file
-from Utils.resources import SharedResources
+# from medpy.metric.binary import hd95, volume_correlation, assd, ravd, obj_assd
+from sklearn.metrics import jaccard_score, normalized_mutual_info_score, roc_auc_score, cohen_kappa_score
+from ..Utils.resources import SharedResources
 
 
 def compute_patient_extra_metrics(patient_object, class_index, optimal_threshold, metrics: List[str] = []):
@@ -37,6 +33,17 @@ def compute_patient_extra_metrics(patient_object, class_index, optimal_threshold
         detection[detection < optimal_threshold] = 0
         detection[detection >= optimal_threshold] = 1
         detection = detection.astype('uint8')
+
+        # # Cleaning the too small objects that might be noise in the detection
+        # if np.count_nonzero(detection) > 0:
+        #     detection_labels = measurements.label(detection)[0]
+        #     # print('Found {} objects.'.format(np.max(self.detection_labels)))
+        #     refined_image = deepcopy(detection)
+        #     for c in range(1, np.max(detection_labels) + 1):
+        #         if np.count_nonzero(detection_labels == c) < SharedResources.getInstance().validation_tiny_objects_removal_threshold:
+        #             refined_image[refined_image == c] = 0
+        #     refined_image[refined_image != 0] = 1
+        #     detection = refined_image
 
         tp_array = np.zeros(detection.shape)
         fp_array = np.zeros(detection.shape)
@@ -219,23 +226,23 @@ def compute_specific_metric_value(metric, gt, detection, tp, tn, fp, fn, gt_ni_h
     elif metric == 'HD95':
         metric_value = math.inf
         if np.max(gt) == 1 and np.max(detection) == 1:  # Computation does not work if no binary object in the array
-            metric_value = hd95(detection, gt, voxelspacing=det_ni_header.get_zooms(), connectivity=1)
+            metric_value = -999 #hd95(detection, gt, voxelspacing=det_ni_header.get_zooms(), connectivity=1)
     elif metric == 'ASSD':
         metric_value = math.inf
         if np.max(gt) == 1 and np.max(detection) == 1:  # Computation does not work if no binary object in the array
-            metric_value = assd(detection, gt, voxelspacing=det_ni_header.get_zooms(), connectivity=1)
+            metric_value = -999 #assd(detection, gt, voxelspacing=det_ni_header.get_zooms(), connectivity=1)
     elif metric == 'OASSD':
         metric_value = math.inf
         if np.max(gt) == 1 and np.max(detection) == 1:  # Computation does not work if no binary object in the array
-            metric_value = obj_assd(detection, gt, voxelspacing=det_ni_header.get_zooms(), connectivity=1)
+            metric_value = -999 #obj_assd(detection, gt, voxelspacing=det_ni_header.get_zooms(), connectivity=1)
     elif metric == 'RAVD':
         metric_value = math.inf
         if np.max(gt) == 1 and np.max(detection) == 1:  # Computation does not work if no binary object in the array
-            metric_value = ravd(detection, gt)
+            metric_value = -999 #ravd(detection, gt)
     elif metric == 'VC':
         metric_value = math.inf
         if np.max(gt) == 1 and np.max(detection) == 1:  # Computation does not work if no binary object in the array
-            metric_value, pval = volume_correlation(detection, gt)
+            metric_value, pval = -999 #volume_correlation(detection, gt)
     elif metric == 'MahaD':
         metric_value = math.inf
         gt_n = np.count_nonzero(detection)

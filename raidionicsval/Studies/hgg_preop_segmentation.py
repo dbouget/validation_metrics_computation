@@ -4,11 +4,10 @@ import pandas as pd
 import numpy as np
 from copy import deepcopy
 import traceback
-from Utils.resources import SharedResources
-from Utils.io_converters import reload_optimal_validation_parameters
-from Validation.validation_utilities import compute_fold_average
-from Plotting.metric_versus_binned_boxplot import compute_binned_metric_over_metric_boxplot
-from Validation.extra_metrics_computation import compute_overall_metrics_correlation
+from raidionicsval.Utils import SharedResources
+from raidionicsval.Utils import reload_optimal_validation_parameters
+from raidionicsval.Validation import compute_fold_average
+from raidionicsval.Plotting import compute_binned_metric_over_metric_boxplot
 
 
 class HGGPreopSegmentationStudy:
@@ -77,7 +76,7 @@ class HGGPreopSegmentationStudy:
 
     def __compute_dice_confidence_intervals(self, data=None, suffix=''):
         if sys.version_info[0] >= 3 and sys.version_info[1] >= 7:
-            from Plotting.confidence_intervals_plot import compute_dice_confidence_intervals
+            from raidionicsval.Plotting.confidence_intervals_plot import compute_dice_confidence_intervals
             try:
                 if data is None:
                     results_filename = os.path.join(self.input_folder, 'Validation', 'all_dice_scores.csv')

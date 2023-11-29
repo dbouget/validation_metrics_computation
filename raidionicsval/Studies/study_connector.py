@@ -1,5 +1,5 @@
-from Utils.resources import SharedResources
-from Studies.SegmentationStudy import *
+from ..Utils.resources import SharedResources
+from ..Studies.SegmentationStudy import SegmentationStudy
 
 
 class StudyConnector:

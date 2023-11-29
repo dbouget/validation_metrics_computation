@@ -1,21 +1,10 @@
 import os
-import configparser
-import datetime
-import dateutil
-import shutil
-import traceback
-from os.path import expanduser
-import nibabel as nib
-import SimpleITK as sitk
-from copy import deepcopy
 
 import numpy as np
-import json
-import logging
-from typing import Union, Any, Tuple, List
+from typing import List
 import pandas as pd
 
-from Utils.resources import SharedResources
+from ..Utils.resources import SharedResources
 
 
 class PatientMetrics:

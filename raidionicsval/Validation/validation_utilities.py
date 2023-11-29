@@ -5,8 +5,7 @@ import numpy as np
 import math
 from copy import deepcopy
 import matplotlib.pyplot as plt
-from Utils.latex_converter import *
-from Utils.resources import SharedResources
+from ..Utils.resources import SharedResources
 
 
 def best_segmentation_probability_threshold_analysis(folder, detection_overlap_thresholds=None):

@@ -7,11 +7,10 @@ from abc import ABC, abstractmethod
 from typing import List
 import traceback
 import math
-from Utils.resources import SharedResources
-from Utils.io_converters import reload_optimal_validation_parameters
-from Plotting.metric_versus_binned_boxplot import compute_binned_metric_over_metric_boxplot
-from Validation.validation_utilities import compute_patientwise_fold_metrics, compute_singe_fold_average_metrics
-from Validation.extra_metrics_computation import compute_overall_metrics_correlation
+from ..Utils.resources import SharedResources
+from ..Utils.io_converters import reload_optimal_validation_parameters
+from ..Plotting.metric_versus_binned_boxplot import compute_binned_metric_over_metric_boxplot
+from ..Validation.validation_utilities import compute_patientwise_fold_metrics, compute_singe_fold_average_metrics
 
 
 class AbstractStudy(ABC):
@@ -98,10 +97,8 @@ class AbstractStudy(ABC):
 
             self.metric_names = list(results_df.columns)[17:]  # Hard-coded, needs to be improved.
             self.__compute_dice_confidence_intervals(data=results_df, class_name=class_name, category=category)
-
-            if self.extra_patient_parameters is not None:
-                self.__compute_results_metric_over_metric(data=results_df, class_name=class_name, metric1='PiW Dice',
-                                                          metric2='Volume', category=category, suffix='_')
+            self.__compute_results_metric_over_metric(data=results_df, class_name=class_name, metric1='PiW Dice',
+                                                      metric2='GT volume (ml)', category=category, suffix='_')
         except Exception as e:
             print('{}'.format(traceback.format_exc()))
 
@@ -115,7 +112,7 @@ class AbstractStudy(ABC):
         :return:
         """
         if sys.version_info[0] >= 3 and sys.version_info[1] >= 7:
-            from Plotting.confidence_intervals_plot import compute_dice_confidence_intervals
+            from raidionicsval.Plotting.confidence_intervals_plot import compute_dice_confidence_intervals
             try:
                 filename_extra = '' if category == 'All' else '_tp'
                 if data is None:
@@ -148,8 +145,8 @@ class AbstractStudy(ABC):
             else:
                 results = deepcopy(data)
 
-            if self.extra_patient_parameters is None:
-                return
+            # if self.extra_patient_parameters is None:
+            #     return
 
             number_bins = 10
             if metric2 == "SpacZ":
@@ -160,10 +157,11 @@ class AbstractStudy(ABC):
             optimal_thresold_index = total_thresholds.index(optimal_threshold)
             optimal_results_per_patient = results[optimal_thresold_index::nb_thresholds]
             # Not elegant, but either the two files have been merged before or not, so this test should be sufficient.
-            if True in [x not in list(results.columns) for x in list(self.extra_patient_parameters.columns)]:
-                optimal_results_per_patient['Patient'] = optimal_results_per_patient.Patient.astype(str)
-                optimal_results_per_patient = pd.merge(optimal_results_per_patient, self.extra_patient_parameters,
-                                                       on="Patient", how='left') #how='outer'
+            if self.extra_patient_parameters is not None:
+                if True in [x not in list(results.columns) for x in list(self.extra_patient_parameters.columns)]:
+                    optimal_results_per_patient['Patient'] = optimal_results_per_patient.Patient.astype(str)
+                    optimal_results_per_patient = pd.merge(optimal_results_per_patient, self.extra_patient_parameters,
+                                                           on="Patient", how='left') #how='outer'
 
             folder = os.path.join(self.input_folder, 'Validation', metric2 + '-Wise')
             os.makedirs(folder, exist_ok=True)
@@ -182,11 +180,14 @@ class AbstractStudy(ABC):
             for f, fold in enumerate(existing_folds):
                 results_fold = results.loc[results['Fold'] == fold]
                 optimal_results_per_patient = results_fold[optimal_thresold_index::nb_thresholds]
-                if True in [x not in list(results.columns) for x in list(self.extra_patient_parameters.columns)]:
-                    optimal_results_per_patient['Patient'] = optimal_results_per_patient.Patient.astype(str)
-                    # Trick to only keep extra information for patients from the current fold with the 'how' attribute
-                    fold_optimal_results = pd.merge(optimal_results_per_patient, self.extra_patient_parameters,
-                                                    on="Patient", how='left')
+                if self.extra_patient_parameters is not None:
+                    if True in [x not in list(results.columns) for x in list(self.extra_patient_parameters.columns)]:
+                        optimal_results_per_patient['Patient'] = optimal_results_per_patient.Patient.astype(str)
+                        # Trick to only keep extra information for patients from the current fold with the 'how' attribute
+                        fold_optimal_results = pd.merge(optimal_results_per_patient, self.extra_patient_parameters,
+                                                        on="Patient", how='left')
+                    else:
+                        fold_optimal_results = optimal_results_per_patient
                 else:
                     fold_optimal_results = optimal_results_per_patient
 
@@ -227,7 +228,10 @@ class AbstractStudy(ABC):
             optimal_thresold_index = total_thresholds.index(optimal_threshold)
             optimal_results_per_patient = results[optimal_thresold_index::nb_thresholds]
             optimal_results_per_patient['Patient'] = optimal_results_per_patient.Patient.astype(str)
-            total_optimal_results = pd.merge(optimal_results_per_patient, self.extra_patient_parameters, on="Patient")
+            if self.extra_patient_parameters is not None:
+                total_optimal_results = pd.merge(optimal_results_per_patient, self.extra_patient_parameters, on="Patient")
+            else:
+                total_optimal_results = optimal_results_per_patient
 
             if not metric1 in list(total_optimal_results.columns) or not metric2 in list(total_optimal_results.columns):
                 print('The required metric is missing from the DataFrame with either {} or {}. Skipping.\n'.format(metric1, metric2))
@@ -248,9 +252,11 @@ class AbstractStudy(ABC):
                 # @TODO. Must include a new fold average specific for the studies, with mean and std values as input,
                 # which is different from the inputs to the computation in the validation part....
                 self.compute_fold_average(self.input_folder, data=optimal_results_per_cutoff[cat],
-                                     class_optimal=self.classes_optimal, metrics=self.metric_names,
-                                     suffix=suffix + '_' + metric2 + '_' + cat,
-                                     true_positive_state=(category == 'True Positive'))
+                                          class_optimal=self.classes_optimal, metrics=self.metric_names,
+                                          suffix=suffix + '_' + metric2 + '_' + cat,
+                                          true_positive_state=(category == 'True Positive'),
+                                          class_names=SharedResources.getInstance().studies_class_names
+                                          )
                 self.__compute_dice_confidence_intervals(class_name=class_name,
                                                          category=category,
                                                          data=optimal_results_per_cutoff[cat],
@@ -263,8 +269,13 @@ class AbstractStudy(ABC):
         except Exception as e:
             print('{}'.format(traceback.format_exc()))
 
-    def compute_fold_average(self, folder, data=None, class_optimal={}, metrics=[], suffix='', true_positive_state=False):
-        classes = SharedResources.getInstance().validation_class_names
+    def compute_fold_average(self, folder, data=None, class_optimal={}, metrics=[], suffix='',
+                             true_positive_state=False, class_names=None):
+        # @TODO. Should not collect the classes from validation_class_names, as it might differ from the studied classes.
+        if class_names is None:
+            classes = SharedResources.getInstance().validation_class_names
+        else:
+            classes = class_names
         optimal_tag = 'All' if not true_positive_state else 'True Positive'
         for c in classes:
             optimal_values = class_optimal[c][optimal_tag]
@@ -281,109 +292,112 @@ class AbstractStudy(ABC):
         :param metric_names:
         :return:
         """
-        results = None
-        if data is None:
-            results_filename = os.path.join(folder, 'Validation', class_name + '_dice_scores.csv')
-            results = pd.read_csv(results_filename)
-            if true_positive_state:
-                results = results.loc[results["True Positive"] == True]
-        else:
-            results = deepcopy(data)
-
-        suffix = "tp" + suffix if true_positive_state else suffix
-        results.replace('inf', np.nan, inplace=True)
-        results.replace(float('inf'), np.nan, inplace=True)
-        results.replace('', np.nan, inplace=True)
-        results.replace(' ', np.nan, inplace=True)
-        unique_folds = np.unique(results['Fold'])
-        nb_folds = len(unique_folds)
-        metrics_per_fold = []
-
-        metric_names = list(results.columns[3:list(results.columns).index("#Det") + 1])
-        # if metrics is not None:
-        #     metric_names.extend(metrics)
-
-        fold_average_columns = ['Fold', '# samples', 'Patient-wise recall', 'Patient-wise precision',
-                                'Patient-wise specificity',
-                                'Patient-wise F1', 'Patient-wise Accuracy', 'Patient-wise Balanced accuracy']
-        for m in metric_names:
-            fold_average_columns.extend([m + ' (Mean)', m + ' (Std)'])
-
-        # Regarding the overlap threshold, should the patient discarded for recall be
-        # used for other metrics computation?
-        for f in unique_folds:
-            patientwise_metrics = compute_patientwise_fold_metrics(results, f, best_threshold, best_overlap)
-            fold_average_metrics, fold_std_metrics = compute_singe_fold_average_metrics(results, f, best_threshold,
-                                                                                        best_overlap, metrics)
-            fold_metrics = []
-            for m in range(len(fold_average_metrics)):
-                fold_metrics.append(fold_average_metrics[m])
-                fold_metrics.append(fold_std_metrics[m])
-            fold_average = [f, len(np.unique(
-                results.loc[results['Fold'] == f]['Patient'].values))] + patientwise_metrics + fold_metrics
-            metrics_per_fold.append(fold_average)
-
-        metrics_per_fold_df = pd.DataFrame(data=metrics_per_fold, columns=fold_average_columns)
-        study_filename = os.path.join(folder, 'Validation',
-                                      class_name + '_folds_metrics_average.csv') if suffix == '' else os.path.join(
-            folder,
-            'Validation',
-            class_name + '_folds_metrics_average_' + suffix + '.csv')
-        metrics_per_fold_df.to_csv(study_filename, index=False)
-
-        ####### Averaging the results from the different folds ###########
-        total_samples = metrics_per_fold_df['# samples'].sum()
-        patientwise_fold_metrics_to_average = metrics_per_fold_df.values[:, 2:8]
-        fold_metrics_to_average = metrics_per_fold_df.values[:, 8:][:, 0::2]
-        fold_std_metrics_to_average = metrics_per_fold_df.values[:, 8:][:, 1::2]
-        total_fold_metrics_to_average = np.concatenate((patientwise_fold_metrics_to_average, fold_metrics_to_average),
-                                                       axis=1)
-        fold_metrics_average = np.mean(total_fold_metrics_to_average, axis=0)
-        fold_metrics_std = np.std(total_fold_metrics_to_average, axis=0)
-        fold_averaged_results = [total_samples]
-        for m in range(len(fold_metrics_average)):
-            fold_averaged_results.append(fold_metrics_average[m])
-            fold_averaged_results.append(fold_metrics_std[m])
-
-        # Performing pooled estimates (taking into account the sample size for each fold) when relevant
-        pooled_fold_averaged_results = [len(unique_folds), total_samples]
-        pw_index = 6  # Length of the initial fold_average_columns, without the first two elements.
-        for m in range(total_fold_metrics_to_average.shape[1]):
-            mean_final = 0
-            std_final = 0
-            for f in range(len(unique_folds)):
-                fold_val = total_fold_metrics_to_average[f, m]
-                fold_sample_size = list(metrics_per_fold_df['# samples'])[f]
-                mean_final = mean_final + (fold_val * fold_sample_size)
-                # For patient-wise metrics, there is no std value for within each fold
-                if m < pw_index:
-                    std_final = std_final
-                else:
-                    std_final = std_final + (
-                                (fold_sample_size - 1) * math.pow(fold_std_metrics_to_average[f, m - pw_index], 2) + (
-                            fold_sample_size) * math.pow(fold_val, 2))
-            mean_final = mean_final / total_samples
-            if m >= pw_index:
-                std_final = math.sqrt(
-                    (1 / (total_samples - 1)) * (std_final - (total_samples * math.pow(mean_final, 2))))
+        try:
+            results = None
+            if data is None:
+                results_filename = os.path.join(folder, 'Validation', class_name + '_dice_scores.csv')
+                results = pd.read_csv(results_filename)
+                if true_positive_state:
+                    results = results.loc[results["True Positive"] == True]
             else:
-                std_final = np.std(total_fold_metrics_to_average[:, m])
-            pooled_fold_averaged_results.extend([mean_final, std_final])
+                results = deepcopy(data)
 
-        overall_average_columns = ['Fold', '# samples']
-        for m in ['Patient-wise recall', 'Patient-wise precision', 'Patient-wise specificity', 'Patient-wise F1',
-                  'Patient-wise Accuracy', 'Patient-wise Balanced accuracy']:
-            overall_average_columns.extend([m + ' (Mean)', m + ' (Std)'])
+            suffix = "tp" + suffix if true_positive_state else suffix
+            results.replace('inf', np.nan, inplace=True)
+            results.replace(float('inf'), np.nan, inplace=True)
+            results.replace('', np.nan, inplace=True)
+            results.replace(' ', np.nan, inplace=True)
+            unique_folds = np.unique(results['Fold'])
+            nb_folds = len(unique_folds)
+            metrics_per_fold = []
 
-        for m in metric_names:
-            overall_average_columns.extend([m + ' (Mean)', m + ' (Std)'])
-        pooled_fold_averaged_results_df = pd.DataFrame(
-            data=np.asarray(pooled_fold_averaged_results).reshape(1, len(overall_average_columns)),
-            columns=overall_average_columns)
-        study_filename = os.path.join(folder, 'Validation',
-                                      class_name + '_overall_metrics_average.csv') if suffix == '' else os.path.join(
-            folder,
-            'Validation',
-            class_name + '_overall_metrics_average_' + suffix + '.csv')
-        pooled_fold_averaged_results_df.to_csv(study_filename, index=False)
+            metric_names = list(results.columns[3:list(results.columns).index("#Det") + 1])
+            if metrics is not None:
+                metric_names.extend(metrics)
 
+            fold_average_columns = ['Fold', '# samples', 'Patient-wise recall', 'Patient-wise precision',
+                                    'Patient-wise specificity',
+                                    'Patient-wise F1', 'Patient-wise Accuracy', 'Patient-wise Balanced accuracy']
+            for m in metric_names:
+                fold_average_columns.extend([m + ' (Mean)', m + ' (Std)'])
+
+            # Regarding the overlap threshold, should the patient discarded for recall be
+            # used for other metrics computation?
+            for f in unique_folds:
+                patientwise_metrics = compute_patientwise_fold_metrics(results, f, best_threshold, best_overlap)
+                fold_average_metrics, fold_std_metrics = compute_singe_fold_average_metrics(results, f, best_threshold,
+                                                                                            best_overlap, metrics)
+                fold_metrics = []
+                for m in range(len(fold_average_metrics)):
+                    fold_metrics.append(fold_average_metrics[m])
+                    fold_metrics.append(fold_std_metrics[m])
+                fold_average = [f, len(np.unique(
+                    results.loc[results['Fold'] == f]['Patient'].values))] + patientwise_metrics + fold_metrics
+                metrics_per_fold.append(fold_average)
+
+            metrics_per_fold_df = pd.DataFrame(data=metrics_per_fold, columns=fold_average_columns)
+            study_filename = os.path.join(folder, 'Validation',
+                                          class_name + '_folds_metrics_average.csv') if suffix == '' else os.path.join(
+                folder,
+                'Validation',
+                class_name + '_folds_metrics_average_' + suffix + '.csv')
+            metrics_per_fold_df.to_csv(study_filename, index=False)
+
+            ####### Averaging the results from the different folds ###########
+            total_samples = metrics_per_fold_df['# samples'].sum()
+            patientwise_fold_metrics_to_average = metrics_per_fold_df.values[:, 2:8]
+            fold_metrics_to_average = metrics_per_fold_df.values[:, 8:][:, 0::2]
+            fold_std_metrics_to_average = metrics_per_fold_df.values[:, 8:][:, 1::2]
+            total_fold_metrics_to_average = np.concatenate((patientwise_fold_metrics_to_average, fold_metrics_to_average),
+                                                           axis=1)
+            fold_metrics_average = np.mean(total_fold_metrics_to_average, axis=0)
+            fold_metrics_std = np.std(total_fold_metrics_to_average, axis=0)
+            fold_averaged_results = [total_samples]
+            for m in range(len(fold_metrics_average)):
+                fold_averaged_results.append(fold_metrics_average[m])
+                fold_averaged_results.append(fold_metrics_std[m])
+
+            # Performing pooled estimates (taking into account the sample size for each fold) when relevant
+            pooled_fold_averaged_results = [len(unique_folds), total_samples]
+            pw_index = 6  # Length of the initial fold_average_columns, without the first two elements.
+            for m in range(total_fold_metrics_to_average.shape[1]):
+                mean_final = 0
+                std_final = 0
+                for f in range(len(unique_folds)):
+                    fold_val = total_fold_metrics_to_average[f, m]
+                    fold_sample_size = list(metrics_per_fold_df['# samples'])[f]
+                    mean_final = mean_final + (fold_val * fold_sample_size)
+                    # For patient-wise metrics, there is no std value for within each fold
+                    if m < pw_index:
+                        std_final = std_final
+                    else:
+                        std_final = std_final + (
+                                    (fold_sample_size - 1) * math.pow(fold_std_metrics_to_average[f, m - pw_index], 2) + (
+                                fold_sample_size) * math.pow(fold_val, 2))
+                mean_final = mean_final / total_samples
+                if m >= pw_index:
+                    std_final = math.sqrt(
+                        (1 / (total_samples - 1)) * (std_final - (total_samples * math.pow(mean_final, 2))))
+                else:
+                    std_final = np.std(total_fold_metrics_to_average[:, m])
+                pooled_fold_averaged_results.extend([mean_final, std_final])
+
+            overall_average_columns = ['Fold', '# samples']
+            for m in ['Patient-wise recall', 'Patient-wise precision', 'Patient-wise specificity', 'Patient-wise F1',
+                      'Patient-wise Accuracy', 'Patient-wise Balanced accuracy']:
+                overall_average_columns.extend([m + ' (Mean)', m + ' (Std)'])
+
+            for m in metric_names:
+                overall_average_columns.extend([m + ' (Mean)', m + ' (Std)'])
+            pooled_fold_averaged_results_df = pd.DataFrame(
+                data=np.asarray(pooled_fold_averaged_results).reshape(1, len(overall_average_columns)),
+                columns=overall_average_columns)
+            study_filename = os.path.join(folder, 'Validation',
+                                          class_name + '_overall_metrics_average.csv') if suffix == '' else os.path.join(
+                folder,
+                'Validation',
+                class_name + '_overall_metrics_average_' + suffix + '.csv')
+            pooled_fold_averaged_results_df.to_csv(study_filename, index=False)
+        except Exception as e:
+            print("Issue arose for class: {}.".format(class_name))
+            print(traceback.format_exc())

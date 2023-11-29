@@ -4,12 +4,10 @@ import traceback
 
 import numpy as np
 import os
-import sys
 import h5py
-import math
 import nibabel as nib
 from copy import deepcopy
-from Utils.resources import SharedResources
+from ..Utils.resources import SharedResources
 
 
 def box_overlap(box1, box2):

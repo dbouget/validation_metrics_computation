@@ -13,7 +13,7 @@ numpy
 *.mhd
 *.raw
 *lymphnodes*
-/venv
+/venv*
 *.ini
 *.sqlite3
 *.idea

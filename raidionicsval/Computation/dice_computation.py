@@ -2,8 +2,8 @@ import numpy as np
 import traceback
 from copy import deepcopy
 
-from Utils.resources import SharedResources
-from Validation.instance_segmentation_validation import InstanceSegmentationValidation
+from raidionicsval.Utils.resources import SharedResources
+from raidionicsval.Validation.instance_segmentation_validation import InstanceSegmentationValidation
 
 
 def compute_dice(volume1, volume2):
@@ -36,6 +36,17 @@ def separate_dice_computation(args):
     detection[detection < t] = 0
     detection[detection >= t] = 1
     detection = detection.astype('uint8')
+
+    # # Cleaning the too small objects that might be noise in the detection
+    # if np.count_nonzero(detection) > 0:
+    #     detection_labels = measurements.label(detection)[0]
+    #     # print('Found {} objects.'.format(np.max(self.detection_labels)))
+    #     refined_image = deepcopy(detection)
+    #     for c in range(1, np.max(detection_labels) + 1):
+    #         if np.count_nonzero(detection_labels == c) < SharedResources.getInstance().validation_tiny_objects_removal_threshold:
+    #             refined_image[refined_image == c] = 0
+    #     refined_image[refined_image != 0] = 1
+    #     detection = refined_image
 
     pixelwise_results = [-1., -1., -1., -1.]
     if "pixelwise" in SharedResources.getInstance().validation_metric_spaces:

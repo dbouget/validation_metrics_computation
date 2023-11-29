@@ -1,6 +1,7 @@
 import os
 import sys
 import logging
+import configparser
 logger = logging.getLogger(__name__)
 
 
@@ -23,18 +24,57 @@ class SharedResources:
             raise Exception("This class is a singleton!")
         else:
             SharedResources.__instance = self
+            self.__setup()
 
-    def set_environment(self, config):
-        self.config = config
-
+    def __setup(self):
+        """
+        Definition all of attributes accessible through this singleton.
+        """
+        self.config_filename = None
+        self.config = None
         self.home_path = ''
+
+        self.upper_default_metrics_index = 17  # Single place for holding this attribute, "safer" approach
+
+        self.data_root = ""
+        self.task = None
+        self.number_processes = 8
+
+        self.studies_input_folder = ''
+        self.studies_output_folder = ''
+        self.studies_task = ''
+        self.studies_study_name = None
+        self.studies_extra_parameters_filename = ''
+        self.studies_class_names = []
+
+        self.validation_input_folder = ''
+        self.validation_output_folder = ''
+        self.validation_nb_folds = 5
+        self.validation_split_way = 'two-way'
+        self.validation_metric_spaces = []
+        self.validation_metric_names = []
+        self.validation_detection_overlap_thresholds = []
+        self.validation_gt_files_suffix = []
+        self.validation_prediction_files_suffix = []
+        self.validation_tiny_objects_removal_threshold = 50
+        self.validation_class_names = []
+        self.validation_true_positive_volume_thresholds = []
+        self.validation_use_brats_data = []
+
+    def set_environment(self, config_filename):
+        self.config = configparser.ConfigParser()
+        if not os.path.exists(config_filename):
+            pass
+
+        self.config_filename = config_filename
+        self.config.read(self.config_filename)
+
         if os.name == 'posix':  # Linux system
             self.home_path = os.path.expanduser("~")
 
         self.__parse_default_parameters()
         self.__parse_validation_parameters()
         self.__parse_studies_parameters()
-        self.upper_default_metrics_index = 17  # Single place for holding this attribute, "safer" approach
 
     def __parse_default_parameters(self):
         """
@@ -44,10 +84,6 @@ class SharedResources:
         :param: number_processes: (int) number of parallel processes to use to perform the different task
         :return:
         """
-        self.data_root = ""
-        self.task = None
-        self.number_processes = 8
-
         if self.config.has_option('Default', 'data_root'):
             if self.config['Default']['data_root'].split('#')[0].strip() != '':
                 self.data_root = self.config['Default']['data_root'].split('#')[0].strip()
@@ -73,13 +109,6 @@ class SharedResources:
         the tumor volume, data origin, etc... for in-depth results analysis.
         :return:
         """
-        self.studies_input_folder = ''
-        self.studies_output_folder = ''
-        self.studies_task = ''
-        self.studies_study_name = None
-        self.studies_extra_parameters_filename = ''
-        self.studies_class_names = []
-
         if self.config.has_option('Studies', 'input_folder'):
             if self.config['Studies']['input_folder'].split('#')[0].strip() != '':
                 self.studies_input_folder = self.config['Studies']['input_folder'].split('#')[0].strip()
@@ -125,20 +154,6 @@ class SharedResources:
         cross_validation_folds.txt) in order to generate the network's prediction filename, including its extension.
         :return:
         """
-        self.validation_input_folder = ''
-        self.validation_output_folder = ''
-        self.validation_nb_folds = 5
-        self.validation_split_way = 'two-way'
-        self.validation_metric_spaces = []
-        self.validation_metric_names = []
-        self.validation_detection_overlap_thresholds = []
-        self.validation_gt_files_suffix = []
-        self.validation_prediction_files_suffix = []
-        self.validation_tiny_objects_removal_threshold = 50
-        self.validation_class_names = []
-        self.validation_true_positive_volume_thresholds = []
-        self.validation_use_brats_data = []
-
         if self.config.has_option('Validation', 'input_folder'):
             if self.config['Validation']['input_folder'].split('#')[0].strip() != '':
                 self.validation_input_folder = self.config['Validation']['input_folder'].split('#')[0].strip()
