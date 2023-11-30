@@ -10,14 +10,9 @@ import zipfile
 
 try:
     import requests
-    import gdown
-    if int(gdown.__version__.split('.')[0]) < 4 or int(gdown.__version__.split('.')[1]) < 4:
-        subprocess.check_call([sys.executable, "-m", "pip", "install", 'gdown==4.4.0'])
 except:
-    subprocess.check_call([sys.executable, "-m", "pip", "install", 'requests==2.28.2'])
-    subprocess.check_call([sys.executable, "-m", "pip", "install", 'gdown==4.4.0'])
+    subprocess.check_call([sys.executable, "-m", "pip", "install", 'requests'])
     import requests
-    import gdown
 
 
 def validation_pipeline_test():
@@ -43,6 +38,9 @@ def validation_pipeline_test():
                     f.write(chunk)
         with zipfile.ZipFile(archive_dl_dest, 'r') as zip_ref:
             zip_ref.extractall(test_dir)
+
+        if not os.path.exists(os.path.join(test_dir, 'Input_dataset')):
+            raise ValueError('Resources download or extraction failed, content not available on disk.')
     except Exception as e:
         logging.error("Error during resources download with: \n {}.\n".format(traceback.format_exc()))
         shutil.rmtree(test_dir)
@@ -54,7 +52,7 @@ def validation_pipeline_test():
         val_config.add_section('Default')
         val_config.set('Default', 'task', 'validation')
         val_config.set('Default', 'data_root', os.path.join(test_dir, 'Input_dataset'))
-        val_config.set('Default', 'number_processes', "2")
+        val_config.set('Default', 'number_processes', "1")
         val_config.add_section('Validation')
         val_config.set('Validation', 'input_folder', os.path.join(test_dir, 'StudyResults'))
         val_config.set('Validation', 'output_folder', os.path.join(test_dir, 'StudyResults'))
