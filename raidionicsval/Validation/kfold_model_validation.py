@@ -311,8 +311,10 @@ class ModelValidation:
                     ind_values = np.asarray(pat_results[ind][0] + extra_metrics)
                     buff_df = pd.DataFrame(ind_values.reshape(1, len(self.results_df_base_columns)),
                                            columns=list(self.results_df_base_columns))
-                    self.class_results_df[classes[c]] = self.class_results_df[classes[c]].append(buff_df,
-                                                                                                 ignore_index=True)
+                    # self.class_results_df[classes[c]] = self.class_results_df[classes[c]].append(buff_df,
+                    #                                                                              ignore_index=True)
+                    self.class_results_df[classes[c]] = pd.concat([self.class_results_df[classes[c]], buff_df],
+                                                                  ignore_index=True)
                 else:
                     ind_values = pat_results[ind][0] + list(self.class_results_df[classes[c]].loc[sub_df.index.values[0], :].values[len(pat_results[ind][0]):])
                     self.class_results_df[classes[c]].loc[sub_df.index.values[0], :] = ind_values
@@ -343,7 +345,8 @@ class ModelValidation:
                 ind_values = np.asarray([fold_number, uid, np.round(th, 2)] + list(class_averaged_results[ind]))
                 buff_df = pd.DataFrame(ind_values.reshape(1, len(self.results_df_base_columns)),
                                        columns=list(self.results_df_base_columns))
-                self.results_df = self.results_df.append(buff_df, ignore_index=True)
+                # self.results_df = self.results_df.append(buff_df, ignore_index=True)
+                self.results_df = pd.concat([self.results_df, buff_df], ignore_index=True)
             else:
                 ind_values = [fold_number, uid, np.round(th, 2)] + list(class_averaged_results[ind])
                 self.results_df.loc[sub_df.index.values[0], :] = ind_values
