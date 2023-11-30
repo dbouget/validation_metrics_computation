@@ -213,15 +213,15 @@ class ModelValidation:
                 ground_truth_filename = os.path.join(detection_image_base, patient_extended + '_' + gt_suffix)
             # The ground truth for the BraTS images is stored a bit differently
             elif SharedResources.getInstance().validation_use_brats_data and classes[c] == 'tumor':
-                raw_gt = nib.load(ground_truth_filename).get_data()[:]
+                raw_gt = nib.load(ground_truth_filename).get_fdata()[:]
                 ground_truth_filename = os.path.join(os.path.dirname(detection_filename), uid + "_groundtruth_tumor.nii.gz")
                 if not os.path.exists(ground_truth_filename):
-                    new_gt = np.zeros(detection_ni.get_data().shape)
+                    new_gt = np.zeros(detection_ni.get_fdata().shape)
                     new_gt[raw_gt == 1] = 1
                     nib.save(nib.Nifti1Image(new_gt, detection_ni.affine), ground_truth_filename)
                 tmp_filename = os.path.join(os.path.dirname(detection_filename), uid + "_groundtruth_necrosis.nii.gz")
                 if not os.path.exists(tmp_filename):
-                    new_gt = np.zeros(detection_ni.get_data().shape)
+                    new_gt = np.zeros(detection_ni.get_fdata().shape)
                     new_gt[raw_gt == 2] = 1
                     new_gt[raw_gt == 1] = 0
                     nib.save(nib.Nifti1Image(new_gt, detection_ni.affine), tmp_filename)
@@ -234,7 +234,7 @@ class ModelValidation:
             if ground_truth_filename is None or not os.path.exists(ground_truth_filename):
                 ground_truth_filename = os.path.join(os.path.dirname(detection_filename), uid + "_groundtruth_" + classes[c] + ".nii.gz")
                 if not os.path.exists(ground_truth_filename):
-                    empty_gt = np.zeros(detection_ni.get_data().shape)
+                    empty_gt = np.zeros(detection_ni.get_fdata().shape)
                     nib.save(nib.Nifti1Image(empty_gt, detection_ni.affine), ground_truth_filename)
             else:
                 file_stats = os.stat(detection_filename)
@@ -270,7 +270,7 @@ class ModelValidation:
             ground_truth_ni = nib.load(gt_filename)
             detection_ni = nib.load(det_filename)
 
-            gt = ground_truth_ni.get_data()
+            gt = ground_truth_ni.get_fdata()
             gt[gt >= 1] = 1
 
             class_tp_threshold = SharedResources.getInstance().validation_true_positive_volume_thresholds[c]

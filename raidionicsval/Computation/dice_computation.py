@@ -32,7 +32,7 @@ def separate_dice_computation(args):
     volumes_extra = args[5]
     results = []
 
-    detection = deepcopy(detection_ni.get_data())
+    detection = deepcopy(detection_ni.get_fdata())
     detection[detection < t] = 0
     detection[detection >= t] = 1
     detection = detection.astype('uint8')

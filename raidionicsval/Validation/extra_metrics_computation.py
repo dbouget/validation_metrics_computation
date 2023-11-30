@@ -25,11 +25,11 @@ def compute_patient_extra_metrics(patient_object, class_index, optimal_threshold
         ground_truth_ni = nib.load(patient_object._ground_truth_filepaths[class_index])
         detection_ni = nib.load(patient_object._prediction_filepaths[class_index])
 
-        gt = ground_truth_ni.get_data()
+        gt = ground_truth_ni.get_fdata()
         gt[gt >= 1] = 1
         gt = gt.astype('uint8')
 
-        detection = detection_ni.get_data()[:]
+        detection = detection_ni.get_fdata()[:]
         detection[detection < optimal_threshold] = 0
         detection[detection >= optimal_threshold] = 1
         detection = detection.astype('uint8')
@@ -140,7 +140,7 @@ def compute_specific_metric_value(metric, gt, detection, tp, tn, fp, fn, gt_ni_h
             param12 = (fp * (fp + (2 * tn))) / (tn + fp)
             param21 = (fp * (fp + (2 * tp))) / (tp + fp)
             param22 = (fn * (fn + (2 * tn))) / (tn + fn)
-            metric_value = (1 / np.prod(gt_ni_header.get_data_shape()[0:3])) * min(param11 + param12, param21 + param22)
+            metric_value = (1 / np.prod(gt_ni_header.get_fdata_shape()[0:3])) * min(param11 + param12, param21 + param22)
         else:
             metric_value = math.inf
     elif metric == 'MI':
@@ -150,7 +150,7 @@ def compute_specific_metric_value(metric, gt, detection, tp, tn, fp, fn, gt_ni_h
         a = 0.5 * ((tp * (tp - 1)) + (fp * (fp - 1)) + (tn * (tn - 1)) + (fn * (fn - 1)))
         b = 0.5 * ((math.pow(tp + fn, 2) + math.pow(tn + fp, 2)) - (math.pow(tp, 2) + math.pow(tn, 2) + math.pow(fp, 2) + math.pow(fn, 2)))
         c = 0.5 * ((math.pow(tp + fp, 2) + math.pow(tn + fn, 2)) - (math.pow(tp, 2) + math.pow(tn, 2) + math.pow(fp, 2) + math.pow(fn, 2)))
-        d = np.prod(gt_ni_header.get_data_shape()[0:3]) * (np.prod(gt_ni_header.get_data_shape()[0:3]) - 1) / 2 - (a + b + c)
+        d = np.prod(gt_ni_header.get_fdata_shape()[0:3]) * (np.prod(gt_ni_header.get_fdata_shape()[0:3]) - 1) / 2 - (a + b + c)
         num = a + b
         den = a + b + c + d
         if den != 0:
@@ -160,7 +160,7 @@ def compute_specific_metric_value(metric, gt, detection, tp, tn, fp, fn, gt_ni_h
         a = 0.5 * ((tp * (tp - 1)) + (fp * (fp - 1)) + (tn * (tn - 1)) + (fn * (fn - 1)))
         b = 0.5 * ((math.pow(tp + fn, 2) + math.pow(tn + fp, 2)) - (math.pow(tp, 2) + math.pow(tn, 2) + math.pow(fp, 2) + math.pow(fn, 2)))
         c = 0.5 * ((math.pow(tp + fp, 2) + math.pow(tn + fn, 2)) - (math.pow(tp, 2) + math.pow(tn, 2) + math.pow(fp, 2) + math.pow(fn, 2)))
-        d = np.prod(gt_ni_header.get_data_shape()[0:3]) * (np.prod(gt_ni_header.get_data_shape()[0:3]) - 1) / 2 - (a + b + c)
+        d = np.prod(gt_ni_header.get_fdata_shape()[0:3]) * (np.prod(gt_ni_header.get_fdata_shape()[0:3]) - 1) / 2 - (a + b + c)
         num = 2 * (a * d - b * c)
         den = math.pow(c, 2) + math.pow(b, 2) + 2 * a * d + (a + d) * (c + b)
         if den != 0:
@@ -168,7 +168,7 @@ def compute_specific_metric_value(metric, gt, detection, tp, tn, fp, fn, gt_ni_h
     elif metric == 'VOI':
         fn_tp = fn + tp
         fp_tp = fp + tp
-        total = np.prod(gt_ni_header.get_data_shape()[0:3])
+        total = np.prod(gt_ni_header.get_fdata_shape()[0:3])
 
         if fn_tp == 0 or (fn_tp / total) == 1 or fp_tp == 0 or (fp_tp / total) == 1:
             metric_value = math.inf
