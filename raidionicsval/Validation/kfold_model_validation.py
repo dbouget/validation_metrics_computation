@@ -52,7 +52,6 @@ class ModelValidation:
                              true_positive_state=False)
         compute_fold_average(self.input_folder, class_optimal=class_optimal, metrics=self.metric_names,
                              true_positive_state=True)
-        # compute_overall_metrics_correlation(self.input_folder, best_threshold=optimal_threshold)
 
     def __compute_metrics(self):
         """
@@ -361,6 +360,9 @@ class ModelValidation:
         for c in classes:
             optimal_values = class_optimal[c]['All']
             for p in tqdm(self.patients_metrics):
+                if self.patients_metrics[p].extra_metrics is None:
+                    # Initializing the list which will hold the extra metrics
+                    self.patients_metrics[p].setup_empty_extra_metrics(self.metric_names)
                 pat_metrics = compute_patient_extra_metrics(self.patients_metrics[p], classes.index(c), optimal_values[1],
                                                             SharedResources.getInstance().validation_metric_names)
                 self.patients_metrics[p].set_optimal_class_extra_metrics(classes.index(c), optimal_values[1], pat_metrics)

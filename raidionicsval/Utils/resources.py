@@ -43,7 +43,6 @@ class SharedResources:
         self.studies_input_folder = ''
         self.studies_output_folder = ''
         self.studies_task = ''
-        self.studies_study_name = None
         self.studies_extra_parameters_filename = ''
         self.studies_class_names = []
 
@@ -101,11 +100,10 @@ class SharedResources:
         """
         Parse the user-selected configuration parameters linked to the study process (plotting and visualization).
         :param: studies_input_folder: main directory containing the validation results.
-        :param: (optional) studies_output_folder: destination directory where the study results will be saved.
+        :param: studies_output_folder: destination directory where the study results will be saved.
         If empty, the study results will be saved in the studies_input_folder location.
         :param: studies_task: identifier for the study script to run. Each identified should link to a python file in
         the /Studies sub-directory.
-        :param: studies_study_name: folder name for the specific study.
         :param: studies_extra_parameters_filename: resources file containing patient-specific information, for example
         the tumor volume, data origin, etc... for in-depth results analysis.
         :return:
@@ -122,10 +120,6 @@ class SharedResources:
             if self.config['Studies']['task'].split('#')[0].strip() != '':
                 self.studies_task = self.config['Studies']['task'].split('#')[0].strip()
 
-        if self.config.has_option('Studies', 'study_name'):
-            if self.config['Studies']['study_name'].split('#')[0].strip() != '':
-                self.studies_study_name = self.config['Studies']['study_name'].split('#')[0].strip()
-
         if self.config.has_option('Studies', 'extra_parameters_filename'):
             if self.config['Studies']['extra_parameters_filename'].split('#')[0].strip() != '':
                 self.studies_extra_parameters_filename = self.config['Studies']['extra_parameters_filename'].split('#')[0].strip()
@@ -133,7 +127,7 @@ class SharedResources:
         if self.config.has_option('Studies', 'class_names'):
             if self.config['Studies']['class_names'].split('#')[0].strip() != '':
                 self.studies_class_names = [x.strip() for x in
-                                               self.config['Studies']['class_names'].split('#')[0].strip().split(',')]
+                                            self.config['Studies']['class_names'].split('#')[0].strip().split(',')]
 
     def __parse_validation_parameters(self):
         """

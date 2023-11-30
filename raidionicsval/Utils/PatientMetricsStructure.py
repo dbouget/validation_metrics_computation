@@ -66,6 +66,10 @@ class PatientMetrics:
     def extra_metrics(self) -> str:
         return self._extra_metrics
 
+    @property
+    def class_names(self) -> List[str]:
+        return self._class_names
+
     def init_from_file(self, study_folder: str):
         all_scores_filename = os.path.join(study_folder, 'all_dice_scores.csv')
 
@@ -157,12 +161,25 @@ class PatientMetrics:
         class_name = self._class_names[class_index]
         for i in range(len(self._class_metrics[class_name].get_all_metrics())):
             if self._class_metrics[class_name].get_all_metrics()[i][0] == optimal_threshold:
-                return self._class_metrics[class_name].get_extra_metrics()[i]
+                if self._class_metrics[class_name].get_extra_metrics() is not None:
+                    return self._class_metrics[class_name].get_extra_metrics()[i]
         return None
 
     def set_optimal_class_extra_metrics(self, class_index: int, optimal_threshold: float, metrics_values: List):
         class_name = self._class_names[class_index]
         self._class_metrics[class_name].set_extra_metrics(optimal_threshold, metrics_values)
+
+    def setup_empty_extra_metrics(self, metric_names):
+        thr_list = self._class_metrics[self.class_names[0]].get_probability_thresholds_list()
+        self._extra_metrics = []
+        for thr in thr_list:
+            curr_thr = [thr]
+            for m in metric_names:
+                curr_thr.append([m, float('nan')])
+            self._extra_metrics.append(curr_thr)
+
+        for cl in self._class_names:
+            self._class_metrics[cl].setup_empty_extra_metrics(metric_names)
 
 
 class ClassMetrics:
@@ -199,6 +216,10 @@ class ClassMetrics:
     @property
     def unique_id(self) -> str:
         return self._unique_id
+
+    @property
+    def pixelwise_metrics(self) -> str:
+        return self._pixelwise_metrics
 
     def set_results(self, results):
         """
@@ -288,3 +309,16 @@ class ClassMetrics:
         else:
             #return [[None]] * len(self._pixelwise_metrics)
             return [[None] * len(SharedResources.getInstance().validation_metric_names)] * len(self._pixelwise_metrics)
+
+    def get_probability_thresholds_list(self) -> List[float]:
+        res = [x[0] for x in self.pixelwise_metrics]
+        return res
+
+    def setup_empty_extra_metrics(self, metric_names):
+        thr_list = self.get_probability_thresholds_list()
+        self._extra_metrics = []
+        for thr in thr_list:
+            curr_thr = [thr]
+            for m in metric_names:
+                curr_thr.append([m, float('nan')])
+            self._extra_metrics.append(curr_thr)

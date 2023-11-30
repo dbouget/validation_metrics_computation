@@ -11,6 +11,7 @@ from ..Utils.resources import SharedResources
 from ..Utils.io_converters import reload_optimal_validation_parameters
 from ..Plotting.metric_versus_binned_boxplot import compute_binned_metric_over_metric_boxplot
 from ..Validation.validation_utilities import compute_patientwise_fold_metrics, compute_singe_fold_average_metrics
+from ..Validation.extra_metrics_computation import compute_overall_metrics_correlation
 
 
 class AbstractStudy(ABC):
@@ -18,11 +19,10 @@ class AbstractStudy(ABC):
 
     """
     _class_names = None
-    _classes_optimal = {}
+    _classes_optimal = {}  # Optimal probability threshold and overlap values, for each class, based on the analysis from the validation round
 
     def __init__(self):
-        self.study_name = SharedResources.getInstance().studies_study_name
-        self.input_folder = os.path.join(SharedResources.getInstance().studies_input_folder, self.study_name)
+        self.input_folder = SharedResources.getInstance().studies_input_folder
         self.output_folder = SharedResources.getInstance().studies_output_folder
         self.metric_names = []
         self.extra_patient_parameters = None
@@ -32,12 +32,10 @@ class AbstractStudy(ABC):
             self.extra_patient_parameters['Patient'] = self.extra_patient_parameters.Patient.astype(str)
 
         if not os.path.exists(self.output_folder):
-            self.output_folder = self.input_folder
+            os.makedirs(self.output_folder)
 
         self._class_names = SharedResources.getInstance().studies_class_names
         self._classes_optimal = {}
-        self.optimal_overlap = None
-        self.optimal_threshold = None
 
         for c in self.class_names:
             self.__retrieve_optimum_values(c)
@@ -56,11 +54,6 @@ class AbstractStudy(ABC):
 
         """
         pass
-        # # compute_overall_metrics_correlation(self.input_folder, best_threshold=self.optimal_threshold)
-        # self.__compute_and_plot_overall()
-        # if self.extra_patient_parameters is not None:
-        #     self.compute_and_plot_metric_over_metric_categories(metric1='Dice', metric2='Volume', metric2_cutoffs=[2.])
-        #     self.compute_and_plot_metric_over_metric_categories(metric1='Dice', metric2='SpacZ', metric2_cutoffs=[2.])
 
     def __retrieve_optimum_values(self, class_name: str):
         study_filename = os.path.join(self.input_folder, 'Validation', class_name + '_optimal_dice_study.csv')
@@ -102,6 +95,32 @@ class AbstractStudy(ABC):
         except Exception as e:
             print('{}'.format(traceback.format_exc()))
 
+    def compute_and_plot_metrics_correlation_matrix(self, class_name: str, category: str = 'All') -> None:
+        """
+
+        :param class_name: Name of the class of interest
+        :param category: Population to patients to focus on, from ['All', 'True Positive']. The threshold for
+        disambiguating between true and false positive patients was set during the validation phase.
+
+        :return:
+        """
+        try:
+            results_filename = os.path.join(self.input_folder, 'Validation', class_name + '_dice_scores.csv')
+            results_df = pd.read_csv(results_filename)
+            results_df.replace('inf', np.nan, inplace=True)
+            suffix = '_' + category.lower()
+            if category == 'True Positive':
+                results_df = results_df.loc[results_df["True Positive"] == True]
+                suffix = '_tp'
+
+            optimal_overlap = self.classes_optimal[class_name][category][0]
+            optimal_threshold = self.classes_optimal[class_name][category][1]
+            compute_overall_metrics_correlation(self.input_folder, self.output_folder, data=results_df,
+                                                class_name=class_name, best_threshold=optimal_threshold,
+                                                best_overlap=optimal_overlap, suffix=suffix)
+        except Exception as e:
+            print('{}'.format(traceback.format_exc()))
+
     def __compute_dice_confidence_intervals(self, class_name: str, data=None, category: str = 'All', suffix=''):
         """
 
@@ -123,10 +142,11 @@ class AbstractStudy(ABC):
                     results = deepcopy(data)
                 dice_thresholds = [np.round(x, 2) for x in list(np.unique(results['Threshold'].values))]
                 nb_tresholds = len(dice_thresholds)
-                optimal_thresold_index = dice_thresholds.index(self.optimal_threshold)
-                best_dices_per_patient = results['Dice'].values[optimal_thresold_index::nb_tresholds]
+                optimal_threshold = self.classes_optimal[class_name]['All'][1] if category == 'All' else self.classes_optimal[class_name]['True Positive'][1]
+                optimal_threshold_index = dice_thresholds.index(optimal_threshold)
+                best_dices_per_patient = results['PiW Dice'].values[optimal_threshold_index::nb_tresholds]
                 optimal_overlap = self.classes_optimal[class_name]['All'][0] if category == 'All' else self.classes_optimal[class_name]['True Positive'][0]
-                compute_dice_confidence_intervals(folder=self.input_folder, dices=best_dices_per_patient,
+                compute_dice_confidence_intervals(folder=self.output_folder, dices=best_dices_per_patient,
                                                   postfix='_overall' + suffix + '_' + class_name + filename_extra,
                                                   best_overlap=optimal_overlap)
             except Exception as e:
@@ -163,7 +183,7 @@ class AbstractStudy(ABC):
                     optimal_results_per_patient = pd.merge(optimal_results_per_patient, self.extra_patient_parameters,
                                                            on="Patient", how='left') #how='outer'
 
-            folder = os.path.join(self.input_folder, 'Validation', metric2 + '-Wise')
+            folder = os.path.join(self.output_folder, metric2 + '-Wise')
             os.makedirs(folder, exist_ok=True)
             optimal_overlap = self.classes_optimal[class_name]['All'][0] if category == 'All' else self.classes_optimal[class_name]['True Positive'][0]
             compute_binned_metric_over_metric_boxplot(folder=folder, data=optimal_results_per_patient,
@@ -251,7 +271,7 @@ class AbstractStudy(ABC):
             for cat in optimal_results_per_cutoff.keys():
                 # @TODO. Must include a new fold average specific for the studies, with mean and std values as input,
                 # which is different from the inputs to the computation in the validation part....
-                self.compute_fold_average(self.input_folder, data=optimal_results_per_cutoff[cat],
+                self.compute_fold_average(self.output_folder, data=optimal_results_per_cutoff[cat],
                                           class_optimal=self.classes_optimal, metrics=self.metric_names,
                                           suffix=suffix + '_' + metric2 + '_' + cat,
                                           true_positive_state=(category == 'True Positive'),
@@ -286,7 +306,7 @@ class AbstractStudy(ABC):
     def compute_fold_average_inner(self, folder, class_name, data=None, best_threshold=0.5, best_overlap=0.0, metrics=[],
                                    suffix='', true_positive_state=False):
         """
-        :param folder: Main study folder where the results will be dumped (assuming inside a Validation sub-folder)
+        :param folder: Destination folder where the results will be dumped (as specified in the configuration file)
         :param best_threshold:
         :param best_overlap:
         :param metric_names:
@@ -295,7 +315,7 @@ class AbstractStudy(ABC):
         try:
             results = None
             if data is None:
-                results_filename = os.path.join(folder, 'Validation', class_name + '_dice_scores.csv')
+                results_filename = os.path.join(folder, class_name + '_dice_scores.csv')
                 results = pd.read_csv(results_filename)
                 if true_positive_state:
                     results = results.loc[results["True Positive"] == True]
@@ -336,11 +356,8 @@ class AbstractStudy(ABC):
                 metrics_per_fold.append(fold_average)
 
             metrics_per_fold_df = pd.DataFrame(data=metrics_per_fold, columns=fold_average_columns)
-            study_filename = os.path.join(folder, 'Validation',
-                                          class_name + '_folds_metrics_average.csv') if suffix == '' else os.path.join(
-                folder,
-                'Validation',
-                class_name + '_folds_metrics_average_' + suffix + '.csv')
+            study_filename = os.path.join(folder, class_name + '_folds_metrics_average.csv') if suffix == '' else\
+                os.path.join(folder, class_name + '_folds_metrics_average_' + suffix + '.csv')
             metrics_per_fold_df.to_csv(study_filename, index=False)
 
             ####### Averaging the results from the different folds ###########
@@ -392,11 +409,8 @@ class AbstractStudy(ABC):
             pooled_fold_averaged_results_df = pd.DataFrame(
                 data=np.asarray(pooled_fold_averaged_results).reshape(1, len(overall_average_columns)),
                 columns=overall_average_columns)
-            study_filename = os.path.join(folder, 'Validation',
-                                          class_name + '_overall_metrics_average.csv') if suffix == '' else os.path.join(
-                folder,
-                'Validation',
-                class_name + '_overall_metrics_average_' + suffix + '.csv')
+            study_filename = os.path.join(folder, class_name + '_overall_metrics_average.csv') if suffix == ''\
+                else os.path.join(folder, class_name + '_overall_metrics_average_' + suffix + '.csv')
             pooled_fold_averaged_results_df.to_csv(study_filename, index=False)
         except Exception as e:
             print("Issue arose for class: {}.".format(class_name))

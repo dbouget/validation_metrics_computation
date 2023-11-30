@@ -8,8 +8,8 @@ from .Utils.resources import SharedResources
 def compute(config_filename: str, logging_filename: str = None) -> None:
     """
 
-    :param config_filename:
-    :param logging_filename:
+    :param config_filename: Filepath to the *.ini with the user-specific runtime parameters
+    :param logging_filename: Filepath to an external file used for logging events (e.g., the Raidionics .log)
     :return:
     """
     try:

@@ -1,3 +1,4 @@
+import logging
 import math
 import os
 import traceback
@@ -11,16 +12,21 @@ from typing import List
 # from medpy.metric.binary import hd95, volume_correlation, assd, ravd, obj_assd
 from sklearn.metrics import jaccard_score, normalized_mutual_info_score, roc_auc_score, cohen_kappa_score
 from ..Utils.resources import SharedResources
+from ..Computation.medpy_metrics import (compute_hd95, compute_assd, compute_ravd, compute_volume_correlation,
+                                         compute_object_assd)
 
 
 def compute_patient_extra_metrics(patient_object, class_index, optimal_threshold, metrics: List[str] = []):
     extra_metrics_results = []
     try:
-        if patient_object.get_optimal_class_extra_metrics(class_index, optimal_threshold)[1:] is not None:
+        if (patient_object.get_optimal_class_extra_metrics(class_index, optimal_threshold) is not None and
+                patient_object.get_optimal_class_extra_metrics(class_index, optimal_threshold)[1:] is not None):
             metric_values = [x[1] for x in patient_object.get_optimal_class_extra_metrics(class_index, optimal_threshold)[1:]]
             if False not in [x == x for x in metric_values]:
                 # If all metric values have been computed, i.e., no nan or None etc...
                 return patient_object.get_optimal_class_extra_metrics(class_index, optimal_threshold)[1:]
+        else:
+            metric_values = [None] * len(metrics)
 
         ground_truth_ni = nib.load(patient_object._ground_truth_filepaths[class_index])
         detection_ni = nib.load(patient_object._prediction_filepaths[class_index])
@@ -140,7 +146,7 @@ def compute_specific_metric_value(metric, gt, detection, tp, tn, fp, fn, gt_ni_h
             param12 = (fp * (fp + (2 * tn))) / (tn + fp)
             param21 = (fp * (fp + (2 * tp))) / (tp + fp)
             param22 = (fn * (fn + (2 * tn))) / (tn + fn)
-            metric_value = (1 / np.prod(gt_ni_header.get_fdata_shape()[0:3])) * min(param11 + param12, param21 + param22)
+            metric_value = (1 / np.prod(gt_ni_header.get_data_shape()[0:3])) * min(param11 + param12, param21 + param22)
         else:
             metric_value = math.inf
     elif metric == 'MI':
@@ -150,7 +156,7 @@ def compute_specific_metric_value(metric, gt, detection, tp, tn, fp, fn, gt_ni_h
         a = 0.5 * ((tp * (tp - 1)) + (fp * (fp - 1)) + (tn * (tn - 1)) + (fn * (fn - 1)))
         b = 0.5 * ((math.pow(tp + fn, 2) + math.pow(tn + fp, 2)) - (math.pow(tp, 2) + math.pow(tn, 2) + math.pow(fp, 2) + math.pow(fn, 2)))
         c = 0.5 * ((math.pow(tp + fp, 2) + math.pow(tn + fn, 2)) - (math.pow(tp, 2) + math.pow(tn, 2) + math.pow(fp, 2) + math.pow(fn, 2)))
-        d = np.prod(gt_ni_header.get_fdata_shape()[0:3]) * (np.prod(gt_ni_header.get_fdata_shape()[0:3]) - 1) / 2 - (a + b + c)
+        d = np.prod(gt_ni_header.get_data_shape()[0:3]) * (np.prod(gt_ni_header.get_data_shape()[0:3]) - 1) / 2 - (a + b + c)
         num = a + b
         den = a + b + c + d
         if den != 0:
@@ -160,7 +166,7 @@ def compute_specific_metric_value(metric, gt, detection, tp, tn, fp, fn, gt_ni_h
         a = 0.5 * ((tp * (tp - 1)) + (fp * (fp - 1)) + (tn * (tn - 1)) + (fn * (fn - 1)))
         b = 0.5 * ((math.pow(tp + fn, 2) + math.pow(tn + fp, 2)) - (math.pow(tp, 2) + math.pow(tn, 2) + math.pow(fp, 2) + math.pow(fn, 2)))
         c = 0.5 * ((math.pow(tp + fp, 2) + math.pow(tn + fn, 2)) - (math.pow(tp, 2) + math.pow(tn, 2) + math.pow(fp, 2) + math.pow(fn, 2)))
-        d = np.prod(gt_ni_header.get_fdata_shape()[0:3]) * (np.prod(gt_ni_header.get_fdata_shape()[0:3]) - 1) / 2 - (a + b + c)
+        d = np.prod(gt_ni_header.get_data_shape()[0:3]) * (np.prod(gt_ni_header.get_data_shape()[0:3]) - 1) / 2 - (a + b + c)
         num = 2 * (a * d - b * c)
         den = math.pow(c, 2) + math.pow(b, 2) + 2 * a * d + (a + d) * (c + b)
         if den != 0:
@@ -168,7 +174,7 @@ def compute_specific_metric_value(metric, gt, detection, tp, tn, fp, fn, gt_ni_h
     elif metric == 'VOI':
         fn_tp = fn + tp
         fp_tp = fp + tp
-        total = np.prod(gt_ni_header.get_fdata_shape()[0:3])
+        total = np.prod(gt_ni_header.get_data_shape()[0:3])
 
         if fn_tp == 0 or (fn_tp / total) == 1 or fp_tp == 0 or (fp_tp / total) == 1:
             metric_value = math.inf
@@ -220,29 +226,28 @@ def compute_specific_metric_value(metric, gt, detection, tp, tn, fp, fn, gt_ni_h
         den = math.sqrt((tp + fp) * (tp + fn) * (tn + fp) * (tn + fn))
         if den != 0:
             metric_value = num / den
-        # metric_value = matthews_corrcoef(gt.flatten(), detection.flatten())
     elif metric == 'CKS':
         metric_value = cohen_kappa_score(gt.flatten(), detection.flatten())
     elif metric == 'HD95':
         metric_value = math.inf
         if np.max(gt) == 1 and np.max(detection) == 1:  # Computation does not work if no binary object in the array
-            metric_value = -999 #hd95(detection, gt, voxelspacing=det_ni_header.get_zooms(), connectivity=1)
-    elif metric == 'ASSD':
-        metric_value = math.inf
-        if np.max(gt) == 1 and np.max(detection) == 1:  # Computation does not work if no binary object in the array
-            metric_value = -999 #assd(detection, gt, voxelspacing=det_ni_header.get_zooms(), connectivity=1)
-    elif metric == 'OASSD':
-        metric_value = math.inf
-        if np.max(gt) == 1 and np.max(detection) == 1:  # Computation does not work if no binary object in the array
-            metric_value = -999 #obj_assd(detection, gt, voxelspacing=det_ni_header.get_zooms(), connectivity=1)
+            metric_value = compute_hd95(detection, gt, voxelspacing=det_ni_header.get_zooms(), connectivity=1)
+    # elif metric == 'ASSD':
+    #     metric_value = math.inf
+    #     if np.max(gt) == 1 and np.max(detection) == 1:  # Computation does not work if no binary object in the array
+    #         metric_value = compute_assd(detection, gt, voxelspacing=det_ni_header.get_zooms(), connectivity=1)
+    # elif metric == 'OASSD':
+    #     metric_value = math.inf
+    #     if np.max(gt) == 1 and np.max(detection) == 1:  # Computation does not work if no binary object in the array
+    #         metric_value = compute_object_assd(detection, gt, voxelspacing=det_ni_header.get_zooms(), connectivity=1)
     elif metric == 'RAVD':
         metric_value = math.inf
         if np.max(gt) == 1 and np.max(detection) == 1:  # Computation does not work if no binary object in the array
-            metric_value = -999 #ravd(detection, gt)
+            metric_value = compute_ravd(detection, gt)
     elif metric == 'VC':
         metric_value = math.inf
         if np.max(gt) == 1 and np.max(detection) == 1:  # Computation does not work if no binary object in the array
-            metric_value, pval = -999 #volume_correlation(detection, gt)
+            metric_value, pval = compute_volume_correlation(detection, gt)
     elif metric == 'MahaD':
         metric_value = math.inf
         gt_n = np.count_nonzero(detection)
@@ -274,49 +279,60 @@ def compute_specific_metric_value(metric, gt, detection, tp, tn, fp, fn, gt_ni_h
 
         if probability_joint != 0:
             metric_value = probability_difference / (2. * probability_joint)
-
+    else:
+        logging.warning("Metric with name {} has not been implemented!".format(metric))
     return metric_value
 
 
-def compute_overall_metrics_correlation(folder, data=None, best_threshold=0.5, best_overlap=0.0):
+def compute_overall_metrics_correlation(input_folder, output_folder, data=None, class_name=None,
+                                        best_threshold=0.5, best_overlap=0.0, suffix=None):
     """
-    @TODO. DEPRECATED. Should be updated to match the multi-class possibility, and with non hard-coded metric names
 
-    :param folder:
-    :param metric_names:
+    :param input_folder:
+    :param output_folder:
+    :param class_name:
     :param data:
     :param best_threshold:
     :param best_overlap:
+    :param suffix
     :return:
     """
     results = None
     if data is None:
-        results_filename = os.path.join(folder, 'Validation', 'all_dice_scores.csv')
+        results_filename = os.path.join(input_folder, 'Validation', class_name + '_dice_scores.csv')
         results = pd.read_csv(results_filename)
     else:
         results = deepcopy(data)
 
     results.replace('inf', np.nan, inplace=True)
     optimal_results = results.loc[results['Threshold'] == best_threshold]
-    # results_for_matrix_df = optimal_results.drop(['Patient', 'Fold', 'Threshold', '#Det', 'Inst DICE', 'Inst Recall',
-    #                                               'Inst Precision', 'Largest foci Dice'], axis=1)
-    # results_for_matrix_df = results_for_matrix_df[['Dice', 'IOU', 'Jaccard', 'AUC', 'TPR', 'TNR', 'FPR', 'FNR', 'PPV',
-    #                                                'VS', 'VC', 'RAVD', 'GCE', 'MI', 'MCC', 'CKS', 'VOI', 'HD95',
-    #                                                'MahaD', 'ProbD','ASSD', 'ARI', 'OASSD', '#GT']]
-    results_for_matrix_df = optimal_results.drop(['Patient', 'Fold', 'Threshold', '#Det', 'Inst DICE', 'Inst Recall',
-                                                   'Inst Precision', 'Largest foci Dice', '#GT', 'FPR', 'FNR'], axis=1)
-    results_for_matrix_df = results_for_matrix_df[['Dice', 'TPR', 'TNR', 'PPV', 'IOU', 'GCE',
-                                                   'VS', 'RAVD', 'MI', 'VOI', 'CKS', 'AUC', 'VC', 'MCC', 'ProbD',
-                                                   'HD95', 'MahaD', 'ASSD', 'ARI', 'OASSD']]
+    results_for_matrix_df = optimal_results.drop(['Fold', 'Patient', 'Threshold'], axis=1)
     results_for_matrix_df = results_for_matrix_df.dropna()
     results_for_matrix_df = results_for_matrix_df.apply(pd.to_numeric)
     corr_matrix = results_for_matrix_df.corr()
     # print(corr_matrix.style.background_gradient(cmap='coolwarm').set_precision(2).render())
-    export_correlation_matrix_to_latex(folder, corr_matrix)
+    export_correlation_matrix_to_latex(output_folder, corr_matrix, suffix='_' + class_name + suffix)
 
 
-def export_correlation_matrix_to_latex(folder, matrix):
-    matrix_filename = os.path.join(folder, 'Validation', 'correlation_matrix.txt')
+def export_correlation_matrix_to_latex(output_folder, matrix, suffix=""):
+    """
+    Converts and saves the correlation matrix as a latex table
+    For the latex code to compile without errors, the following packages must be added at the top of the document:
+        usepackage[table]{xcolor}
+        usepackage{adjustbox}
+
+    ...
+    Attributes
+    ----------
+    output_folder: str
+        Destination folder where the latex table will be saved under correlation_matrix.txt
+    matrix: pd.DataFrame
+        Correlation matrix object as a pandas DataFrame
+    suffix: (optional) str
+        Name to append to the end of the destination file
+    """
+
+    matrix_filename = os.path.join(output_folder, 'correlation_matrix' + suffix + '.txt')
     pfile = open(matrix_filename, 'w')
 
     pfile.write('\\begin{table}[h]\n')
@@ -327,10 +343,14 @@ def export_correlation_matrix_to_latex(folder, matrix):
     pfile.write('\\toprule\n')
     header_line = '{}'
     for elem in matrix.axes[0].values:
+        if '#' in elem:
+            elem = elem.replace('#', 'Num ')
         header_line = header_line + ' & ' + elem
     pfile.write(header_line + '\\tabularnewline\n')
     for r in range(matrix.shape[0]):
         line = matrix.axes[1].values[r]
+        if '#' in line:
+            line = line.replace('#', 'Num ')
         for c in range(matrix.shape[1]):
             if matrix.values[r, c] == matrix.values[r, c]:
                 num_value = float(matrix.values[r, c])
