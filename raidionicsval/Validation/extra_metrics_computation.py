@@ -232,14 +232,14 @@ def compute_specific_metric_value(metric, gt, detection, tp, tn, fp, fn, gt_ni_h
         metric_value = math.inf
         if np.max(gt) == 1 and np.max(detection) == 1:  # Computation does not work if no binary object in the array
             metric_value = compute_hd95(detection, gt, voxelspacing=det_ni_header.get_zooms(), connectivity=1)
-    # elif metric == 'ASSD':
-    #     metric_value = math.inf
-    #     if np.max(gt) == 1 and np.max(detection) == 1:  # Computation does not work if no binary object in the array
-    #         metric_value = compute_assd(detection, gt, voxelspacing=det_ni_header.get_zooms(), connectivity=1)
-    # elif metric == 'OASSD':
-    #     metric_value = math.inf
-    #     if np.max(gt) == 1 and np.max(detection) == 1:  # Computation does not work if no binary object in the array
-    #         metric_value = compute_object_assd(detection, gt, voxelspacing=det_ni_header.get_zooms(), connectivity=1)
+    elif metric == 'ASSD':
+        metric_value = math.inf
+        if np.max(gt) == 1 and np.max(detection) == 1:  # Computation does not work if no binary object in the array
+            metric_value = compute_assd(detection, gt, voxel_spacing=det_ni_header.get_zooms())
+    elif metric == 'OASSD':
+        metric_value = math.inf
+        if np.max(gt) == 1 and np.max(detection) == 1:  # Computation does not work if no binary object in the array
+            metric_value = compute_object_assd(detection, gt, voxel_spacing=det_ni_header.get_zooms())
     elif metric == 'RAVD':
         metric_value = math.inf
         if np.max(gt) == 1 and np.max(detection) == 1:  # Computation does not work if no binary object in the array

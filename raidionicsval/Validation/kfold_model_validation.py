@@ -360,9 +360,8 @@ class ModelValidation:
         for c in classes:
             optimal_values = class_optimal[c]['All']
             for p in tqdm(self.patients_metrics):
-                if self.patients_metrics[p].extra_metrics is None:
-                    # Initializing the list which will hold the extra metrics
-                    self.patients_metrics[p].setup_empty_extra_metrics(self.metric_names)
+                # Initializing/completing the list which will hold the extra metrics
+                self.patients_metrics[p].setup_extra_metrics(self.metric_names)
                 pat_metrics = compute_patient_extra_metrics(self.patients_metrics[p], classes.index(c), optimal_values[1],
                                                             SharedResources.getInstance().validation_metric_names)
                 self.patients_metrics[p].set_optimal_class_extra_metrics(classes.index(c), optimal_values[1], pat_metrics)

@@ -3,7 +3,7 @@ import traceback
 import numpy as np
 from typing import Tuple
 from scipy.stats import pearsonr
-from scipy.ndimage import _ni_support, label, find_objects
+from scipy.ndimage import _ni_support, label, find_objects, distance_transform_edt
 from scipy.ndimage.morphology import distance_transform_edt, binary_erosion, generate_binary_structure
 
 """
@@ -43,16 +43,96 @@ def compute_hd95(reference, result, voxelspacing=None, connectivity=1):
     return hd95
 
 
-def compute_assd(result, reference, voxelspacing=None, connectivity=1):
-    assd = np.mean((__surface_distances(result, reference, voxelspacing, connectivity),
-                    __surface_distances(reference, result, voxelspacing, connectivity)))
-    return assd
+def compute_assd(volume1, volume2, voxel_spacing=(1, 1, 1)):
+    """
+    Compute the average symmetric surface distance between two 3D volumes.
+
+    Parameters:
+    - volume1: First 3D volume (binary mask).
+    - volume2: Second 3D volume (binary mask).
+    - voxel_spacing: Tuple representing the spacing between voxels in each dimension (default is (1, 1, 1)).
+
+    Returns:
+    - Average symmetric surface distance.
+    """
+    # Ensure volumes are binary masks
+    volume1 = np.asarray(volume1).astype(bool)
+    volume2 = np.asarray(volume2).astype(bool)
+
+    # Compute the distance transform for both volumes
+    dist_transform1 = distance_transform_edt(volume1, sampling=voxel_spacing)
+    dist_transform2 = distance_transform_edt(volume2, sampling=voxel_spacing)
+
+    # Compute the surface distances
+    surface_distances_1_to_2 = dist_transform1[volume2]
+    surface_distances_2_to_1 = dist_transform2[volume1]
+
+    # Combine distances from both volumes
+    all_surface_distances = np.concatenate([surface_distances_1_to_2, surface_distances_2_to_1])
+
+    # Compute the average symmetric surface distance
+    average_symmetric_surface_distance = np.mean(all_surface_distances)
+
+    return average_symmetric_surface_distance
 
 
-def compute_object_assd(result, reference, voxelspacing=None, connectivity=1):
-    assd = np.mean((__obj_surface_distances(result, reference, voxelspacing, connectivity),
-                    __obj_surface_distances(reference, result, voxelspacing, connectivity)))
-    return assd
+def compute_object_assd(volume1, volume2, voxel_spacing=(1, 1, 1)):
+    """
+    Compute Object-wise Average Symmetric Surface Distance (oASD) between two 3D volumes.
+
+    Parameters:
+    - volume1: Binary mask of the first volume (numpy array).
+    - volume2: Binary mask of the second volume (numpy array).
+    - voxel_spacing: Tuple representing the voxel spacing in each dimension (e.g., (1.0, 1.0, 1.0)).
+
+    Returns:
+    - oASD: Object-wise Average Symmetric Surface Distance.
+    """
+
+    def surface_distances(mask1, mask2, voxel_spacing):
+        """
+        Compute surface distances between two binary masks.
+        """
+        distances = distance_transform_edt(mask1, sampling=voxel_spacing) * mask2
+        surface_distances = distances[mask2 == 1]
+        return surface_distances
+
+    def compute_ASD(mask1, mask2, voxel_spacing):
+        """
+        Compute Average Symmetric Surface Distance (ASD) between two binary masks.
+        """
+        distances1 = surface_distances(mask1, mask2, voxel_spacing)
+        distances2 = surface_distances(mask2, mask1, voxel_spacing)
+        distances = np.concatenate([distances1, distances2])
+        ASD = np.mean(distances)
+        return ASD
+
+    # Ensure input volumes have the same shape
+    if volume1.shape != volume2.shape:
+        raise ValueError("Input volumes must have the same shape.")
+
+    # Convert volumes to binary masks
+    mask1 = np.asarray(volume1, dtype=bool)
+    mask2 = np.asarray(volume2, dtype=bool)
+
+    # Compute ASD for each object in the volumes
+    unique_objects = np.unique(np.concatenate([mask1, mask2]))
+    oASD_values = []
+
+    for obj_label in unique_objects:
+        if obj_label == 0:  # Skip background
+            continue
+
+        obj1 = (mask1 == obj_label).astype(int)
+        obj2 = (mask2 == obj_label).astype(int)
+
+        ASD_obj = compute_ASD(obj1, obj2, voxel_spacing)
+        oASD_values.append(ASD_obj)
+
+    # Compute oASD as the average of individual ASD values
+    oASD = np.mean(oASD_values)
+
+    return oASD
 
 
 def __surface_distances(result, reference, voxelspacing=None, connectivity=1):
@@ -88,89 +168,3 @@ def __surface_distances(result, reference, voxelspacing=None, connectivity=1):
     sds = dt[result_border]
 
     return sds
-
-
-def __obj_surface_distances(result, reference, voxelspacing=None, connectivity=1):
-    """
-    The distances between the surface voxel between all corresponding binary
-    objects in result and reference. Correspondence is defined as unique and at least one voxel overlap.
-    """
-    sds = list()
-    labelmap1, labelmap2, _a, _b, mapping = __distinct_binary_object_correspondences(result, reference, connectivity)
-    slicers1 = find_objects(labelmap1)
-    slicers2 = find_objects(labelmap2)
-    for lid2, lid1 in list(mapping.items()):
-        window = __combine_windows(slicers1[lid1 - 1], slicers2[lid2 - 1])
-        object1 = labelmap1[window] == lid1
-        object2 = labelmap2[window] == lid2
-        sds.extend(__surface_distances(object1, object2, voxelspacing, connectivity))
-    return sds
-
-
-def __distinct_binary_object_correspondences(reference, result, connectivity=1):
-    """
-    Determines all distinct (where connectivity is defined by the connectivity parameter
-    passed to scipy's `generate_binary_structure`) binary objects in both of the input
-    parameters and returns a 1to1 mapping from the labelled objects in reference to the
-    corresponding (whereas a one-voxel overlap suffices for correspondence) objects in
-    result.
-
-    All stems from the problem, that the relationship is non-surjective many-to-many.
-
-    @return (labelmap1, labelmap2, n_lables1, n_labels2, labelmapping2to1)
-    """
-    result = np.atleast_1d(result.astype(np.bool_))
-    reference = np.atleast_1d(reference.astype(np.bool_))
-
-    # binary structure
-    footprint = generate_binary_structure(result.ndim, connectivity)
-
-    # label distinct binary objects
-    labelmap1, n_obj_result = label(result, footprint)
-    labelmap2, n_obj_reference = label(reference, footprint)
-
-    # find all overlaps from labelmap2 to labelmap1; collect one-to-one relationships and store all one-two-many for later processing
-    slicers = find_objects(labelmap2)  # get windows of labelled objects
-    mapping = dict()  # mappings from labels in labelmap2 to corresponding object labels in labelmap1
-    used_labels = set()  # set to collect all already used labels from labelmap2
-    one_to_many = list()  # list to collect all one-to-many mappings
-    for l1id, slicer in enumerate(slicers):  # iterate over object in labelmap2 and their windows
-        l1id += 1  # labelled objects have ids sarting from 1
-        bobj = (l1id) == labelmap2[slicer]  # find binary object corresponding to the label1 id in the segmentation
-        l2ids = np.unique(labelmap1[slicer][
-                                 bobj])  # extract all unique object identifiers at the corresponding positions in the reference (i.e. the mapping)
-        l2ids = l2ids[0 != l2ids]  # remove background identifiers (=0)
-        if 1 == len(
-                l2ids):  # one-to-one mapping: if target label not already used, add to final list of object-to-object mappings and mark target label as used
-            l2id = l2ids[0]
-            if not l2id in used_labels:
-                mapping[l1id] = l2id
-                used_labels.add(l2id)
-        elif 1 < len(l2ids):  # one-to-many mapping: store relationship for later processing
-            one_to_many.append((l1id, set(l2ids)))
-
-    # process one-to-many mappings, always choosing the one with the least labelmap2 correspondences first
-    while True:
-        one_to_many = [(l1id, l2ids - used_labels) for l1id, l2ids in
-                       one_to_many]  # remove already used ids from all sets
-        one_to_many = [x for x in one_to_many if x[1]]  # remove empty sets
-        one_to_many = sorted(one_to_many, key=lambda x: len(x[1]))  # sort by set length
-        if 0 == len(one_to_many):
-            break
-        l2id = one_to_many[0][1].pop()  # select an arbitrary target label id from the shortest set
-        mapping[one_to_many[0][0]] = l2id  # add to one-to-one mappings
-        used_labels.add(l2id)  # mark target label as used
-        one_to_many = one_to_many[1:]  # delete the processed set from all sets
-
-    return labelmap1, labelmap2, n_obj_result, n_obj_reference, mapping
-
-
-def __combine_windows(w1, w2):
-    """
-    Joins two windows (defined by tuple of slices) such that their maximum
-    combined extend is covered by the new returned window.
-    """
-    res = []
-    for s1, s2 in zip(w1, w2):
-        res.append(slice(min(s1.start, s2.start), max(s1.stop, s2.stop)))
-    return tuple(res)

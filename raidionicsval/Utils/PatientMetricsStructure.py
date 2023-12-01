@@ -169,17 +169,34 @@ class PatientMetrics:
         class_name = self._class_names[class_index]
         self._class_metrics[class_name].set_extra_metrics(optimal_threshold, metrics_values)
 
-    def setup_empty_extra_metrics(self, metric_names):
-        thr_list = self._class_metrics[self.class_names[0]].get_probability_thresholds_list()
-        self._extra_metrics = []
-        for thr in thr_list:
-            curr_thr = [thr]
-            for m in metric_names:
-                curr_thr.append([m, float('nan')])
-            self._extra_metrics.append(curr_thr)
+    def setup_extra_metrics(self, metric_names):
+        """
+        Adjust the size of the extra metrics, if new metrics have been requested to be computed in the config file.
+        N-B: For already computed metrics, even if removed from the list in the config file, a removal from the
+        container will not be performed and results will be kept.
 
+
+        """
+        thr_list = self._class_metrics[self.class_names[0]].get_probability_thresholds_list()
+        if self._extra_metrics is None:
+            self._extra_metrics = []
+            for thr in thr_list:
+                curr_thr = [thr]
+                for m in metric_names:
+                    curr_thr.append([m, float('nan')])
+                self._extra_metrics.append(curr_thr)
+        else:
+            existing_metrics = [x[0] for x in self._extra_metrics[0][1:]]
+            matching_metrics_states = all(element in existing_metrics for element in metric_names)
+            if not matching_metrics_states:
+                for m in metric_names:
+                    if m not in existing_metrics:
+                        for th in range(len(self._extra_metrics)):
+                            self._extra_metrics[th].append([m, float('nan')])
+
+        # Performs the same operation on the extra metrics for each class
         for cl in self._class_names:
-            self._class_metrics[cl].setup_empty_extra_metrics(metric_names)
+            self._class_metrics[cl].setup_extra_metrics(metric_names)
 
 
 class ClassMetrics:
@@ -262,7 +279,7 @@ class ClassMetrics:
             patientwise_values = list(thr_results[7:10])
             objectwise_values = list(thr_results[10:SharedResources.getInstance().upper_default_metrics_index])
             extra_values = list(thr_results[SharedResources.getInstance().upper_default_metrics_index:])
-            [extra_values.append(None) for x in range(len(list(thr_results[SharedResources.getInstance().upper_default_metrics_index:])), len(SharedResources.getInstance().validation_metric_names))]
+            [extra_values.append(float('nan')) for x in range(len(list(thr_results[SharedResources.getInstance().upper_default_metrics_index:])), len(SharedResources.getInstance().validation_metric_names))]
             extra_values_description = list(scores_df.columns[SharedResources.getInstance().upper_default_metrics_index:])
             [extra_values_description.append(x) for x in SharedResources.getInstance().validation_metric_names if x not in extra_values_description]
             self._pixelwise_metrics.append([thr_val] + pixelwise_values)
@@ -314,11 +331,23 @@ class ClassMetrics:
         res = [x[0] for x in self.pixelwise_metrics]
         return res
 
-    def setup_empty_extra_metrics(self, metric_names):
+    def setup_extra_metrics(self, metric_names):
+        """
+
+        """
         thr_list = self.get_probability_thresholds_list()
-        self._extra_metrics = []
-        for thr in thr_list:
-            curr_thr = [thr]
-            for m in metric_names:
-                curr_thr.append([m, float('nan')])
-            self._extra_metrics.append(curr_thr)
+        if self._extra_metrics is None:
+            self._extra_metrics = []
+            for thr in thr_list:
+                curr_thr = [thr]
+                for m in metric_names:
+                    curr_thr.append([m, float('nan')])
+                self._extra_metrics.append(curr_thr)
+        else:
+            existing_metrics = [x[0] for x in self._extra_metrics[0][1:]]
+            matching_metrics_states = all(element in existing_metrics for element in metric_names)
+            if not matching_metrics_states:
+                for m in metric_names:
+                    if m not in existing_metrics:
+                        for th in range(len(self._extra_metrics)):
+                            self._extra_metrics[th].append([m, float('nan')])
