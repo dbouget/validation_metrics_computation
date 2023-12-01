@@ -74,6 +74,7 @@ def compute_binned_metric_over_metric_boxplot(folder, data, metric1, metric2, cr
         sns_plot = sns.boxplot(x=data[metric1], y=binned)
         sns_plot.figure.savefig(os.path.join(folder, 'boxplot_' + metric1 + '_over_' + metric2 + '_normal_bins' + postfix + '.png'),
                                 dpi=300, bbox_inches="tight")
+        plt.close(sns_plot.figure)
 
         binned, edges = pd.qcut(data[metric2], q=nb_bins, retbins=True, precision=2, duplicates='drop')
         nb_bins = len(edges) - 1
@@ -125,6 +126,7 @@ def compute_binned_metric_over_metric_boxplot(folder, data, metric1, metric2, cr
         sns_plot.figure.savefig(os.path.join(folder, 'boxplot_' + metric1 + '_over_' + metric2 + '_equal_bins' + postfix + '.png'),
                                 dpi=300, bbox_inches="tight")
         # plt.show()
+        plt.close(sns_plot.figure)
 
         print('\n\nTotal selected: {}, total to find: {}. Recall: {:.4f}'.format(total_selected, total_to_find,
                                                                                  total_selected / total_to_find))

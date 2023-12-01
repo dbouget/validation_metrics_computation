@@ -144,6 +144,10 @@ def best_segmentation_probability_threshold_analysis_inner(folder, detection_ove
     fig4.savefig(os.path.join(folder, 'Validation', 'OptimalSearch', 'metrics_scatter_over_threshold.png'), dpi=300,
                  bbox_inches="tight")
 
+    plt.close(fig)
+    plt.close(fig2)
+    plt.close(fig3)
+    plt.close(fig4)
     return max_overlap, max_threshold
 
 

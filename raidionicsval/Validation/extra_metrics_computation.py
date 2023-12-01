@@ -310,8 +310,26 @@ def compute_overall_metrics_correlation(input_folder, output_folder, data=None, 
     results_for_matrix_df = results_for_matrix_df.dropna()
     results_for_matrix_df = results_for_matrix_df.apply(pd.to_numeric)
     corr_matrix = results_for_matrix_df.corr()
-    # print(corr_matrix.style.background_gradient(cmap='coolwarm').set_precision(2).render())
     export_correlation_matrix_to_latex(output_folder, corr_matrix, suffix='_' + class_name + suffix)
+    export_correlation_matrix_to_html(output_folder, corr_matrix, suffix='_' + class_name + suffix)
+
+
+def export_correlation_matrix_to_html(output_folder, matrix, suffix=""):
+    """
+    Converts and saves the correlation matrix as an html table
+
+    ...
+    Attributes
+    ----------
+    output_folder: str
+        Destination folder where the latex table will be saved under correlation_matrix.html
+    matrix: pd.DataFrame
+        Correlation matrix object as a pandas DataFrame
+    suffix: (optional) str
+        Name to append to the end of the destination file
+    """
+    matrix_filename = os.path.join(output_folder, 'correlation_matrix' + suffix + '.html')
+    matrix.style.background_gradient(cmap='coolwarm').to_html(matrix_filename)
 
 
 def export_correlation_matrix_to_latex(output_folder, matrix, suffix=""):

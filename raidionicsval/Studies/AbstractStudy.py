@@ -271,6 +271,9 @@ class AbstractStudy(ABC):
             for cat in optimal_results_per_cutoff.keys():
                 # @TODO. Must include a new fold average specific for the studies, with mean and std values as input,
                 # which is different from the inputs to the computation in the validation part....
+                if len(optimal_results_per_cutoff[cat]) == 0:
+                    print("Skipping analysis for {} {}. Collected pd.DataFrame is empty.\n".format(metric2, cat))
+                    return
                 self.compute_fold_average(self.output_folder, data=optimal_results_per_cutoff[cat],
                                           class_optimal=self.classes_optimal, metrics=self.metric_names,
                                           suffix=suffix + '_' + metric2 + '_' + cat,
