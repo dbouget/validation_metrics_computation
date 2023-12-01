@@ -3,7 +3,7 @@
 [![License](https://img.shields.io/badge/License-BSD%202--Clause-orange.svg)](https://opensource.org/licenses/BSD-2-Clause)
 [![](https://img.shields.io/badge/python-3.8|3.9|3.10|3.11|3.12-blue.svg)](https://www.python.org/downloads/)
 [![Paper](https://zenodo.org/badge/DOI/10.3389/fneur.2022.932219.svg)](https://www.frontiersin.org/articles/10.3389/fneur.2022.932219/full)
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/gist/dbouget/4ebb25b139383e8ac87d1ef910098184/compute_validation_example.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/gist/dbouget/7560fe410db03e384a45ddc77bbe9a57/compute_validation_example.ipynb)
 
 The code corresponds to the Raidionics backend for running the k-fold cross-validation and metrics computation.
 The module can either be used as a Python library, as CLI, or as Docker container.
@@ -14,7 +14,10 @@ The module can either be used as a Python library, as CLI, or as Docker containe
 pip install git+https://github.com/dbouget/validation_metrics_computation.git
 ```
 
-## [Continuous integration](https://github.com/dbouget/validation_metrics_computation#continuous-integration)
+## [Continuous integration and notebooks](https://github.com/dbouget/validation_metrics_computation#continuous-integration-and-notebooks)
+
+<div style="display: flex;">
+  <div style="flex: 1; margin-right: 20px;">
 
 | Operating System | Status                                                                                                             |
 |------------------|--------------------------------------------------------------------------------------------------------------------|
@@ -22,8 +25,19 @@ pip install git+https://github.com/dbouget/validation_metrics_computation.git
 | **Ubuntu**       | [![Build macOS](https://github.com/dbouget/validation_metrics_computation/actions/workflows/build_ubuntu.yml/badge.svg)](https://github.com/dbouget/validation_metrics_computation/actions/workflows/build_ubuntu.yml) |
 | **macOS**        | [![Build macOS](https://github.com/dbouget/validation_metrics_computation/actions/workflows/build_macos.yml/badge.svg)](https://github.com/dbouget/validation_metrics_computation/actions/workflows/build_macos.yml) |
 | **macOS ARM**    | [![Build macOS](https://github.com/dbouget/validation_metrics_computation/actions/workflows/build_macos_arm.yml/badge.svg)](https://github.com/dbouget/validation_metrics_computation/actions/workflows/build_macos_arm.yml) |
+  </div>
+  <div style="flex: 1;">
+
+| Notebook       | Colab                                                | Github                                                                                                                   |
+|----------------|-------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------|
+| **Validation** | <a href="https://colab.research.google.com/gist/dbouget/7560fe410db03e384a45ddc77bbe9a57/compute_validation_example.ipynb" target="_parent"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a> | [![View on GitHub](https://img.shields.io/badge/View%20on%20GitHub-blue?logo=github)](https://github.com/dbouget/validation_metrics_computation/blob/master/notebooks/compute_validation_example.ipynb) |
+| **Study**      | <a href="https://colab.research.google.com/gist/dbouget/8a0e093284688e993244930bd36fd367/compute_study_example.ipynb" target="_parent"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a>   | [![View on GitHub](https://img.shields.io/badge/View%20on%20GitHub-blue?logo=github)](https://github.com/dbouget/validation_metrics_computation/blob/master/notebooks/compute_study_example.ipynb)      |
+
+  </div>
+</div>
 
 ## [How to cite](https://github.com/dbouget/validation_metrics_computation#how-to-cite)
+
 If you are using Raidionics in your research, please cite the following references.
 
 For segmentation validation and metrics computation:
@@ -57,9 +71,6 @@ The final software including updated performance metrics for preoperative tumors
 ## [How to use](https://github.com/dbouget/validation_metrics_computation#how-to-use)
 In the following, a description of how the data should be organized on disk is provided, and a test dataset can
 be downloaded [here](https://github.com/raidionics/Raidionics-models/releases/download/1.2.0/Samples-RaidionicsValLib_UnitTest1.zip).
-
-A detailed interactive demo on how to load and work with the data can be seen on CoLab, simply click the CoLab badge <a href="https://colab.research.google.com/gist/dbouget/4ebb25b139383e8ac87d1ef910098184/compute_validation_example.ipynb" target="_parent"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a> to see the notebook.
-Alternatively click [here](https://github.com/dbouget/validation_metrics_computation/blob/master/notebooks/compute_validation_example.ipynb) to see it on GitHub.
 
 <details>
 <summary>
