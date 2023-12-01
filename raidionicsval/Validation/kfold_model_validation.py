@@ -105,7 +105,7 @@ class ModelValidation:
 
         results_per_folds = []
         for fold in range(0, self.fold_number):
-            print('\nProcessing fold {}/{}.\n'.format(fold, self.fold_number - 1))
+            print('\nProcessing fold {}/{}.\n'.format(fold + 1, self.fold_number))
             if self.split_way == 'two-way':
                 test_set, _ = get_fold_from_file(filename=cross_validation_description_file, fold_number=fold)
             else:
