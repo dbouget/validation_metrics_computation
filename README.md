@@ -1,9 +1,9 @@
 # Segmentation validation and metrics computation backend for Raidionics related publications
 
 [![License](https://img.shields.io/badge/License-BSD%202--Clause-orange.svg)](https://opensource.org/licenses/BSD-2-Clause)
-[![](https://img.shields.io/badge/python-3.8|3.9|3.10|3.11|(3.12)-blue.svg)](https://www.python.org/downloads/)
+[![](https://img.shields.io/badge/python-3.8|3.9|3.10|3.11|3.12-blue.svg)](https://www.python.org/downloads/)
 [![Paper](https://zenodo.org/badge/DOI/10.3389/fneur.2022.932219.svg)](https://www.frontiersin.org/articles/10.3389/fneur.2022.932219/full)
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/18slIzthGjHGjG0qSEN71fN5gy6sOpoYg?usp=sharing)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/gist/andreped/15ffb78c4bcf2b903a4794f06174a19c/compute_validation_example.ipynb)
 
 The code corresponds to the Raidionics backend for running the k-fold cross-validation and metrics computation.
 The module can either be used as a Python library, as CLI, or as Docker container.
@@ -14,14 +14,14 @@ The module can either be used as a Python library, as CLI, or as Docker containe
 pip install git+https://github.com/dbouget/validation_metrics_computation.git
 ```
 
-## [Continuous integration](https://github.com/dbouget/validation_metrics_computation#continuous_integration)
+## [Continuous integration](https://github.com/dbouget/validation_metrics_computation#continuous-integration)
 
 | Operating System | Status                                                                                                             |
 |------------------|--------------------------------------------------------------------------------------------------------------------|
-| **Windows**      | ![CI](https://github.com/dbouget/validation_metrics_computation/workflows/Build%20Windows/badge.svg?branch=master) |
-| **Ubuntu**       | ![CI](https://github.com/dbouget/validation_metrics_computation/workflows/Build%20Ubuntu/badge.svg?branch=master)             |
-| **macOS**        | ![CI](https://github.com/dbouget/validation_metrics_computation/workflows/Build%20macOS/badge.svg?branch=master)              |
-| **macOS ARM**    | ![CI](https://github.com/dbouget/validation_metrics_computation/workflows/Build%20macOS%20ARM/badge.svg?branch=master)        |
+| **Windows**      | [![Build macOS](https://github.com/dbouget/validation_metrics_computation/actions/workflows/build_windows.yml/badge.svg)](https://github.com/dbouget/validation_metrics_computation/actions/workflows/build_windows.yml) |
+| **Ubuntu**       | [![Build macOS](https://github.com/dbouget/validation_metrics_computation/actions/workflows/build_ubuntu.yml/badge.svg)](https://github.com/dbouget/validation_metrics_computation/actions/workflows/build_ubuntu.yml) |
+| **macOS**        | [![Build macOS](https://github.com/dbouget/validation_metrics_computation/actions/workflows/build_macos.yml/badge.svg)](https://github.com/dbouget/validation_metrics_computation/actions/workflows/build_macos.yml) |
+| **macOS ARM**    | [![Build macOS](https://github.com/dbouget/validation_metrics_computation/actions/workflows/build_macos_arm.yml/badge.svg)](https://github.com/dbouget/validation_metrics_computation/actions/workflows/build_macos_arm.yml) |
 
 ## [How to cite](https://github.com/dbouget/validation_metrics_computation#how-to-cite)
 If you are using Raidionics in your research, please cite the following references.
