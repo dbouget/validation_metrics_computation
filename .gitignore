@@ -20,3 +20,4 @@ numpy
 *.vscode
 /home
 /Atlases
+/notebooks
