@@ -8,13 +8,13 @@
 The code corresponds to the Raidionics backend for running the k-fold cross-validation and metrics computation.
 The module can either be used as a Python library, as CLI, or as Docker container.
 
-## [Installation](https://github.com/dbouget/validation_metrics_computation/installation)
+## [Installation](https://github.com/dbouget/validation_metrics_computation#installation)
 
 ```
 pip install git+https://github.com/dbouget/validation_metrics_computation.git
 ```
 
-## [Continuous integration](https://github.com/dbouget/validation_metrics_computation/continuous-integration)
+## [Continuous integration](https://github.com/dbouget/validation_metrics_computation#continuous_integration)
 
 | Operating System | Status                                                                                                             |
 |------------------|--------------------------------------------------------------------------------------------------------------------|
