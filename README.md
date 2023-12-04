@@ -75,7 +75,7 @@ be downloaded [here](https://github.com/raidionics/Raidionics-models/releases/do
 <details>
 <summary>
 
-### 1. Folder and data structures and naming conventions
+### [1. Folder and data structures and naming conventions](https://github.com/dbouget/validation_metrics_computation#1-folder-and-data-structures-and-naming-conventions)
 </summary>
 
 Two main structure types are supported, without or without following an index-based naming convention.
@@ -85,7 +85,7 @@ anything should work. The folders named _index0_ and _index1_ could be renamed t
 The metrics and overall validation can be computed for multiple segmentation classes at the same time, granted that
 unique and name-matching sets of files (i.e., ground truth and prediction files) are provided.
 
-#### 1.1 Original data folder structure
+#### [1.1 Original data folder structure](https://github.com/dbouget/validation_metrics_computation#11-original-data-folder-structure)
 The main data directory containing the original 3D volumes and corresponding manual annotations is expected
 to resemble the following structure using an index-based naming convention:
 
@@ -121,7 +121,7 @@ to resemble the following structure when **not** using an index-based naming con
         │   ├── Pat100_MRI_label_tumor.nii.gz
         │   └── Pat100_MRI_label_other.nii.gz
 
-#### 1.2 Inference results folder structure
+#### [1.2 Inference results folder structure](https://github.com/dbouget/validation_metrics_computation#12-inference-results-folder-structure)
 Predictions results are expected to be stored inside a _predictions/_ sub-folder, the outer-most sub-folder 
 naming convention inside the folder are the fold numbers.
 The inference results should be grouped inside what will become the validation folder, resembling the following
@@ -164,7 +164,7 @@ structure when **not** using an index-based naming convention.
             │   │   ├── Pat150_MRI-pred_tumor.nii.gz
             │   │   └── Pat150_MRI-pred_other.nii.gz  
 
-#### 1.3 Folds file
+#### [1.3 Folds file](https://github.com/dbouget/validation_metrics_computation#13-folds-file)
 The file with patients' distribution within each fold used for training should list
 the content of the validation and test sets iteratively.  
 The file should be called __cross\_validation\_folds.txt__ and placed in the validation
@@ -191,7 +191,7 @@ An example of its content is given below when **not** using an index-based namin
 <details>
 <summary>
 
-### 2. Installation
+### [2. Installation](https://github.com/dbouget/validation_metrics_computation#2-installation)
 </summary>
 Create a virtual environment using at least Python 3.8, and install all dependencies from
 the requirements.txt file.
@@ -218,7 +218,7 @@ found in _/Utils/resources.py_.
 <details>
 <summary>
 
-### 3. Process
+### [3. Process](https://github.com/dbouget/validation_metrics_computation#3-process)
 </summary>
 To run, you need to supply the configuration file as parameter.
 
