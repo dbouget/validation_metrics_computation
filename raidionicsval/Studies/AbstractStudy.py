@@ -293,15 +293,18 @@ class AbstractStudy(ABC):
                 return
 
             optimal_results_per_cutoff = {}
-            for c, cutoff in enumerate(metric2_cutoffs):
-                if c == 0:
-                    cat_optimal_results = total_optimal_results.loc[total_optimal_results[metric2] <= cutoff]
-                    optimal_results_per_cutoff['<=' + str(cutoff)] = cat_optimal_results
-                else:
-                    cat_optimal_results = total_optimal_results.loc[metric2_cutoffs[c-1] < total_optimal_results[metric2] <= cutoff]
-                    optimal_results_per_cutoff[']' + str(metric2_cutoffs[c-1]) + ',' + str(cutoff) + ']'] = cat_optimal_results
-            cat_optimal_results = total_optimal_results.loc[total_optimal_results[metric2] > metric2_cutoffs[-1]]
-            optimal_results_per_cutoff['>' + str(metric2_cutoffs[-1])] = cat_optimal_results
+            if metric2_cutoffs is None or len(metric2_cutoffs) == 0:
+                optimal_results_per_cutoff['All'] = total_optimal_results
+            else:
+                for c, cutoff in enumerate(metric2_cutoffs):
+                    if c == 0:
+                        cat_optimal_results = total_optimal_results.loc[total_optimal_results[metric2] <= cutoff]
+                        optimal_results_per_cutoff['<=' + str(cutoff)] = cat_optimal_results
+                    else:
+                        cat_optimal_results = total_optimal_results.loc[metric2_cutoffs[c-1] < total_optimal_results[metric2] <= cutoff]
+                        optimal_results_per_cutoff[']' + str(metric2_cutoffs[c-1]) + ',' + str(cutoff) + ']'] = cat_optimal_results
+                cat_optimal_results = total_optimal_results.loc[total_optimal_results[metric2] > metric2_cutoffs[-1]]
+                optimal_results_per_cutoff['>' + str(metric2_cutoffs[-1])] = cat_optimal_results
 
             for cat in optimal_results_per_cutoff.keys():
                 # @TODO. Must include a new fold average specific for the studies, with mean and std values as input,
