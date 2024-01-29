@@ -45,6 +45,8 @@ class SharedResources:
         self.studies_task = ''
         self.studies_extra_parameters_filename = ''
         self.studies_class_names = []
+        self.studies_selections_dense = []
+        self.studies_selections_categorical = []
 
         self.validation_input_folder = ''
         self.validation_output_folder = ''
@@ -128,6 +130,14 @@ class SharedResources:
             if self.config['Studies']['class_names'].split('#')[0].strip() != '':
                 self.studies_class_names = [x.strip() for x in
                                             self.config['Studies']['class_names'].split('#')[0].strip().split(',')]
+
+        if self.config.has_option('Studies', 'selections_dense'):
+            if self.config['Studies']['selections_dense'].split('#')[0].strip() != '':
+                self.studies_selections_dense = [x.strip() for x in self.config['Studies']['selections_dense'].split('#')[0].strip().split('\\')]
+
+        if self.config.has_option('Studies', 'selections_categorical'):
+            if self.config['Studies']['selections_categorical'].split('#')[0].strip() != '':
+                self.studies_selections_categorical = [x.strip() for x in self.config['Studies']['selections_categorical'].split('#')[0].strip().split('\\')]
 
     def __parse_validation_parameters(self):
         """
