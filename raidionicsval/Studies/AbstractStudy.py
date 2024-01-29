@@ -92,6 +92,7 @@ class AbstractStudy(ABC):
             self.__compute_dice_confidence_intervals(data=results_df, class_name=class_name, category=category)
             self.__compute_results_metric_over_metric(data=results_df, class_name=class_name, metric1='PiW Dice',
                                                       metric2='GT volume (ml)', category=category, suffix='_')
+            self.__compute_agreement_blant_altman(data=results_df, class_name=class_name, category=category)
         except Exception as e:
             print('{}'.format(traceback.format_exc()))
 
@@ -153,6 +154,36 @@ class AbstractStudy(ABC):
                 print('{}'.format(traceback.format_exc()))
         else:
             print('Confidence intervals can only be computed with a Python version > 3.7.0, current version is {}.\n'.format(str(sys.version_info[0]) + '.' + str(sys.version_info[1]) + '.' + str(sys.version_info[2])))
+
+    def __compute_agreement_blant_altman(self, class_name: str, data=None, category: str = 'All', suffix=''):
+        """
+
+        :param class_name:
+        :param data:
+        :param category:
+        :param suffix:
+        :return:
+        """
+        from raidionicsval.Plotting.agreement_plot import compute_agreement_plot
+        try:
+            filename_extra = '' if category == 'All' else '_tp'
+            if data is None:
+                results_filename = os.path.join(self.input_folder, 'Validation', class_name + '_dice_scores.csv')
+                results = pd.read_csv(results_filename)
+                results.replace('inf', np.nan, inplace=True)
+            else:
+                results = deepcopy(data)
+            dice_thresholds = [np.round(x, 2) for x in list(np.unique(results['Threshold'].values))]
+            nb_tresholds = len(dice_thresholds)
+            optimal_threshold = self.classes_optimal[class_name]['All'][1] if category == 'All' else self.classes_optimal[class_name]['True Positive'][1]
+            optimal_threshold_index = dice_thresholds.index(optimal_threshold)
+            gt_volumes = results['GT volume (ml)'].values[optimal_threshold_index::nb_tresholds]
+            det_volumes = results['Detection volume (ml)'].values[optimal_threshold_index::nb_tresholds]
+            compute_agreement_plot(folder=self.output_folder, array1=gt_volumes, array2=det_volumes,
+                                              postfix='_overall' + suffix + '_' + class_name + filename_extra)
+        except Exception as e:
+            print('{}'.format(traceback.format_exc()))
+
 
     def __compute_results_metric_over_metric(self, class_name: str, data=None, metric1='Dice', metric2='Volume',
                                              category: str = 'All', suffix=''):
@@ -225,14 +256,15 @@ class AbstractStudy(ABC):
                                                        metric2='Volume', metric2_cutoffs=None, category='All',
                                                        suffix='') -> None:
         """
+        Performs the computation and plotting of a dense metric against another dense metric.
 
-        :param class_name:
-        :param data:
-        :param metric1:
-        :param metric2:
+        :param class_name: current class of the segmentation object of interest
+        :param data: subset of data to only consider, i.e., a pd.DataFrame already reduced
+        :param metric1: Name of the first metric (dense), as appearing in the class_dice_scores.csv file
+        :param metric2: Name of the second metric (dense), as appearing in either the class_dice_scores.csv file or the studies_extra_parameters_filename
         :param metric2_cutoffs:
-        :param category:
-        :param suffix:
+        :param category: subset to consider from [All, True Positive]
+        :param suffix: text to be appended to the corresponding result filenames
         :return: Nothing is returned, and the corresponding results are saved on disk.
         """
         try:
@@ -274,6 +306,78 @@ class AbstractStudy(ABC):
                 if len(optimal_results_per_cutoff[cat]) == 0:
                     print("Skipping analysis for {} {}. Collected pd.DataFrame is empty.\n".format(metric2, cat))
                     return
+                self.compute_fold_average(self.output_folder, data=optimal_results_per_cutoff[cat],
+                                          class_optimal=self.classes_optimal, metrics=self.metric_names,
+                                          suffix=suffix + '_' + metric2 + '_' + cat,
+                                          true_positive_state=(category == 'True Positive'),
+                                          class_names=SharedResources.getInstance().studies_class_names
+                                          )
+                self.__compute_dice_confidence_intervals(class_name=class_name,
+                                                         category=category,
+                                                         data=optimal_results_per_cutoff[cat],
+                                                         suffix=suffix + '_' + metric2 + '_' + cat)
+                self.__compute_results_metric_over_metric(class_name=class_name,
+                                                          data=optimal_results_per_cutoff[cat], metric1=metric1,
+                                                          metric2=metric2,
+                                                          category=category,
+                                                          suffix=suffix + '_' + metric2 + '_' + cat)
+        except Exception as e:
+            print('{}'.format(traceback.format_exc()))
+
+    def compute_and_plot_categorical_metric_over_metric_categories(self, class_name: str, metric1,
+                                                                   metric2, data=None, metric2_cutoffs=None,
+                                                                   category='All', suffix='') -> None:
+        """
+        Performs the computation and plotting of a dense metric against a categorical metric.
+        The categorical metric is expected to be expressed as strings inside the studies_extra_parameters_filename.
+        For example, for a metric called MR_sequence, the values are expected to be [T1, T2, FLAIR].
+
+        :param class_name: current class of the segmentation object of interest
+        :param data: subset of data to only consider, i.e., a pd.DataFrame already reduced
+        :param metric1: Name of the first metric (dense), as appearing in the class_dice_scores.csv file
+        :param metric2: Name of the second metric (categorical), as appearing in the studies_extra_parameters_filename
+        :param metric2_cutoffs:
+        :param category: subset to consider from [All, True Positive]
+        :param suffix: text to be appended to the corresponding result filenames
+        :return: Nothing is returned, and the corresponding results are saved on disk.
+        """
+        try:
+            if data is None:
+                results_filename = os.path.join(self.input_folder, 'Validation', class_name + '_dice_scores.csv')
+                results = pd.read_csv(results_filename)
+                results.replace('inf', np.nan, inplace=True)
+            else:
+                results = deepcopy(data)
+            total_thresholds = [np.round(x, 2) for x in list(np.unique(results['Threshold'].values))]
+            nb_thresholds = len(np.unique(results['Threshold'].values))
+            optimal_threshold = self.classes_optimal[class_name]['All'][1] if category == 'All' else self.classes_optimal[class_name]['True Positive'][1]
+            optimal_thresold_index = total_thresholds.index(optimal_threshold)
+            optimal_results_per_patient = results[optimal_thresold_index::nb_thresholds]
+            optimal_results_per_patient['Patient'] = optimal_results_per_patient.Patient.astype(str)
+            if self.extra_patient_parameters is not None:
+                total_optimal_results = pd.merge(optimal_results_per_patient, self.extra_patient_parameters, on="Patient")
+            else:
+                total_optimal_results = optimal_results_per_patient
+
+            if not metric1 in list(total_optimal_results.columns) or not metric2 in list(total_optimal_results.columns):
+                print('The required metric is missing from the DataFrame with either {} or {}. Skipping.\n'.format(metric1, metric2))
+                return
+
+            optimal_results_per_cutoff = {}
+            if metric2_cutoffs is None or len(metric2_cutoffs) == 0:
+                metric2_cutoffs = list(np.unique(total_optimal_results[metric2].values))
+
+            for c, cutoff in enumerate(metric2_cutoffs):
+                cat_optimal_results = total_optimal_results.loc[total_optimal_results[metric2] == cutoff]
+                optimal_results_per_cutoff[cutoff] = cat_optimal_results
+
+            for cat in optimal_results_per_cutoff.keys():
+                # @TODO. Must include a new fold average specific for the studies, with mean and std values as input,
+                # which is different from the inputs to the computation in the validation part....
+                if len(optimal_results_per_cutoff[cat]) == 0:
+                    print("Skipping analysis for {} {}. Collected pd.DataFrame is empty.\n".format(metric2, cat))
+                    return
+                metric2 = "GT volume (ml)"
                 self.compute_fold_average(self.output_folder, data=optimal_results_per_cutoff[cat],
                                           class_optimal=self.classes_optimal, metrics=self.metric_names,
                                           suffix=suffix + '_' + metric2 + '_' + cat,
