@@ -75,3 +75,6 @@ jobs:
 
       - name: k-fold cross-validation unit test
         run: cd ${{github.workspace}}/tests && python validation_pipeline_test.py
+
+      - name: Segmentation study unit test
+        run: cd ${{github.workspace}}/tests && python studies_pipeline_test.py

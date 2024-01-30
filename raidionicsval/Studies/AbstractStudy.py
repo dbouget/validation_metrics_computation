@@ -185,8 +185,8 @@ class AbstractStudy(ABC):
             print('{}'.format(traceback.format_exc()))
 
 
-    def __compute_results_metric_over_metric(self, class_name: str, data=None, metric1='Dice', metric2='Volume',
-                                             category: str = 'All', suffix=''):
+    def __compute_results_metric_over_metric(self, class_name: str, data=None, metric1='PiW Dice',
+                                             metric2='GT Volume (ml)', category: str = 'All', suffix=''):
         try:
             filename_extra = '' if category == 'All' else '_tp'
             if data is None:
@@ -214,7 +214,7 @@ class AbstractStudy(ABC):
                     optimal_results_per_patient = pd.merge(optimal_results_per_patient, self.extra_patient_parameters,
                                                            on="Patient", how='left') #how='outer'
 
-            folder = os.path.join(self.output_folder, metric2 + '-Wise')
+            folder = os.path.join(self.output_folder, metric1.replace(" ", "") + '_' + metric2.replace(" ", "") + '-Wise')
             os.makedirs(folder, exist_ok=True)
             optimal_overlap = self.classes_optimal[class_name]['All'][0] if category == 'All' else self.classes_optimal[class_name]['True Positive'][0]
             compute_binned_metric_over_metric_boxplot(folder=folder, data=optimal_results_per_patient,
@@ -268,6 +268,9 @@ class AbstractStudy(ABC):
         :return: Nothing is returned, and the corresponding results are saved on disk.
         """
         try:
+            print("Computing and plotting {} over {} with the following cut-off values [{}].\n".format(metric1,
+                                                                                                    metric2,
+                                                                                                    metric2_cutoffs))
             if data is None:
                 results_filename = os.path.join(self.input_folder, 'Validation', class_name + '_dice_scores.csv')
                 results = pd.read_csv(results_filename)
@@ -290,15 +293,18 @@ class AbstractStudy(ABC):
                 return
 
             optimal_results_per_cutoff = {}
-            for c, cutoff in enumerate(metric2_cutoffs):
-                if c == 0:
-                    cat_optimal_results = total_optimal_results.loc[total_optimal_results[metric2] <= cutoff]
-                    optimal_results_per_cutoff['<=' + str(cutoff)] = cat_optimal_results
-                else:
-                    cat_optimal_results = total_optimal_results.loc[metric2_cutoffs[c-1] < total_optimal_results[metric2] <= cutoff]
-                    optimal_results_per_cutoff[']' + str(metric2_cutoffs[c-1]) + ',' + str(cutoff) + ']'] = cat_optimal_results
-            cat_optimal_results = total_optimal_results.loc[total_optimal_results[metric2] > metric2_cutoffs[-1]]
-            optimal_results_per_cutoff['>' + str(metric2_cutoffs[-1])] = cat_optimal_results
+            if metric2_cutoffs is None or len(metric2_cutoffs) == 0:
+                optimal_results_per_cutoff['All'] = total_optimal_results
+            else:
+                for c, cutoff in enumerate(metric2_cutoffs):
+                    if c == 0:
+                        cat_optimal_results = total_optimal_results.loc[total_optimal_results[metric2] <= cutoff]
+                        optimal_results_per_cutoff['<=' + str(cutoff)] = cat_optimal_results
+                    else:
+                        cat_optimal_results = total_optimal_results.loc[metric2_cutoffs[c-1] < total_optimal_results[metric2] <= cutoff]
+                        optimal_results_per_cutoff[']' + str(metric2_cutoffs[c-1]) + ',' + str(cutoff) + ']'] = cat_optimal_results
+                cat_optimal_results = total_optimal_results.loc[total_optimal_results[metric2] > metric2_cutoffs[-1]]
+                optimal_results_per_cutoff['>' + str(metric2_cutoffs[-1])] = cat_optimal_results
 
             for cat in optimal_results_per_cutoff.keys():
                 # @TODO. Must include a new fold average specific for the studies, with mean and std values as input,
@@ -342,6 +348,9 @@ class AbstractStudy(ABC):
         :return: Nothing is returned, and the corresponding results are saved on disk.
         """
         try:
+            print("Computing and plotting {} over {} with the following cut-off values [{}].\n".format(metric1,
+                                                                                                       metric2,
+                                                                                                       metric2_cutoffs))
             if data is None:
                 results_filename = os.path.join(self.input_folder, 'Validation', class_name + '_dice_scores.csv')
                 results = pd.read_csv(results_filename)
