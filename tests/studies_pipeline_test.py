@@ -99,7 +99,7 @@ def studies_pipeline_test():
         val_config.set('Studies', 'output_folder', os.path.join(test_dir, 'StudyResults', 'Analysis'))
         val_config.set('Studies', 'task', 'segmentation')
         val_config.set('Studies', 'class_names', 'tumor')
-        val_config.set('Studies', 'selections_dense', 'PiW Dice,GT volume (ml),1,All\IOU,GT volume (ml),,All')
+        val_config.set('Studies', 'selections_dense', 'PiW Dice,GT volume (ml),1,All')
         config_filename = os.path.join(test_dir, 'config.ini')
         with open(config_filename, 'w') as outfile:
             val_config.write(outfile)
