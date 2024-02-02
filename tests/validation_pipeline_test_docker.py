@@ -7,12 +7,35 @@ import sys
 import subprocess
 import traceback
 import zipfile
+import platform
+
 
 try:
     import requests
 except:
     subprocess.check_call([sys.executable, "-m", "pip", "install", 'requests'])
     import requests
+
+
+def permissions_update(path):
+    """
+
+    """
+    if platform.system() == 'win32':
+        logging.info("Files created inside Docker have root permissions, please adjust manually.")
+    else:
+        # Change permissions for the top-level folder
+        os.chmod(path, 0o777)
+        user_id = os.geteuid()  # pwd.getpwuid(os.getuid())[0]
+        gid = os.getegid()
+        for root, dirs, files in os.walk(path):
+            # set perms on sub-directories
+            for d in dirs:
+                os.chown(os.path.join(root, d), user_id, gid)
+
+            # set perms on files
+            for f in files:
+                os.chown(os.path.join(root, f), user_id, gid)
 
 
 def inference_test_docker():
@@ -99,8 +122,8 @@ def inference_test_docker():
             raise ValueError("Error during validation test in Docker container.\n")
 
         logging.info("Collecting and comparing results.\n")
-        brain_segmentation_filename = os.path.join(test_dir, 'StudyResults', 'Validation', 'all_dice_scores.csv')
-        if not os.path.exists(brain_segmentation_filename):
+        scores_segmentation_filename = os.path.join(test_dir, 'StudyResults', 'Validation', 'all_dice_scores.csv')
+        if not os.path.exists(scores_segmentation_filename):
             logging.error("Validation in Docker container failed, no dice scores were generated.\n")
             if os.path.exists(test_dir):
                 shutil.rmtree(test_dir)
