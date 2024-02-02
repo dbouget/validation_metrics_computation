@@ -192,21 +192,57 @@ An additional explanation of all parameters specified in the configuration file 
 found in _/Utils/resources.py_. 
 
 </details>
-
+ 
 <details>
 <summary>
 
 ### [3. Process](https://github.com/dbouget/validation_metrics_computation#3-process)
 </summary>
-To run, you need to supply the configuration file as parameter.
+
+After filling in the configuration file specifying all runtime parameters,
+according to the pattern from [**blank_main_config.ini**](https://github.com/dbouget/validation_metrics_computation/blob/master/blank_main_config.ini),
+you should run first the __validation__ task and then the __study__ task.  
+
+
+#### [CLI](https://github.com/dbouget/validation_metrics_computation#cli)
+```
+raidionicsval -c CONFIG (-v debug)
+```
+
+CONFIG should point to a configuration file (*.ini).
+
+#### [Python module](https://github.com/dbouget/validation_metrics_computation#python-module)
+```
+from raidionicsval import compute
+compute(config_filename="/path/to/main_config.ini")
+```
+
+"/path/to/main_config.ini" should point to a valid configuration file.
+
+#### [Docker](https://github.com/dbouget/validation_metrics_computation#docker)
 
 ```
-  python main.py -c main_config.ini (-v debug)
+docker pull dbouget/raidionics-val:v1.0-py38-cpu
 ```
 
-After filling in the configuration file, you should run first the 
-__validation__ task and then the __study__ task.  
-N.B. If no study fits your need, you can create a new study file in _/Studies/_.
+For opening the Docker image and interacting with it, run:  
+```
+docker run --entrypoint /bin/bash -v /home/<username>/<resources_path>:/workspace/resources -t -i --network=host --ipc=host dbouget/raidionics-val:v1.0-py38-cpu
+```
+
+The `/home/<username>/<resources_path>` before the column sign has to be changed to match a directory on your local 
+machine containing the data to expose to the docker image. Namely, it must contain folder(s) with data to use as input
+for the validation studies, and it will contain the destination folder where the results will be saved.
+
+For launching the Docker image as a CLI, run:  
+```
+docker run -v /home/<username>/<resources_path>:/workspace/resources -t -i --network=host --ipc=host dbouget/raidionics-val:v1.0-py38-cpu -c /workspace/resources/<path>/<to>/main_config.ini -v <verbose>
+```
+
+The `<path>/<to>/main_config.ini` must point to a valid configuration file on your machine, as a relative path to the `/home/<username>/<resources_path>` described above.
+For example, if the file is located on my machine under `/home/myuser/Data/Validation/main_config.ini`, 
+and that `/home/myuser/Data` is the mounted resources partition mounted on the Docker image, the new relative path will be `Validation/main_config.ini`.  
+The `<verbose>` level can be selected from [debug, info, warning, error].
 
 </details>
 
