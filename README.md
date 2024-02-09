@@ -220,6 +220,9 @@ compute(config_filename="/path/to/main_config.ini")
 "/path/to/main_config.ini" should point to a valid configuration file.
 
 #### [Docker](https://github.com/dbouget/validation_metrics_computation#docker)
+When calling Docker images, the --user flag must be properly used in order for the folders and files created inside
+the container to inherit the proper read/write permissions. The user ID is retrieved on-the-fly in the following
+examples, but it can be given in a more hard-coded fashion if known by the user.
 
 ```
 docker pull dbouget/raidionics-val:v1.0-py38-cpu
@@ -227,7 +230,7 @@ docker pull dbouget/raidionics-val:v1.0-py38-cpu
 
 For opening the Docker image and interacting with it, run:  
 ```
-docker run --entrypoint /bin/bash -v /home/<username>/<resources_path>:/workspace/resources -t -i --network=host --ipc=host dbouget/raidionics-val:v1.0-py38-cpu
+docker run --entrypoint /bin/bash -v /home/<username>/<resources_path>:/workspace/resources -t -i --network=host --ipc=host --user $(id -u) dbouget/raidionics-val:v1.0-py38-cpu
 ```
 
 The `/home/<username>/<resources_path>` before the column sign has to be changed to match a directory on your local 
@@ -236,7 +239,7 @@ for the validation studies, and it will contain the destination folder where the
 
 For launching the Docker image as a CLI, run:  
 ```
-docker run -v /home/<username>/<resources_path>:/workspace/resources -t -i --network=host --ipc=host dbouget/raidionics-val:v1.0-py38-cpu -c /workspace/resources/<path>/<to>/main_config.ini -v <verbose>
+docker run -v /home/<username>/<resources_path>:/workspace/resources -t -i --network=host --ipc=host --user $(id -u) dbouget/raidionics-val:v1.0-py38-cpu -c /workspace/resources/<path>/<to>/main_config.ini -v <verbose>
 ```
 
 The `<path>/<to>/main_config.ini` must point to a valid configuration file on your machine, as a relative path to the `/home/<username>/<resources_path>` described above.

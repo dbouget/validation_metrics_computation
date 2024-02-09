@@ -1,5 +1,4 @@
 import os
-import json
 import shutil
 import configparser
 import logging
@@ -7,35 +6,12 @@ import sys
 import subprocess
 import traceback
 import zipfile
-import platform
-
 
 try:
     import requests
 except:
     subprocess.check_call([sys.executable, "-m", "pip", "install", 'requests'])
     import requests
-
-
-def permissions_update(path):
-    """
-
-    """
-    if platform.system() == 'win32':
-        logging.info("Files created inside Docker have root permissions, please adjust manually.")
-    else:
-        # Change permissions for the top-level folder
-        os.chmod(path, 0o777)
-        user_id = os.geteuid()  # pwd.getpwuid(os.getuid())[0]
-        gid = os.getegid()
-        for root, dirs, files in os.walk(path):
-            # set perms on sub-directories
-            for d in dirs:
-                os.chown(os.path.join(root, d), user_id, gid)
-
-            # set perms on files
-            for f in files:
-                os.chown(os.path.join(root, f), user_id, gid)
 
 
 def inference_test_docker():
@@ -108,7 +84,8 @@ def inference_test_docker():
         try:
             import platform
             cmd_docker = ['docker', 'run', '-v', '{}:/workspace/resources'.format(test_dir),
-                          '--network=host', '--ipc=host', 'dbouget/raidionics-val:v1.0-py38-cpu',
+                          '--network=host', '--ipc=host', '--user', str(os.geteuid()),
+                          'dbouget/raidionics-val:v1.0-py38-cpu',
                           '-c', '/workspace/resources/test_val_config.ini', '-v', 'debug']
             logging.info("Executing the following Docker call: {}".format(cmd_docker))
             if platform.system() == 'Windows':
