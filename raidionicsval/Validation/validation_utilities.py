@@ -63,15 +63,16 @@ def best_segmentation_probability_threshold_analysis_inner(folder, detection_ove
     for obj in object_detection_dice_thresholds:
         for thr in range(nb_thresh):
             pixelwise_metrics_df = all_dices[['PiW Dice', 'PiW Recall', 'PiW Precision', 'PiW F1']]
-            dice_selected_pixelwise_metrics_df = pixelwise_metrics_df.loc[np.round(pixelwise_metrics_df['PiW Dice'], 3) >= obj]
-            dice_selected_pixelwise_metrics = dice_selected_pixelwise_metrics_df[thr::nb_thresh]
-            mean_dice = dice_selected_pixelwise_metrics['PiW Dice'].values.mean()
-            mean_recall = dice_selected_pixelwise_metrics['PiW Recall'].values.mean()
-            mean_precision = dice_selected_pixelwise_metrics['PiW Precision'].values.mean()
-            mean_f1 = dice_selected_pixelwise_metrics['PiW F1'].values.mean()
+            all_pixelwise_metrics_df = pixelwise_metrics_df[thr::nb_thresh]
+            mean_dice = all_pixelwise_metrics_df['PiW Dice'].values.mean()
+            mean_recall = all_pixelwise_metrics_df['PiW Recall'].values.mean()
+            mean_precision = all_pixelwise_metrics_df['PiW Precision'].values.mean()
+            mean_f1 = all_pixelwise_metrics_df['PiW F1'].values.mean()
 
             gt = all_dices['True Positive'].values[thr::nb_thresh]
             nb_gt = len(gt)
+            dice_selected_pixelwise_metrics_df = pixelwise_metrics_df.loc[np.round(pixelwise_metrics_df['PiW Dice'], 3) >= obj]
+            dice_selected_pixelwise_metrics = dice_selected_pixelwise_metrics_df[thr::nb_thresh]
             nb_found = len(dice_selected_pixelwise_metrics)
 
             recall_precision_results.append([obj, thresholds[thr], mean_dice, mean_recall, mean_precision, mean_f1, nb_found, nb_gt])
@@ -151,18 +152,20 @@ def best_segmentation_probability_threshold_analysis_inner(folder, detection_ove
     return max_overlap, max_threshold
 
 
-def compute_fold_average(folder, data=None, class_optimal={}, metrics=[], suffix='', true_positive_state=False):
+def compute_fold_average(folder, data=None, class_optimal={}, metrics=[], suffix='', true_positive_state=False,
+                         positive_detected_state=False):
     classes = SharedResources.getInstance().validation_class_names
     optimal_tag = 'All' if not true_positive_state else 'True Positive'
     for c in classes:
         optimal_values = class_optimal[c][optimal_tag]
         compute_fold_average_inner(folder, data=data, class_name=c, best_threshold=optimal_values[1],
                                    best_overlap=optimal_values[0], metrics=metrics, suffix=suffix,
-                                   true_positive_state=true_positive_state)
+                                   true_positive_state=true_positive_state,
+                                   positive_detected_state=positive_detected_state)
 
 
 def compute_fold_average_inner(folder, class_name, data=None, best_threshold=0.5, best_overlap=0.0, metrics=[],
-                               suffix='', true_positive_state=False):
+                               suffix='', true_positive_state=False, positive_detected_state=False):
     """
     :param folder: Main study folder where the results will be dumped (assuming inside a Validation sub-folder)
     :param best_threshold:
@@ -180,6 +183,7 @@ def compute_fold_average_inner(folder, class_name, data=None, best_threshold=0.5
         results = deepcopy(data)
 
     suffix = "tp" + suffix if true_positive_state else suffix
+    suffix = "detected" + suffix if positive_detected_state else suffix
     results.replace('inf', np.nan, inplace=True)
     results.replace(float('inf'), np.nan, inplace=True)
     results.replace('', np.nan, inplace=True)
@@ -201,7 +205,9 @@ def compute_fold_average_inner(folder, class_name, data=None, best_threshold=0.5
     # used for other metrics computation?
     for f in unique_folds:
         patientwise_metrics = compute_patientwise_fold_metrics(results, f, best_threshold, best_overlap)
-        fold_average_metrics, fold_std_metrics = compute_singe_fold_average_metrics(results, f, best_threshold, best_overlap, metrics)
+        fold_average_metrics, fold_std_metrics = compute_singe_fold_average_metrics(results, f, best_threshold,
+                                                                                    best_overlap, metrics,
+                                                                                    positive_detected_state=positive_detected_state)
         fold_metrics = []
         for m in range(len(fold_average_metrics)):
             fold_metrics.append(fold_average_metrics[m])
@@ -264,13 +270,16 @@ def compute_fold_average_inner(folder, class_name, data=None, best_threshold=0.5
     pooled_fold_averaged_results_df.to_csv(study_filename, index=False)
 
 
-def compute_singe_fold_average_metrics(results, fold_number, best_threshold, best_overlap, metric_names):
+def compute_singe_fold_average_metrics(results, fold_number, best_threshold, best_overlap, metric_names,
+                                       positive_detected_state=False):
     fold_results = results.loc[results['Fold'] == fold_number]
     thresh_index = (np.round(fold_results['Threshold'], 1) == best_threshold)
     all_for_thresh = fold_results.loc[thresh_index]
     if len(all_for_thresh) == 0:
         # Empty fold? Can indicate something went wrong, or was not computed properly beforehand
         return None
+    if positive_detected_state:
+        all_for_thresh = all_for_thresh.loc[all_for_thresh['PiW Dice'] >= best_overlap]
     upper_default_metrics_index = SharedResources.getInstance().upper_default_metrics_index
     default_metrics_average = list(np.mean(all_for_thresh.values[:, 3:upper_default_metrics_index], axis=0))
     default_metrics_std = [np.std(all_for_thresh.values[:, x], axis=0) for x in range(3, upper_default_metrics_index)]

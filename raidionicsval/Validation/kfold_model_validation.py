@@ -52,6 +52,8 @@ class ModelValidation:
                              true_positive_state=False)
         compute_fold_average(self.input_folder, class_optimal=class_optimal, metrics=self.metric_names,
                              true_positive_state=True)
+        compute_fold_average(self.input_folder, class_optimal=class_optimal, metrics=self.metric_names,
+                             true_positive_state=True, positive_detected_state=True)
 
     def __compute_metrics(self):
         """
@@ -121,6 +123,7 @@ class ModelValidation:
                 if SharedResources.getInstance().validation_use_index_naming_convention:
                     pid = patient.split('_')[1]
                     sub_folder_index = str(ceil(int(pid) / 200))  # patient.split('_')[0]
+                    pid = pid + '_' + patient.split('_')[4]
                 else:
                     # Option2. For files not following the original naming conventions
                     pid = patient
@@ -154,7 +157,10 @@ class ModelValidation:
         Asserts the existence of the raw files on disk for computing the metrics for the current patient.
         :return:
         """
+        use_internal_convention = SharedResources.getInstance().validation_use_index_naming_convention
         uid = patient_metrics.patient_id
+        if use_internal_convention:
+            uid = patient_metrics.patient_id.split('_')[0]
         classes = SharedResources.getInstance().validation_class_names
         nb_classes = len(classes)
         patient_filenames = {}
@@ -176,7 +182,10 @@ class ModelValidation:
             for _, _, files in os.walk(detection_image_base):
                 for f in files:
                     if pred_suffix in f:
-                        detection_filename = os.path.join(detection_image_base, f)
+                        if use_internal_convention and patient_metrics.patient_id.split('_')[1] in f:
+                            detection_filename = os.path.join(detection_image_base, f)
+                        elif not use_internal_convention:
+                            detection_filename = os.path.join(detection_image_base, f)
                 break
             if not os.path.exists(detection_filename):
                 print("No detection file found for class {} in patient {}".format(c, patient_metrics.unique_id))
