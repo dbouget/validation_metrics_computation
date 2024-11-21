@@ -275,6 +275,8 @@ class AbstractStudy(ABC):
                 results_filename = os.path.join(self.input_folder, 'Validation', class_name + '_dice_scores.csv')
                 results = pd.read_csv(results_filename)
                 results.replace('inf', np.nan, inplace=True)
+                if category == 'True Positive':
+                    results = results.loc[results["True Positive"] == True]
             else:
                 results = deepcopy(data)
             total_thresholds = [np.round(x, 2) for x in list(np.unique(results['Threshold'].values))]
@@ -355,6 +357,8 @@ class AbstractStudy(ABC):
                 results_filename = os.path.join(self.input_folder, 'Validation', class_name + '_dice_scores.csv')
                 results = pd.read_csv(results_filename)
                 results.replace('inf', np.nan, inplace=True)
+                if category == 'True Positive':
+                    results = results.loc[results["True Positive"] == True]
             else:
                 results = deepcopy(data)
             total_thresholds = [np.round(x, 2) for x in list(np.unique(results['Threshold'].values))]
