@@ -70,6 +70,22 @@ class PatientMetrics:
     def class_names(self) -> List[str]:
         return self._class_names
 
+    @property
+    def ground_truth_filepaths(self) -> str:
+        return self._ground_truth_filepaths
+
+    @ground_truth_filepaths.setter
+    def ground_truth_filepaths(self, ground_truth_filepaths) -> None:
+        self._ground_truth_filepaths = ground_truth_filepaths
+
+    @property
+    def prediction_filepaths(self) -> str:
+        return self._prediction_filepaths
+
+    @prediction_filepaths.setter
+    def prediction_filepaths(self, prediction_filepaths) -> None:
+        self._prediction_filepaths = prediction_filepaths
+
     def init_from_file(self, study_folder: str):
         all_scores_filename = os.path.join(study_folder, 'all_dice_scores.csv')
 
@@ -136,7 +152,7 @@ class PatientMetrics:
             self._prediction_filepaths.append(filenames[c][1])
 
     def get_class_filenames(self, class_index: int) -> List[str]:
-        return [self._ground_truth_filepaths[class_index], self._prediction_filepaths[class_index]]
+        return [self._ground_truth_filepaths[class_index], self.prediction_filepaths[class_index]]
 
     def set_class_regular_metrics(self, class_name: str, results: list):
         self._class_metrics[class_name].set_results(results)

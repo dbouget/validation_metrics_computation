@@ -12,6 +12,7 @@ from typing import List
 # from medpy.metric.binary import hd95, volume_correlation, assd, ravd, obj_assd
 from sklearn.metrics import jaccard_score, normalized_mutual_info_score, roc_auc_score, cohen_kappa_score
 from ..Utils.resources import SharedResources
+from ..Utils.io_converters import open_image_file, save_image_file
 from ..Computation.medpy_metrics import (compute_hd95, compute_assd, compute_ravd, compute_volume_correlation,
                                          compute_object_assd)
 
@@ -28,14 +29,15 @@ def compute_patient_extra_metrics(patient_object, class_index, optimal_threshold
         else:
             metric_values = [None] * len(metrics)
 
-        ground_truth_ni = nib.load(patient_object._ground_truth_filepaths[class_index])
-        detection_ni = nib.load(patient_object._prediction_filepaths[class_index])
-
-        gt = ground_truth_ni.get_fdata()
+        # ground_truth_ni = nib.load(patient_object._ground_truth_filepaths[class_index])
+        # detection_ni = nib.load(patient_object._prediction_filepaths[class_index])
+        # gt = ground_truth_ni.get_fdata()
+        # detection = detection_ni.get_fdata()[:]
+        gt, _, gt_input_specs = open_image_file(patient_object.ground_truth_filepaths[class_index])
+        detection, _, det_input_specs = open_image_file(patient_object.prediction_filepaths[class_index])
         gt[gt >= 1] = 1
         gt = gt.astype('uint8')
 
-        detection = detection_ni.get_fdata()[:]
         detection[detection < optimal_threshold] = 0
         detection[detection >= optimal_threshold] = 1
         detection = detection.astype('uint8')
@@ -70,8 +72,8 @@ def compute_patient_extra_metrics(patient_object, class_index, optimal_threshold
                 extra_metrics_results = pool.map(parallel_metric_computation, zip(metrics, metric_values,
                                                                                   itertools.repeat(gt),
                                                                                   itertools.repeat(detection),
-                                                                                  itertools.repeat(detection_ni.header),
-                                                                                  itertools.repeat(ground_truth_ni.header),
+                                                                                  itertools.repeat(det_input_specs[1]),
+                                                                                  itertools.repeat(gt_input_specs[1]),
                                                                                   itertools.repeat(tp_array),
                                                                                   itertools.repeat(tn_array),
                                                                                   itertools.repeat(fp_array),
@@ -87,8 +89,8 @@ def compute_patient_extra_metrics(patient_object, class_index, optimal_threshold
                     metric_value = compute_specific_metric_value(metric=metric, gt=gt, detection=detection,
                                                                  tp=np.sum(tp_array), tn=np.sum(tn_array),
                                                                  fp=np.sum(fp_array), fn=np.sum(fn_array),
-                                                                 gt_ni_header=ground_truth_ni.header,
-                                                                 det_ni_header=detection_ni.header)
+                                                                 gt_ni_header=gt_input_specs[1],
+                                                                 det_ni_header=det_input_specs[1])
                     extra_metrics_results.append([metric, metric_value])
                 except Exception as e:
                     print('Issue computing metric {} for patient {}'.format(metric, patient_object.unique_id))
@@ -110,8 +112,8 @@ def parallel_metric_computation(args):
     metric_value = args[1] #args[1][1]
     gt = args[2]
     detection = args[3]
-    det_header = args[4]
-    gt_header = args[5]
+    det_extra = args[4]
+    gt_extra = args[5]
     tp_array = args[6]
     tn_array = args[7]
     fp_array = args[8]
@@ -124,8 +126,8 @@ def parallel_metric_computation(args):
         metric_value = compute_specific_metric_value(metric=metric, gt=gt, detection=detection,
                                                      tp=np.sum(tp_array), tn=np.sum(tn_array),
                                                      fp=np.sum(fp_array), fn=np.sum(fn_array),
-                                                     gt_ni_header=gt_header,
-                                                     det_ni_header=det_header)
+                                                     gt_spacing=gt_extra[1],
+                                                     det_spacing=det_extra[1])
     except Exception as e:
         print('Computing {} gave an exception'.format(metric))
         pass
@@ -133,7 +135,7 @@ def parallel_metric_computation(args):
     return [metric, metric_value]
 
 
-def compute_specific_metric_value(metric, gt, detection, tp, tn, fp, fn, gt_ni_header, det_ni_header):
+def compute_specific_metric_value(metric, gt, detection, tp, tn, fp, fn, gt_spacing, det_spacing):
     metric_value = None
     if metric == 'VS':
         metric_value = math.inf
@@ -146,7 +148,8 @@ def compute_specific_metric_value(metric, gt, detection, tp, tn, fp, fn, gt_ni_h
             param12 = (fp * (fp + (2 * tn))) / (tn + fp)
             param21 = (fp * (fp + (2 * tp))) / (tp + fp)
             param22 = (fn * (fn + (2 * tn))) / (tn + fn)
-            metric_value = (1 / np.prod(gt_ni_header.get_data_shape()[0:3])) * min(param11 + param12, param21 + param22)
+            # metric_value = (1 / np.prod(gt_ni_header.get_data_shape()[0:3])) * min(param11 + param12, param21 + param22)
+            metric_value = (1 / np.prod(gt.shape)) * min(param11 + param12, param21 + param22)
         else:
             metric_value = math.inf
     elif metric == 'MI':
@@ -156,7 +159,8 @@ def compute_specific_metric_value(metric, gt, detection, tp, tn, fp, fn, gt_ni_h
         a = 0.5 * ((tp * (tp - 1)) + (fp * (fp - 1)) + (tn * (tn - 1)) + (fn * (fn - 1)))
         b = 0.5 * ((math.pow(tp + fn, 2) + math.pow(tn + fp, 2)) - (math.pow(tp, 2) + math.pow(tn, 2) + math.pow(fp, 2) + math.pow(fn, 2)))
         c = 0.5 * ((math.pow(tp + fp, 2) + math.pow(tn + fn, 2)) - (math.pow(tp, 2) + math.pow(tn, 2) + math.pow(fp, 2) + math.pow(fn, 2)))
-        d = np.prod(gt_ni_header.get_data_shape()[0:3]) * (np.prod(gt_ni_header.get_data_shape()[0:3]) - 1) / 2 - (a + b + c)
+        # d = np.prod(gt_ni_header.get_data_shape()[0:3]) * (np.prod(gt_ni_header.get_data_shape()[0:3]) - 1) / 2 - (a + b + c)
+        d = np.prod(gt.shape) * (np.prod(gt.shape) - 1) / 2 - (a + b + c)
         num = a + b
         den = a + b + c + d
         if den != 0:
@@ -166,7 +170,8 @@ def compute_specific_metric_value(metric, gt, detection, tp, tn, fp, fn, gt_ni_h
         a = 0.5 * ((tp * (tp - 1)) + (fp * (fp - 1)) + (tn * (tn - 1)) + (fn * (fn - 1)))
         b = 0.5 * ((math.pow(tp + fn, 2) + math.pow(tn + fp, 2)) - (math.pow(tp, 2) + math.pow(tn, 2) + math.pow(fp, 2) + math.pow(fn, 2)))
         c = 0.5 * ((math.pow(tp + fp, 2) + math.pow(tn + fn, 2)) - (math.pow(tp, 2) + math.pow(tn, 2) + math.pow(fp, 2) + math.pow(fn, 2)))
-        d = np.prod(gt_ni_header.get_data_shape()[0:3]) * (np.prod(gt_ni_header.get_data_shape()[0:3]) - 1) / 2 - (a + b + c)
+        # d = np.prod(gt_ni_header.get_data_shape()[0:3]) * (np.prod(gt_ni_header.get_data_shape()[0:3]) - 1) / 2 - (a + b + c)
+        d = np.prod(gt.shape) * (np.prod(gt.shape) - 1) / 2 - (a + b + c)
         num = 2 * (a * d - b * c)
         den = math.pow(c, 2) + math.pow(b, 2) + 2 * a * d + (a + d) * (c + b)
         if den != 0:
@@ -174,7 +179,8 @@ def compute_specific_metric_value(metric, gt, detection, tp, tn, fp, fn, gt_ni_h
     elif metric == 'VOI':
         fn_tp = fn + tp
         fp_tp = fp + tp
-        total = np.prod(gt_ni_header.get_data_shape()[0:3])
+        # total = np.prod(gt_ni_header.get_data_shape()[0:3])
+        total = np.prod(gt.shape)
 
         if fn_tp == 0 or (fn_tp / total) == 1 or fp_tp == 0 or (fp_tp / total) == 1:
             metric_value = math.inf
@@ -231,15 +237,15 @@ def compute_specific_metric_value(metric, gt, detection, tp, tn, fp, fn, gt_ni_h
     elif metric == 'HD95':
         metric_value = math.inf
         if np.max(gt) == 1 and np.max(detection) == 1:  # Computation does not work if no binary object in the array
-            metric_value = compute_hd95(detection, gt, voxelspacing=det_ni_header.get_zooms(), connectivity=1)
+            metric_value = compute_hd95(detection, gt, voxelspacing=det_spacing, connectivity=1)
     elif metric == 'ASSD':
         metric_value = math.inf
         if np.max(gt) == 1 and np.max(detection) == 1:  # Computation does not work if no binary object in the array
-            metric_value = compute_assd(detection, gt, voxel_spacing=det_ni_header.get_zooms())
+            metric_value = compute_assd(detection, gt, voxel_spacing=det_spacing)
     elif metric == 'OASSD':
         metric_value = math.inf
         if np.max(gt) == 1 and np.max(detection) == 1:  # Computation does not work if no binary object in the array
-            metric_value = compute_object_assd(detection, gt, voxel_spacing=det_ni_header.get_zooms())
+            metric_value = compute_object_assd(detection, gt, voxel_spacing=det_spacing)
     elif metric == 'RAVD':
         metric_value = math.inf
         if np.max(gt) == 1 and np.max(detection) == 1:  # Computation does not work if no binary object in the array

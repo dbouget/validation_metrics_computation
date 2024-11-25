@@ -27,12 +27,14 @@ def separate_dice_computation(args):
     t = np.round(args[0], 2)
     fold_number = args[1]
     gt = args[2]
-    detection_ni = args[3]
+    # detection_ni = args[3]
+    detection_raw = args[3]
     patient_id = args[4]
     volumes_extra = args[5]
     results = []
 
-    detection = deepcopy(detection_ni.get_fdata())
+    # detection = deepcopy(detection_ni.get_fdata())
+    detection = deepcopy(detection_raw)
     detection[detection < t] = 0
     detection[detection >= t] = 1
     detection = detection.astype('uint8')
@@ -52,20 +54,20 @@ def separate_dice_computation(args):
     if "pixelwise" in SharedResources.getInstance().validation_metric_spaces:
         pixelwise_results = __pixelwise_computation(gt, detection)
 
-    det_volume = np.round(np.count_nonzero(detection) * np.prod(detection_ni.header.get_zooms()) * 1e-3, 4)
+    det_volume = np.round(np.count_nonzero(detection) * np.prod(volumes_extra[2]) * 1e-3, 4)
 
     obj_val = InstanceSegmentationValidation(gt_image=gt, detection_image=detection)
     if "objectwise" in SharedResources.getInstance().validation_metric_spaces:
         try:
             # obj_val.set_trace_parameters(self.output_folder, fold_number, patient, t)
-            obj_val.spacing = detection_ni.header.get_zooms()
+            obj_val.spacing = volumes_extra[2]
             obj_val.run()
         except Exception as e:
             print('Issue computing instance segmentation parameters for patient {}'.format(patient_id))
             print(traceback.format_exc())
     instance_results = obj_val.instance_detection_results
 
-    results.append([fold_number, patient_id, t] + pixelwise_results + volumes_extra +
+    results.append([fold_number, patient_id, t] + pixelwise_results + volumes_extra[:-1] +
                    [det_volume] + instance_results + [len(obj_val.gt_candidates), len(obj_val.detection_candidates)])
 
     return results
