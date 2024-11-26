@@ -450,6 +450,12 @@ class AbstractStudy(ABC):
             unique_folds = np.unique(results['Fold'])
             nb_folds = len(unique_folds)
             metrics_per_fold = []
+            tp_volume_threshold = 0.
+            if len(SharedResources.getInstance().validation_true_positive_volume_thresholds) == 1:
+                tp_volume_threshold = SharedResources.getInstance().validation_true_positive_volume_thresholds[0]
+            else:
+                index_cl = SharedResources.getInstance().validation_class_names.find(class_name)
+                tp_volume_threshold = SharedResources.getInstance().validation_true_positive_volume_thresholds[index_cl]
 
             metric_names = list(results.columns[3:list(results.columns).index("#Det") + 1])
             if metrics is not None:
@@ -464,7 +470,8 @@ class AbstractStudy(ABC):
             # Regarding the overlap threshold, should the patient discarded for recall be
             # used for other metrics computation?
             for f in unique_folds:
-                patientwise_metrics = compute_patientwise_fold_metrics(results, f, best_threshold, best_overlap)
+                patientwise_metrics = compute_patientwise_fold_metrics(results, f, best_threshold, best_overlap,
+                                                                       tp_volume_threshold)
                 fold_average_metrics, fold_std_metrics = compute_singe_fold_average_metrics(results, f, best_threshold,
                                                                                             best_overlap, metrics)
                 fold_metrics = []
