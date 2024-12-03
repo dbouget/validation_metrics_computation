@@ -204,7 +204,7 @@ def compute_fold_average_inner(folder, class_name, data=None, best_threshold=0.5
     if len(SharedResources.getInstance().validation_true_positive_volume_thresholds) == 1:
         tp_volume_threshold = SharedResources.getInstance().validation_true_positive_volume_thresholds[0]
     else:
-        index_cl = SharedResources.getInstance().validation_class_names.find(class_name)
+        index_cl = SharedResources.getInstance().validation_class_names.index(class_name)
         tp_volume_threshold = SharedResources.getInstance().validation_true_positive_volume_thresholds[index_cl]
 
     metric_names = list(results.columns[3:])
