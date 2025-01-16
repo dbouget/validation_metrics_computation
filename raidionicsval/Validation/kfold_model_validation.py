@@ -152,10 +152,23 @@ class ModelValidation:
                 continue
         return 0
 
-    def __identify_patient_files(self, patient_metrics, folder_index, fold_number):
+    def __identify_patient_files(self, patient_metrics: PatientMetrics, folder_index: int, fold_number: int) -> bool:
         """
         Asserts the existence of the raw files on disk for computing the metrics for the current patient.
-        :return:
+
+        Parameters
+        ----------
+        patient_metrics: PatientMetrics
+            Object holding all computed metrics for the current patient
+        folder_index: int
+            Index value for the folder on disk to investigate
+        fold_number: int
+            Current fold number for looking into the correct folder on disk
+
+        Returns
+        ----------
+        bool
+             Boolean indicating whether all patient files were correctly identified or not.
         """
         use_internal_convention = SharedResources.getInstance().validation_use_index_naming_convention
         uid = patient_metrics.patient_id
