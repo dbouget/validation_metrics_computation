@@ -27,19 +27,13 @@ def separate_dice_computation(args):
     t = np.round(args[0], 2)
     fold_number = args[1]
     gt = args[2]
-    # detection_ni = args[3]
     detection_raw = args[3]
     patient_id = args[4]
     volumes_extra = args[5]
     results = []
 
-    # detection = deepcopy(detection_ni.get_fdata())
-    # @TODO. Should not deepcopy, just create an empty array with shape
-    # detection = deepcopy(detection_raw)
     detection = np.zeros(detection_raw.shape, dtype='uint8')
-    # detection[detection < t] = 0
     detection[detection_raw >= t] = 1
-    # detection = detection.astype('uint8')
 
     # # Cleaning the too small objects that might be noise in the detection
     # if np.count_nonzero(detection) > 0:
