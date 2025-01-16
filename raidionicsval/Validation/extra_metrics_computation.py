@@ -89,8 +89,8 @@ def compute_patient_extra_metrics(patient_object, class_index, optimal_threshold
                     metric_value = compute_specific_metric_value(metric=metric, gt=gt, detection=detection,
                                                                  tp=np.sum(tp_array), tn=np.sum(tn_array),
                                                                  fp=np.sum(fp_array), fn=np.sum(fn_array),
-                                                                 gt_ni_header=gt_input_specs[1],
-                                                                 det_ni_header=det_input_specs[1])
+                                                                 gt_spacing=gt_input_specs[1],
+                                                                 det_spacing=det_input_specs[1])
                     extra_metrics_results.append([metric, metric_value])
                 except Exception as e:
                     print('Issue computing metric {} for patient {}'.format(metric, patient_object.unique_id))

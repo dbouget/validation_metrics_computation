@@ -17,7 +17,7 @@ jobs:
     strategy:
       matrix:
         include:
-          - os: macos-11
+          - os: macos-13
             TARGET: macos
             CMD_BUILD: python setup.py bdist_wheel --plat-name macosx_10_15_x86_64
 
@@ -42,7 +42,7 @@ jobs:
         run: ${{matrix.CMD_BUILD}}
 
       - name: Upload Python wheel
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: Python wheel
           path: ${{github.workspace}}/dist/raidionicsval-*.whl
@@ -52,7 +52,7 @@ jobs:
     needs: build
     strategy:
       matrix:
-        os: [ macos-11, macos-12 ]
+        os: [ macos-13 ]
         python-version: ["3.8", "3.9", "3.10", "3.11"]
     runs-on: ${{ matrix.os }}
 
@@ -63,7 +63,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Download artifact
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: "Python wheel"
 

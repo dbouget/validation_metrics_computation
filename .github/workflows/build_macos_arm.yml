@@ -38,7 +38,7 @@ jobs:
         run: python3 setup.py bdist_wheel --plat-name macosx_11_0_arm64
 
       - name: Upload Python wheel
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: Python wheel
           path: ${{github.workspace}}/dist/raidionicsval-*.whl
@@ -58,7 +58,7 @@ jobs:
           default: ${{ matrix.python-version }}
 
       - name: Download artifact
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: "Python wheel"
 
