@@ -1,7 +1,11 @@
+import logging
 import os
 import pickle
 import pandas as pd
 import numpy as np
+import nibabel as nib
+from typing import Tuple, List
+from PIL import Image
 
 
 def get_fold_from_file(filename, fold_number):
@@ -52,3 +56,33 @@ def reload_optimal_validation_parameters(study_filename):
     optimums = study_df.iloc[-1]
 
     return optimums['Detection threshold'], optimums['Dice threshold']
+
+def open_image_file(input_filename: str) -> Tuple[np.ndarray, str, List]:
+    ext = '.' + '.'.join(input_filename.split('.')[1:])
+    input_array = None
+    input_specifics = []
+
+    if ext == ".nii" or ext == ".nii.gz":
+        input_ni = nib.load(input_filename)
+        if len(input_ni.shape) == 4:
+            input_ni = nib.four_to_three(input_ni)[0]
+        input_array = input_ni.get_fdata()[:]
+        input_specifics = [input_ni.affine, input_ni.header.get_zooms()]
+    elif ext in [".tif", ".tiff", ".png"]:
+        input_array = Image.open(input_filename)
+        input_specifics = [np.eye(4, dtype=int), [1., 1.]]
+    else:
+        logging.error("Working with an unknown file type: {}. Skipping...".format(ext))
+
+    return input_array, ext, input_specifics
+
+
+def save_image_file(output_array, output_filename: str, specifics: List = None) -> None:
+    ext = '.'.join(output_filename.split('.')[1:])
+
+    if ext == ".nii" or ext == ".nii.gz":
+        nib.save(nib.Nifti1Image(output_array, affine=specifics[0]), output_filename)
+    elif ext in [".tif", ".tiff", ".png"]:
+        Image.fromarray(output_array).save(output_filename)
+    else:
+        logging.error("Working with an unknown file type: {}. Skipping...".format(ext))

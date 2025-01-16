@@ -11,7 +11,7 @@ from ..Computation.dice_computation import separate_dice_computation
 from ..Validation.instance_segmentation_validation import *
 from ..Utils.resources import SharedResources
 from ..Utils.PatientMetricsStructure import PatientMetrics
-from ..Utils.io_converters import get_fold_from_file
+from ..Utils.io_converters import get_fold_from_file, open_image_file, save_image_file
 from ..Validation.validation_utilities import best_segmentation_probability_threshold_analysis, compute_fold_average
 from ..Validation.extra_metrics_computation import compute_patient_extra_metrics
 
@@ -52,6 +52,8 @@ class ModelValidation:
                              true_positive_state=False)
         compute_fold_average(self.input_folder, class_optimal=class_optimal, metrics=self.metric_names,
                              true_positive_state=True)
+        compute_fold_average(self.input_folder, class_optimal=class_optimal, metrics=self.metric_names,
+                             true_positive_state=True, positive_detected_state=True)
 
     def __compute_metrics(self):
         """
@@ -121,6 +123,7 @@ class ModelValidation:
                 if SharedResources.getInstance().validation_use_index_naming_convention:
                     pid = patient.split('_')[1]
                     sub_folder_index = str(ceil(int(pid) / 200))  # patient.split('_')[0]
+                    pid = pid + '_' + patient.split('_')[4]
                 else:
                     # Option2. For files not following the original naming conventions
                     pid = patient
@@ -154,7 +157,10 @@ class ModelValidation:
         Asserts the existence of the raw files on disk for computing the metrics for the current patient.
         :return:
         """
+        use_internal_convention = SharedResources.getInstance().validation_use_index_naming_convention
         uid = patient_metrics.patient_id
+        if use_internal_convention:
+            uid = patient_metrics.patient_id.split('_')[0]
         classes = SharedResources.getInstance().validation_class_names
         nb_classes = len(classes)
         patient_filenames = {}
@@ -176,7 +182,10 @@ class ModelValidation:
             for _, _, files in os.walk(detection_image_base):
                 for f in files:
                     if pred_suffix in f:
-                        detection_filename = os.path.join(detection_image_base, f)
+                        if use_internal_convention and patient_metrics.patient_id.split('_')[1] in f:
+                            detection_filename = os.path.join(detection_image_base, f)
+                        elif not use_internal_convention:
+                            detection_filename = os.path.join(detection_image_base, f)
                 break
             if not os.path.exists(detection_filename):
                 print("No detection file found for class {} in patient {}".format(c, patient_metrics.unique_id))
@@ -209,9 +218,11 @@ class ModelValidation:
 
             # Specific actions for remapping BraTS results to match the whole tumor and tumor core categories
             if SharedResources.getInstance().validation_use_brats_data and (classes[c] == 'whole' or classes[c] == 'core'):
+                detection_ni = nib.load(detection_filename)
                 ground_truth_filename = os.path.join(detection_image_base, patient_extended + '_' + gt_suffix)
             # The ground truth for the BraTS images is stored a bit differently
             elif SharedResources.getInstance().validation_use_brats_data and classes[c] == 'tumor':
+                detection_ni = nib.load(detection_filename)
                 raw_gt = nib.load(ground_truth_filename).get_fdata()[:]
                 ground_truth_filename = os.path.join(os.path.dirname(detection_filename), uid + "_groundtruth_tumor.nii.gz")
                 if not os.path.exists(ground_truth_filename):
@@ -227,25 +238,44 @@ class ModelValidation:
             elif SharedResources.getInstance().validation_use_brats_data and classes[c] == 'necrosis':
                 ground_truth_filename = os.path.join(os.path.dirname(detection_filename), uid + "_groundtruth_necrosis.nii.gz")
 
-            detection_ni = nib.load(detection_filename)
+            # detection_ni = nib.load(detection_filename)
+            # # If there's no ground truth, we assume the class to be empty for this patient and create an
+            # # empty ground truth volume.
+            # if ground_truth_filename is None or not os.path.exists(ground_truth_filename):
+            #     ground_truth_filename = os.path.join(os.path.dirname(detection_filename), uid + "_groundtruth_" + classes[c] + ".nii.gz")
+            #     if not os.path.exists(ground_truth_filename):
+            #         empty_gt = np.zeros(detection_ni.get_fdata().shape)
+            #         nib.save(nib.Nifti1Image(empty_gt, detection_ni.affine), ground_truth_filename)
+            # else:
+            #     file_stats = os.stat(detection_filename)
+            #     ground_truth_ni = nib.load(ground_truth_filename)
+            #     if len(ground_truth_ni.shape) == 4:
+            #         ground_truth_ni = nib.four_to_three(ground_truth_ni)[0]
+            #
+            #     if file_stats.st_size == 0:
+            #         nib.save(nib.Nifti1Image(np.zeros(ground_truth_ni.get_shape), affine=ground_truth_ni.affine),
+            #                  detection_filename)
+            #
+            #     if detection_ni.shape != ground_truth_ni.shape:
+            #         return False
+            detection_array, file_extension, input_spec = open_image_file(detection_filename)
             # If there's no ground truth, we assume the class to be empty for this patient and create an
             # empty ground truth volume.
             if ground_truth_filename is None or not os.path.exists(ground_truth_filename):
-                ground_truth_filename = os.path.join(os.path.dirname(detection_filename), uid + "_groundtruth_" + classes[c] + ".nii.gz")
+                ground_truth_filename = os.path.join(os.path.dirname(detection_filename), uid + "_groundtruth_" +
+                                                     classes[c] + file_extension)
                 if not os.path.exists(ground_truth_filename):
-                    empty_gt = np.zeros(detection_ni.get_fdata().shape)
-                    nib.save(nib.Nifti1Image(empty_gt, detection_ni.affine), ground_truth_filename)
+                    empty_gt = np.zeros(detection_array.shape)
+                    save_image_file(empty_gt, ground_truth_filename, specifics=input_spec)
             else:
                 file_stats = os.stat(detection_filename)
-                ground_truth_ni = nib.load(ground_truth_filename)
-                if len(ground_truth_ni.shape) == 4:
-                    ground_truth_ni = nib.four_to_three(ground_truth_ni)[0]
+                ground_truth_array, _, ground_truth_input_spec = open_image_file(ground_truth_filename)
 
                 if file_stats.st_size == 0:
-                    nib.save(nib.Nifti1Image(np.zeros(ground_truth_ni.get_shape), affine=ground_truth_ni.affine),
-                             detection_filename)
+                    save_image_file(np.zeros(shape=ground_truth_array.shape), detection_filename,
+                                    specifics=ground_truth_input_spec)
 
-                if detection_ni.shape != ground_truth_ni.shape:
+                if detection_array.shape != ground_truth_array.shape:
                     return False
 
             patient_filenames[classes[c]] = [ground_truth_filename, detection_filename]
@@ -266,23 +296,25 @@ class ModelValidation:
         # Iterating over all classes, where independent files are expected
         for c in range(nb_classes):
             gt_filename, det_filename = patient_metrics.get_class_filenames(c)
-            ground_truth_ni = nib.load(gt_filename)
-            detection_ni = nib.load(det_filename)
-
-            gt = ground_truth_ni.get_fdata()
+            # ground_truth_ni = nib.load(gt_filename)
+            # gt = ground_truth_ni.get_fdata()
+            # detection_ni = nib.load(det_filename)
+            gt, _, gt_specs = open_image_file(gt_filename)
+            detection, _, det_specs = open_image_file(det_filename)
             gt[gt >= 1] = 1
 
             class_tp_threshold = SharedResources.getInstance().validation_true_positive_volume_thresholds[c]
-            gt_volume = np.count_nonzero(gt) * np.prod(ground_truth_ni.header.get_zooms()) * 1e-3
+            # gt_volume = np.count_nonzero(gt) * np.prod(ground_truth_ni.header.get_zooms()) * 1e-3
+            gt_volume = np.count_nonzero(gt) * np.prod(det_specs[1]) * 1e-3
             tp_state = True if gt_volume > class_tp_threshold else False
-            extra = [np.round(gt_volume, 4), tp_state]
+            extra = [np.round(gt_volume, 4), tp_state, det_specs[1]]
             pat_results = []
             if SharedResources.getInstance().number_processes > 1:
                 pool = multiprocessing.Pool(processes=SharedResources.getInstance().number_processes)
                 pat_results = pool.map(separate_dice_computation, zip(thr_range,
                                                                       itertools.repeat(fold_number),
                                                                       itertools.repeat(gt),
-                                                                      itertools.repeat(detection_ni),
+                                                                      itertools.repeat(detection),
                                                                       itertools.repeat(uid),
                                                                       itertools.repeat(extra)
                                                                       )
@@ -291,7 +323,7 @@ class ModelValidation:
                 pool.join()
             else:
                 for thr_value in thr_range:
-                    thr_res = separate_dice_computation([thr_value, fold_number, gt, detection_ni, uid, extra])
+                    thr_res = separate_dice_computation([thr_value, fold_number, gt, detection, uid, extra])
                     pat_results.append(thr_res)
 
             patient_metrics.set_class_regular_metrics(classes[c], pat_results)

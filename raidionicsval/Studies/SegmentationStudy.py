@@ -50,13 +50,13 @@ class SegmentationStudy(AbstractStudy):
             # Plotting the results based on the selection of categorical parameters
             for s in SharedResources.getInstance().studies_selections_categorical:
                 parsing = s.split(',')
-                metric1 = parsing[0]
-                metric2 = parsing[1]
-                if parsing[2] != '':
+                metric1 = parsing[0].strip()
+                metric2 = parsing[1].strip()
+                if parsing[2].strip() != '':
                     metric2_cutoff = [x for x in parsing[2].split('-')]
                 else:
                     metric2_cutoff = None
-                category = parsing[3]
+                category = parsing[3].strip()
                 self.compute_and_plot_categorical_metric_over_metric_categories(class_name=c, metric1=metric1,
                                                                                 metric2=metric2,
                                                                                 metric2_cutoffs=metric2_cutoff,

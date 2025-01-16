@@ -6,7 +6,9 @@
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/gist/dbouget/7560fe410db03e384a45ddc77bbe9a57/compute_validation_example.ipynb)
 
 The code corresponds to the Raidionics backend for running the k-fold cross-validation and metrics computation.
-The module can either be used as a Python library, as CLI, or as Docker container.
+The module can either be used as a Python library, as CLI, or as Docker container. It supports both 2D and 3D inputs,
+the only hard requirement is the expected folder structure to use as input.  
+:warning: For using custom structures, modifying the code [here](https://github.com/dbouget/validation_metrics_computation/blob/master/raidionicsval/Validation/kfold_model_validation.py#L155) is a good place to start.
 
 ## [Installation](https://github.com/dbouget/validation_metrics_computation#installation)
 
