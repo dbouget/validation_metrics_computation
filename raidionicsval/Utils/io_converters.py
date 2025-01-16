@@ -6,6 +6,7 @@ import numpy as np
 import nibabel as nib
 from typing import Tuple, List
 from PIL import Image
+import SimpleITK as sitk
 
 
 def get_fold_from_file(filename, fold_number):
@@ -58,6 +59,23 @@ def reload_optimal_validation_parameters(study_filename):
     return optimums['Detection threshold'], optimums['Dice threshold']
 
 def open_image_file(input_filename: str) -> Tuple[np.ndarray, str, List]:
+    """
+    Opens the input file and associated metadata, which should be compatible for 2D or 3D inputs.\n
+    Currently supported format in 2D: *.tif, *.tiff, *.png\n
+    Currently supported format in 3D: *.nii, *.nii.gz, *.nrrd, *.nhdr, *.mha, *.mhd
+    @TODO. Not fully tested with SimpleITK as loader!
+
+    Parameters
+    ----------
+    input_filename: str
+        Location on disk where the image lies.
+
+    Return
+    ----------
+    Tuple[np.ndarray, str, List]
+        Loaded content as an array of the input image (np.ndarray), extension format (str), and metadata where the
+        first element is the image affine matrix and second element is the image spacings as Tuple.
+    """
     ext = '.' + '.'.join(input_filename.split('.')[1:])
     input_array = None
     input_specifics = []
@@ -68,6 +86,14 @@ def open_image_file(input_filename: str) -> Tuple[np.ndarray, str, List]:
             input_ni = nib.four_to_three(input_ni)[0]
         input_array = input_ni.get_fdata()[:]
         input_specifics = [input_ni.affine, input_ni.header.get_zooms()]
+    elif ext in [".nrrd", ".nhdr", ".mhd", ".mha"]:
+        image_sitk = sitk.ReadImage(input_filename)
+        input_array = sitk.GetArrayFromImage(image_sitk)
+        tmp_affine = np.asarray(image_sitk.GetDirection()).reshape(3,3)
+        affine = np.eye(4).astype('float32')
+        affine[:3, :3] = tmp_affine
+        spacings = image_sitk.GetSpacing()
+        input_specifics = [affine, spacings]
     elif ext in [".tif", ".tiff", ".png"]:
         input_array = Image.open(input_filename)
         input_specifics = [np.eye(4, dtype=int), [1., 1.]]
@@ -77,11 +103,29 @@ def open_image_file(input_filename: str) -> Tuple[np.ndarray, str, List]:
     return input_array, ext, input_specifics
 
 
-def save_image_file(output_array, output_filename: str, specifics: List = None) -> None:
+def save_image_file(output_array: np.ndarray, output_filename: str, specifics: List = None) -> None:
+    """
+    Saves an array on disk using the corresponding file format.
+
+    Parameters
+    ----------
+    output_array: np.ndarray
+        Array to write on disk.
+    output_filename: str
+        Location on disk where to save the array
+    specifics: List
+        Metadata including the image header corresponding to the array (e.g., affine matrix, spacings)
+
+    Returns
+    --------
+        None
+    """
     ext = '.'.join(output_filename.split('.')[1:])
 
     if ext == ".nii" or ext == ".nii.gz":
         nib.save(nib.Nifti1Image(output_array, affine=specifics[0]), output_filename)
+    elif ext in [".nrrd", ".nhdr", ".mhd", ".mha"]:
+        sitk.WriteImage(sitk.GetImageFromArray(output_array), output_filename)
     elif ext in [".tif", ".tiff", ".png"]:
         Image.fromarray(output_array).save(output_filename)
     else:
