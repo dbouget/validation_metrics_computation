@@ -39,6 +39,7 @@ class SharedResources:
         self.data_root = ""
         self.task = None
         self.number_processes = 8
+        self.overall_objective = "segmentation"
 
         self.studies_input_folder = ''
         self.studies_output_folder = ''
@@ -97,6 +98,13 @@ class SharedResources:
         if self.config.has_option('Default', 'number_processes'):
             if self.config['Default']['number_processes'].split('#')[0].strip() != '':
                 self.number_processes = int(self.config['Default']['number_processes'].split('#')[0].strip())
+
+        if self.config.has_option('Default', 'objective'):
+            if self.config['Default']['objective'].split('#')[0].strip() != '':
+                self.overall_objective = self.config['Default']['objective'].split('#')[0].strip()
+        if self.overall_objective not in ["segmentation", "classification"]:
+            raise ValueError("Provided ['Default']['objective'] should be inside [segmentation, classification]."
+                             "\n Please provide a correct value!")
 
     def __parse_studies_parameters(self):
         """
