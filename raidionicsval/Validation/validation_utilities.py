@@ -334,7 +334,7 @@ def compute_patientwise_fold_metrics(results, fold_number, best_threshold, best_
     false_negatives = fold_results.loc[thresh_index & (fold_results['PiW Dice'] <= best_overlap) & (fold_results['True Positive'] == True)]
     patient_wise_recall = len(true_positives) / (len(true_positives) + len(false_negatives) + 1e-6)
     patient_wise_precision = len(true_positives) / (len(true_positives) + len(false_positives) + 1e-6)
-    patient_wise_specificity = 100. if len(true_negatives) + len(false_positives) == 0 else len(true_negatives) / (len(true_negatives) + len(false_positives) + 1e-6)
+    patient_wise_specificity = 1. if len(true_negatives) + len(false_positives) == 0 else len(true_negatives) / (len(true_negatives) + len(false_positives) + 1e-6)
     patient_wise_f1 = 2 * len(true_positives) / ((2 * len(true_positives)) + len(false_positives) + len(false_negatives) + 1e-6)
     accuracy = (len(true_positives) + len(true_negatives)) / (len(true_positives) + len(true_negatives) + len(false_positives) + len(false_negatives))
     balanced_accuracy = (patient_wise_recall + patient_wise_specificity) / 2

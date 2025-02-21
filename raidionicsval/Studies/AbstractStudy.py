@@ -12,6 +12,7 @@ from ..Utils.io_converters import reload_optimal_validation_parameters
 from ..Plotting.metric_versus_binned_boxplot import compute_binned_metric_over_metric_boxplot
 from ..Validation.validation_utilities import compute_patientwise_fold_metrics, compute_singe_fold_average_metrics
 from ..Validation.extra_metrics_computation import compute_overall_metrics_correlation
+from ..Utils.latex_converter import export_segmentation_df_to_latex_paper
 
 
 class AbstractStudy(ABC):
@@ -93,6 +94,7 @@ class AbstractStudy(ABC):
             self.__compute_results_metric_over_metric(data=results_df, class_name=class_name, metric1='PiW Dice',
                                                       metric2='GT volume (ml)', category=category, suffix='_')
             self.__compute_agreement_blant_altman(data=results_df, class_name=class_name, category=category)
+            export_segmentation_df_to_latex_paper(folder=self.input_folder, class_name=class_name, suffix=category)
         except Exception as e:
             print('{}'.format(traceback.format_exc()))
 
@@ -122,7 +124,8 @@ class AbstractStudy(ABC):
         except Exception as e:
             print('{}'.format(traceback.format_exc()))
 
-    def __compute_dice_confidence_intervals(self, class_name: str, data=None, category: str = 'All', suffix=''):
+    def __compute_dice_confidence_intervals(self, class_name: str, data=None, category: str = 'All',
+                                            study_name: str = "", suffix=''):
         """
 
         :param class_name:
@@ -147,7 +150,10 @@ class AbstractStudy(ABC):
                 optimal_threshold_index = dice_thresholds.index(optimal_threshold)
                 best_dices_per_patient = results['PiW Dice'].values[optimal_threshold_index::nb_tresholds]
                 optimal_overlap = self.classes_optimal[class_name]['All'][0] if category == 'All' else self.classes_optimal[class_name]['True Positive'][0]
-                compute_dice_confidence_intervals(folder=self.output_folder, dices=best_dices_per_patient,
+                output_folder = self.output_folder
+                if study_name != "":
+                    output_folder = os.path.join(self.output_folder, study_name)
+                compute_dice_confidence_intervals(folder=output_folder, dices=best_dices_per_patient,
                                                   postfix='_overall' + suffix + '_' + class_name + filename_extra,
                                                   best_overlap=optimal_overlap)
             except Exception as e:
@@ -186,7 +192,8 @@ class AbstractStudy(ABC):
 
 
     def __compute_results_metric_over_metric(self, class_name: str, data=None, metric1='PiW Dice',
-                                             metric2='GT Volume (ml)', category: str = 'All', suffix=''):
+                                             metric2='GT Volume (ml)', category: str = 'All', study_name: str = "",
+                                             suffix=''):
         try:
             filename_extra = '' if category == 'All' else '_tp'
             if data is None:
@@ -214,7 +221,9 @@ class AbstractStudy(ABC):
                     optimal_results_per_patient = pd.merge(optimal_results_per_patient, self.extra_patient_parameters,
                                                            on="Patient", how='left') #how='outer'
 
-            folder = os.path.join(self.output_folder, metric1.replace(" ", "") + '_' + metric2.replace(" ", "") + '-Wise')
+            if study_name == "":
+                study_name = metric1.replace(" ", "") + '_' + metric2.replace(" ", "") + '-Wise'
+            folder = os.path.join(self.output_folder, study_name)
             os.makedirs(folder, exist_ok=True)
             optimal_overlap = self.classes_optimal[class_name]['All'][0] if category == 'All' else self.classes_optimal[class_name]['True Positive'][0]
             compute_binned_metric_over_metric_boxplot(folder=folder, data=optimal_results_per_patient,
@@ -308,13 +317,16 @@ class AbstractStudy(ABC):
                 cat_optimal_results = total_optimal_results.loc[total_optimal_results[metric2] > metric2_cutoffs[-1]]
                 optimal_results_per_cutoff['>' + str(metric2_cutoffs[-1])] = cat_optimal_results
 
+            study_name = metric1.replace(" ", "-") + "_Versus_" + metric2.replace(" ", "-")
+            study_output_folder = os.path.join(self.output_folder, study_name)
+            os.makedirs(study_output_folder, exist_ok=True)
             for cat in optimal_results_per_cutoff.keys():
                 # @TODO. Must include a new fold average specific for the studies, with mean and std values as input,
                 # which is different from the inputs to the computation in the validation part....
                 if len(optimal_results_per_cutoff[cat]) == 0:
                     print("Skipping analysis for {} {}. Collected pd.DataFrame is empty.\n".format(metric2, cat))
                     return
-                self.compute_fold_average(self.output_folder, data=optimal_results_per_cutoff[cat],
+                self.compute_fold_average(folder=study_output_folder, data=optimal_results_per_cutoff[cat],
                                           class_optimal=self.classes_optimal, metrics=self.metric_names,
                                           suffix=suffix + '_' + metric2 + '_' + cat,
                                           true_positive_state=(category == 'True Positive'),
@@ -323,12 +335,16 @@ class AbstractStudy(ABC):
                 self.__compute_dice_confidence_intervals(class_name=class_name,
                                                          category=category,
                                                          data=optimal_results_per_cutoff[cat],
+                                                         study_name=study_name,
                                                          suffix=suffix + '_' + metric2 + '_' + cat)
                 self.__compute_results_metric_over_metric(class_name=class_name,
                                                           data=optimal_results_per_cutoff[cat], metric1=metric1,
                                                           metric2=metric2,
                                                           category=category,
+                                                          study_name=study_name,
                                                           suffix=suffix + '_' + metric2 + '_' + cat)
+            export_segmentation_df_to_latex_paper(folder=self.output_folder, class_name=class_name, study=study_name,
+                                                  categories=list(optimal_results_per_cutoff.keys()), suffix=suffix)
         except Exception as e:
             print('{}'.format(traceback.format_exc()))
 
@@ -376,6 +392,12 @@ class AbstractStudy(ABC):
                 print('The required metric is missing from the DataFrame with either {} or {}. Skipping.\n'.format(metric1, metric2))
                 return
 
+            total_patients_nb = len(total_optimal_results)
+            total_optimal_results = total_optimal_results.dropna(subset=[metric2])
+            total_patients_nb_selected = len(total_optimal_results)
+            if total_patients_nb != total_patients_nb_selected:
+                print(f"A total of {total_patients_nb-total_patients_nb_selected} patients has been discarded for "
+                      f"the analysis over {metric2} because missing info from the extra_parameters.csv file!")
             optimal_results_per_cutoff = {}
             if metric2_cutoffs is None or len(metric2_cutoffs) == 0:
                 metric2_cutoffs = list(np.unique(total_optimal_results[metric2].values))
@@ -384,6 +406,9 @@ class AbstractStudy(ABC):
                 cat_optimal_results = total_optimal_results.loc[total_optimal_results[metric2] == cutoff]
                 optimal_results_per_cutoff[cutoff] = cat_optimal_results
 
+            study_name = metric1.replace(" ", "-") + "_Versus_" + metric2.replace(" ", "-")
+            study_output_folder = os.path.join(self.output_folder, study_name)
+            os.makedirs(study_output_folder, exist_ok=True)
             for cat in optimal_results_per_cutoff.keys():
                 # @TODO. Must include a new fold average specific for the studies, with mean and std values as input,
                 # which is different from the inputs to the computation in the validation part....
@@ -391,7 +416,7 @@ class AbstractStudy(ABC):
                     print("Skipping analysis for {} {}. Collected pd.DataFrame is empty.\n".format(metric2, cat))
                     return
                 metric2 = "GT volume (ml)"
-                self.compute_fold_average(self.output_folder, data=optimal_results_per_cutoff[cat],
+                self.compute_fold_average(folder=study_output_folder, data=optimal_results_per_cutoff[cat],
                                           class_optimal=self.classes_optimal, metrics=self.metric_names,
                                           suffix=suffix + '_' + metric2 + '_' + cat,
                                           true_positive_state=(category == 'True Positive'),
@@ -400,12 +425,16 @@ class AbstractStudy(ABC):
                 self.__compute_dice_confidence_intervals(class_name=class_name,
                                                          category=category,
                                                          data=optimal_results_per_cutoff[cat],
+                                                         study_name=study_name,
                                                          suffix=suffix + '_' + metric2 + '_' + cat)
                 self.__compute_results_metric_over_metric(class_name=class_name,
                                                           data=optimal_results_per_cutoff[cat], metric1=metric1,
                                                           metric2=metric2,
                                                           category=category,
+                                                          study_name=study_name,
                                                           suffix=suffix + '_' + metric2 + '_' + cat)
+            export_segmentation_df_to_latex_paper(folder=self.output_folder, class_name=class_name, study=study_name,
+                                                  categories=list(optimal_results_per_cutoff.keys()), suffix=suffix)
         except Exception as e:
             print('{}'.format(traceback.format_exc()))
 
