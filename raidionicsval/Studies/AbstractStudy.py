@@ -571,3 +571,109 @@ class AbstractStudy(ABC):
         except Exception as e:
             print("Issue arose for class: {}.".format(class_name))
             print(traceback.format_exc())
+
+    def compute_and_plot_metric_over_metric_cascading_categories(self, class_name: str, category: str = 'All'):
+        results_filename = os.path.join(self.input_folder, 'Validation', class_name + '_dice_scores.csv')
+        results = pd.read_csv(results_filename)
+        results.replace('inf', np.nan, inplace=True)
+        if category == 'True Positive':
+            results = results.loc[results["True Positive"] == True]
+
+        total_thresholds = [np.round(x, 2) for x in list(np.unique(results['Threshold'].values))]
+        nb_thresholds = len(np.unique(results['Threshold'].values))
+        optimal_threshold = self.classes_optimal[class_name]['All'][1] if category == 'All' else self.classes_optimal[class_name]['True Positive'][1]
+        optimal_thresold_index = total_thresholds.index(optimal_threshold)
+        optimal_results_per_patient = results[optimal_thresold_index::nb_thresholds]
+        optimal_results_per_patient['Patient'] = optimal_results_per_patient.Patient.astype(str)
+        if self.extra_patient_parameters is not None:
+            total_optimal_results = pd.merge(optimal_results_per_patient, self.extra_patient_parameters, on="Patient")
+        else:
+            total_optimal_results = optimal_results_per_patient
+
+        data_per_complete_selection = {}
+        for s in SharedResources.getInstance().studies_selections_categorical:
+            parsing = s.split(',')
+            metric1 = parsing[0].strip()
+            metric2 = parsing[1].strip()
+            if parsing[2].strip() != '':
+                metric2_cutoffs = [x for x in parsing[2].split('-')]
+            else:
+                metric2_cutoffs = None
+
+            total_optimal_results = total_optimal_results.dropna(subset=[metric2])
+            if metric2_cutoffs is None or len(metric2_cutoffs) == 0:
+                metric2_cutoffs = list(np.unique(total_optimal_results[metric2].values))
+
+            new_data_per_complete_selection = {}
+            if len(data_per_complete_selection.keys()) == 0:
+                for c, cutoff in enumerate(metric2_cutoffs):
+                    cat_optimal_results = total_optimal_results.loc[total_optimal_results[metric2] == cutoff]
+                    new_data_per_complete_selection[cutoff] = cat_optimal_results
+            else:
+                for sel in list(data_per_complete_selection.keys()):
+                    results_pool = data_per_complete_selection[sel]
+                    for c, cutoff in enumerate(metric2_cutoffs):
+                        cat_results = results_pool.loc[results_pool[metric2] == cutoff]
+                        new_data_per_complete_selection[sel + ';' + cutoff] = cat_results
+            data_per_complete_selection = new_data_per_complete_selection
+
+        for s in SharedResources.getInstance().studies_selections_dense:
+            parsing = s.split(',')
+            metric1 = parsing[0].strip()
+            metric2 = parsing[1].strip()
+            if parsing[2].strip() != '':
+                metric2_cutoffs = [float(x) for x in parsing[2].split('-')]
+            else:
+                metric2_cutoffs = None
+
+            if metric2_cutoffs is None or len(metric2_cutoffs) == 0:
+                continue
+
+            total_optimal_results = total_optimal_results.dropna(subset=[metric2])
+            new_data_per_complete_selection = {}
+            if len(data_per_complete_selection.keys()) == 0:
+                for c, cutoff in enumerate(metric2_cutoffs):
+                    if c == 0:
+                        cat_optimal_results = total_optimal_results.loc[total_optimal_results[metric2] <= cutoff]
+                        new_data_per_complete_selection[metric2 + '<=' + str(cutoff)] = cat_optimal_results
+                    else:
+                        cat_optimal_results = total_optimal_results.loc[metric2_cutoffs[c-1] < total_optimal_results[metric2] <= cutoff]
+                        new_data_per_complete_selection[metric2 + ']' + str(metric2_cutoffs[c-1]) + ',' + str(cutoff) + ']'] = cat_optimal_results
+                cat_optimal_results = total_optimal_results.loc[total_optimal_results[metric2] > metric2_cutoffs[-1]]
+                new_data_per_complete_selection[metric2 + '>' + str(metric2_cutoffs[-1])] = cat_optimal_results
+            else:
+                for sel in list(data_per_complete_selection.keys()):
+                    results_pool = data_per_complete_selection[sel]
+                    for c, cutoff in enumerate(metric2_cutoffs):
+                        if c == 0:
+                            cat_optimal_results = results_pool.loc[results_pool[metric2] <= cutoff]
+                            new_data_per_complete_selection[sel + ';' + metric2 + '<=' + str(cutoff)] = cat_optimal_results
+                        else:
+                            cat_optimal_results = results_pool.loc[
+                                metric2_cutoffs[c - 1] < results_pool[metric2] <= cutoff]
+                            new_data_per_complete_selection[sel + ';' + metric2 +
+                                ']' + str(metric2_cutoffs[c - 1]) + ',' + str(cutoff) + ']'] = cat_optimal_results
+                    cat_optimal_results = results_pool.loc[
+                        results_pool[metric2] > metric2_cutoffs[-1]]
+                    new_data_per_complete_selection[sel + ';' + metric2 + '>' + str(metric2_cutoffs[-1])] = cat_optimal_results
+            data_per_complete_selection = new_data_per_complete_selection
+
+        for sel in list(data_per_complete_selection.keys()):
+            combined_df = data_per_complete_selection[sel]
+            if len(combined_df) != 0:
+                # self.__compute_results_metric_over_metric(data=combined_df, class_name=class_name, metric1='PiW Dice',
+                #                                           metric2='GT volume (ml)', category=category,
+                #                                           study_name='Cascaded_Selection/' + sel, suffix='_' + sel)
+                dest_folder = os.path.join(self.output_folder, 'Cascaded_Selection', sel)
+                os.makedirs(dest_folder, exist_ok=True)
+                self.compute_fold_average(folder=dest_folder,
+                                          data=combined_df,
+                                          class_optimal=self.classes_optimal, metrics=self.metric_names,
+                                          suffix='_' + sel,
+                                          true_positive_state=(category == 'True Positive'),
+                                          class_names=SharedResources.getInstance().studies_class_names
+                                          )
+                export_segmentation_df_to_latex_paper(folder=dest_folder, class_name=class_name, study=sel,
+                                                      input_csv_filename=os.path.join(dest_folder, class_name + '_overall_metrics_average__' + sel + '.csv'))
+            else:
+                print("No results for the following combination: {}. Skipping...".format(sel))
