@@ -433,6 +433,7 @@ class AbstractStudy(ABC):
                                                           category=category,
                                                           study_name=study_name,
                                                           suffix=suffix + '_' + metric2 + '_' + cat)
+            suffix = "tp" + suffix if category == "True Positive" else suffix
             export_segmentation_df_to_latex_paper(folder=self.output_folder, class_name=class_name, study=study_name,
                                                   categories=list(optimal_results_per_cutoff.keys()), suffix=suffix)
         except Exception as e:

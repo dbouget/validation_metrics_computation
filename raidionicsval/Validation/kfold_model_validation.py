@@ -116,6 +116,7 @@ class ModelValidation:
             results_per_folds.append(results)
 
     def __compute_metrics_for_fold(self, data_list, fold_number):
+        data_list = ["5_1000_MR_FLAIR_post_4125", "5_1000_MR_FLAIR_pre_2366"]
         for i, patient in enumerate(tqdm(data_list)):
             uid = None
             try:
@@ -195,7 +196,7 @@ class ModelValidation:
             for _, _, files in os.walk(detection_image_base):
                 for f in files:
                     if pred_suffix in f:
-                        if use_internal_convention and patient_metrics.patient_id.split('_')[1] in f:
+                        if use_internal_convention and patient_metrics.patient_id.split('_')[1] in f.split('_'):
                             detection_filename = os.path.join(detection_image_base, f)
                         elif not use_internal_convention:
                             detection_filename = os.path.join(detection_image_base, f)
