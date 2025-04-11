@@ -144,6 +144,10 @@ class AbstractStudy(ABC):
                     results.replace('inf', np.nan, inplace=True)
                 else:
                     results = deepcopy(data)
+
+                if category != 'All':
+                    results = results.loc[results["True Positive"] == True]
+
                 dice_thresholds = [np.round(x, 2) for x in list(np.unique(results['Threshold'].values))]
                 nb_tresholds = len(dice_thresholds)
                 optimal_threshold = self.classes_optimal[class_name]['All'][1] if category == 'All' else self.classes_optimal[class_name]['True Positive'][1]
@@ -205,6 +209,9 @@ class AbstractStudy(ABC):
 
             # if self.extra_patient_parameters is None:
             #     return
+
+            if category != 'All':
+                results = results.loc[results["True Positive"] == True]
 
             number_bins = 10
             if metric2 == "SpacZ":
@@ -284,8 +291,8 @@ class AbstractStudy(ABC):
                 results_filename = os.path.join(self.input_folder, 'Validation', class_name + '_dice_scores.csv')
                 results = pd.read_csv(results_filename)
                 results.replace('inf', np.nan, inplace=True)
-                if category == 'True Positive':
-                    results = results.loc[results["True Positive"] == True]
+                # if category == 'True Positive':
+                #     results = results.loc[results["True Positive"] == True]
             else:
                 results = deepcopy(data)
             total_thresholds = [np.round(x, 2) for x in list(np.unique(results['Threshold'].values))]
@@ -329,9 +336,8 @@ class AbstractStudy(ABC):
                 self.compute_fold_average(folder=study_output_folder, data=optimal_results_per_cutoff[cat],
                                           class_optimal=self.classes_optimal, metrics=self.metric_names,
                                           suffix=suffix + '_' + metric2 + '_' + cat,
-                                          true_positive_state=(category == 'True Positive'),
-                                          class_names=SharedResources.getInstance().studies_class_names
-                                          )
+                                          class_names=SharedResources.getInstance().studies_class_names,
+                                          condition=category)
                 self.__compute_dice_confidence_intervals(class_name=class_name,
                                                          category=category,
                                                          data=optimal_results_per_cutoff[cat],
@@ -343,6 +349,7 @@ class AbstractStudy(ABC):
                                                           category=category,
                                                           study_name=study_name,
                                                           suffix=suffix + '_' + metric2 + '_' + cat)
+            suffix = category + '_' + metric2 + '_'
             export_segmentation_df_to_latex_paper(folder=self.output_folder, class_name=class_name, study=study_name,
                                                   categories=list(optimal_results_per_cutoff.keys()), suffix=suffix)
         except Exception as e:
@@ -373,8 +380,8 @@ class AbstractStudy(ABC):
                 results_filename = os.path.join(self.input_folder, 'Validation', class_name + '_dice_scores.csv')
                 results = pd.read_csv(results_filename)
                 results.replace('inf', np.nan, inplace=True)
-                if category == 'True Positive':
-                    results = results.loc[results["True Positive"] == True]
+                # if category == 'True Positive':
+                #     results = results.loc[results["True Positive"] == True]
             else:
                 results = deepcopy(data)
             total_thresholds = [np.round(x, 2) for x in list(np.unique(results['Threshold'].values))]
@@ -418,10 +425,8 @@ class AbstractStudy(ABC):
                 metric2 = "GT volume (ml)"
                 self.compute_fold_average(folder=study_output_folder, data=optimal_results_per_cutoff[cat],
                                           class_optimal=self.classes_optimal, metrics=self.metric_names,
-                                          suffix=suffix + '_' + metric2 + '_' + cat,
-                                          true_positive_state=(category == 'True Positive'),
-                                          class_names=SharedResources.getInstance().studies_class_names
-                                          )
+                                          suffix=suffix + '_' + metric2 + '_' + cat, class_names=SharedResources.getInstance().studies_class_names,
+                                          condition=category)
                 self.__compute_dice_confidence_intervals(class_name=class_name,
                                                          category=category,
                                                          data=optimal_results_per_cutoff[cat],
@@ -433,28 +438,27 @@ class AbstractStudy(ABC):
                                                           category=category,
                                                           study_name=study_name,
                                                           suffix=suffix + '_' + metric2 + '_' + cat)
-            suffix = "tp" + suffix if category == "True Positive" else suffix
+            suffix = category
+            suffix = category + '_' + metric2 + '_'
             export_segmentation_df_to_latex_paper(folder=self.output_folder, class_name=class_name, study=study_name,
                                                   categories=list(optimal_results_per_cutoff.keys()), suffix=suffix)
         except Exception as e:
             print('{}'.format(traceback.format_exc()))
 
-    def compute_fold_average(self, folder, data=None, class_optimal={}, metrics=[], suffix='',
-                             true_positive_state=False, class_names=None):
+    def compute_fold_average(self, folder, data=None, class_optimal={}, metrics=[], suffix='', class_names=None, condition='All'):
         # @TODO. Should not collect the classes from validation_class_names, as it might differ from the studied classes.
         if class_names is None:
             classes = SharedResources.getInstance().validation_class_names
         else:
             classes = class_names
-        optimal_tag = 'All' if not true_positive_state else 'True Positive'
+        optimal_tag = 'All' if condition == 'All' else 'True Positive'
         for c in classes:
             optimal_values = class_optimal[c][optimal_tag]
             self.compute_fold_average_inner(folder, data=data, class_name=c, best_threshold=optimal_values[1],
-                                       best_overlap=optimal_values[0], metrics=metrics, suffix=suffix,
-                                       true_positive_state=true_positive_state)
+                                       best_overlap=optimal_values[0], metrics=metrics, suffix=suffix, condition=condition)
 
     def compute_fold_average_inner(self, folder, class_name, data=None, best_threshold=0.5, best_overlap=0.0, metrics=[],
-                                   suffix='', true_positive_state=False):
+                                   suffix='', condition='All'):
         """
         :param folder: Destination folder where the results will be dumped (as specified in the configuration file)
         :param best_threshold:
@@ -467,12 +471,12 @@ class AbstractStudy(ABC):
             if data is None:
                 results_filename = os.path.join(folder, class_name + '_dice_scores.csv')
                 results = pd.read_csv(results_filename)
-                if true_positive_state:
-                    results = results.loc[results["True Positive"] == True]
+                # if true_positive_state:
+                #     results = results.loc[results["True Positive"] == True]
             else:
                 results = deepcopy(data)
 
-            suffix = "tp" + suffix if true_positive_state else suffix
+            suffix = condition + suffix
             results.replace('inf', np.nan, inplace=True)
             results.replace(float('inf'), np.nan, inplace=True)
             results.replace('', np.nan, inplace=True)
@@ -501,9 +505,9 @@ class AbstractStudy(ABC):
             # used for other metrics computation?
             for f in unique_folds:
                 patientwise_metrics = compute_patientwise_fold_metrics(results, f, best_threshold, best_overlap,
-                                                                       tp_volume_threshold)
+                                                                       tp_volume_threshold, condition)
                 fold_average_metrics, fold_std_metrics = compute_singe_fold_average_metrics(results, f, best_threshold,
-                                                                                            best_overlap, metrics)
+                                                                                            best_overlap, metrics, tp_volume_threshold, condition)
                 fold_metrics = []
                 for m in range(len(fold_average_metrics)):
                     fold_metrics.append(fold_average_metrics[m])
@@ -671,7 +675,6 @@ class AbstractStudy(ABC):
                                           data=combined_df,
                                           class_optimal=self.classes_optimal, metrics=self.metric_names,
                                           suffix='_' + sel,
-                                          true_positive_state=(category == 'True Positive'),
                                           class_names=SharedResources.getInstance().studies_class_names
                                           )
                 export_segmentation_df_to_latex_paper(folder=dest_folder, class_name=class_name, study=sel,
