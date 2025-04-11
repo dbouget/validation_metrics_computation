@@ -48,12 +48,12 @@ class ModelValidation:
                                                                          detection_overlap_thresholds=self.detection_overlap_thresholds)
         if len(SharedResources.getInstance().validation_metric_names) != 0:
             self.__compute_extra_metrics(class_optimal=class_optimal)
-        compute_fold_average(self.input_folder, class_optimal=class_optimal, metrics=self.metric_names,
-                             true_positive_state=False)
-        compute_fold_average(self.input_folder, class_optimal=class_optimal, metrics=self.metric_names,
-                             true_positive_state=True)
-        compute_fold_average(self.input_folder, class_optimal=class_optimal, metrics=self.metric_names,
-                             true_positive_state=True, positive_detected_state=True)
+        # All
+        compute_fold_average(self.input_folder, class_optimal=class_optimal, metrics=self.metric_names, condition='All')
+        # Positive, based on given volume limit
+        compute_fold_average(self.input_folder, class_optimal=class_optimal, metrics=self.metric_names, condition='Positive')
+        # True positive, based on given detection_overlap_thresholds
+        compute_fold_average(self.input_folder, class_optimal=class_optimal, metrics=self.metric_names, condition='TP')
 
     def __compute_metrics(self):
         """
@@ -116,7 +116,6 @@ class ModelValidation:
             results_per_folds.append(results)
 
     def __compute_metrics_for_fold(self, data_list, fold_number):
-        data_list = ["5_1000_MR_FLAIR_post_4125", "5_1000_MR_FLAIR_pre_2366"]
         for i, patient in enumerate(tqdm(data_list)):
             uid = None
             try:

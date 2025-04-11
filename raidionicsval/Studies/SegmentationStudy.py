@@ -32,7 +32,8 @@ class SegmentationStudy(AbstractStudy):
         """
         for c in self.class_names:
             super().compute_and_plot_overall(c, category='All')
-            super().compute_and_plot_overall(c, category='True Positive')
+            super().compute_and_plot_overall(c, category='Positive')
+            super().compute_and_plot_overall(c, category='TP')
 
             # Plotting the results based on the selection of dense parameters
             for s in SharedResources.getInstance().studies_selections_dense:
