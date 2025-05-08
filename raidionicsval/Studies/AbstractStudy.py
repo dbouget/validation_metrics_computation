@@ -86,8 +86,14 @@ class AbstractStudy(ABC):
             results_filename = os.path.join(self.input_folder, 'Validation', class_name + '_dice_scores.csv')
             results_df = pd.read_csv(results_filename)
             results_df.replace('inf', np.nan, inplace=True)
-            if category == 'True Positive':
+            optimal_threshold = self.classes_optimal[class_name]['All'][1] if category == 'All' else self.classes_optimal[class_name]['True Positive'][1]
+            if category != 'All':
                 results_df = results_df.loc[results_df["True Positive"] == True]
+                if category == "TP":
+                    optimal_overlap = self.classes_optimal[class_name]['All'][0] if category == 'All' else self.classes_optimal[class_name]['True Positive'][0]
+                    results_df = results_df.loc[(results_df["Threshold"] == optimal_threshold) & (results_df["PiW Dice"] >= optimal_overlap)]
+            else:
+                results_df = results_df.loc[results_df["Threshold"] == optimal_threshold]
 
             self.metric_names = list(results_df.columns)[17:]  # Hard-coded, needs to be improved.
             self.__compute_dice_confidence_intervals(data=results_df, class_name=class_name, category=category)
@@ -111,13 +117,20 @@ class AbstractStudy(ABC):
             results_filename = os.path.join(self.input_folder, 'Validation', class_name + '_dice_scores.csv')
             results_df = pd.read_csv(results_filename)
             results_df.replace('inf', np.nan, inplace=True)
-            suffix = '_' + category.lower()
-            if category == 'True Positive':
-                results_df = results_df.loc[results_df["True Positive"] == True]
-                suffix = '_tp'
+            suffix = '' if category == "All" else '_' + category
+            optimal_overlap = self.classes_optimal[class_name]['All'][0] if category == 'All' else \
+                self.classes_optimal[class_name]['True Positive'][0]
+            optimal_threshold = self.classes_optimal[class_name]['All'][1] if category == 'All' else \
+                self.classes_optimal[class_name]['True Positive'][1]
+            if category != 'All':
+                if category != 'All':
+                    results_df = results_df.loc[results_df["True Positive"] == True]
+                    if category == "TP":
+                        results_df = results_df.loc[(results_df["Threshold"] == optimal_threshold) & (
+                                results_df["PiW Dice"] >= optimal_overlap)]
+                else:
+                    results_df = results_df.loc[results_df["Threshold"] == optimal_threshold]
 
-            optimal_overlap = self.classes_optimal[class_name][category][0]
-            optimal_threshold = self.classes_optimal[class_name][category][1]
             compute_overall_metrics_correlation(self.input_folder, self.output_folder, data=results_df,
                                                 class_name=class_name, best_threshold=optimal_threshold,
                                                 best_overlap=optimal_overlap, suffix=suffix)
@@ -137,22 +150,30 @@ class AbstractStudy(ABC):
         if sys.version_info[0] >= 3 and sys.version_info[1] >= 7:
             from raidionicsval.Plotting.confidence_intervals_plot import compute_dice_confidence_intervals
             try:
-                filename_extra = '' if category == 'All' else '_tp'
+                filename_extra = '' if category == 'All' else '_' + category
                 if data is None:
                     results_filename = os.path.join(self.input_folder, 'Validation', class_name + '_dice_scores.csv')
                     results = pd.read_csv(results_filename)
                     results.replace('inf', np.nan, inplace=True)
+                    optimal_threshold = self.classes_optimal[class_name]['All'][1] if category == 'All' else \
+                        self.classes_optimal[class_name]['True Positive'][1]
+                    if category != 'All':
+                        results = results.loc[results["True Positive"] == True]
+                        if category == "TP":
+                            optimal_overlap = self.classes_optimal[class_name]['All'][0] if category == 'All' else \
+                            self.classes_optimal[class_name]['True Positive'][0]
+                            results = results.loc[(results["Threshold"] == optimal_threshold) & (
+                                        results["PiW Dice"] >= optimal_overlap)]
+                    else:
+                        results = results.loc[results["Threshold"] == optimal_threshold]
                 else:
                     results = deepcopy(data)
 
-                if category != 'All':
-                    results = results.loc[results["True Positive"] == True]
-
-                dice_thresholds = [np.round(x, 2) for x in list(np.unique(results['Threshold'].values))]
-                nb_tresholds = len(dice_thresholds)
-                optimal_threshold = self.classes_optimal[class_name]['All'][1] if category == 'All' else self.classes_optimal[class_name]['True Positive'][1]
-                optimal_threshold_index = dice_thresholds.index(optimal_threshold)
-                best_dices_per_patient = results['PiW Dice'].values[optimal_threshold_index::nb_tresholds]
+                # dice_thresholds = [np.round(x, 2) for x in list(np.unique(results['Threshold'].values))]
+                # nb_tresholds = len(dice_thresholds)
+                # optimal_threshold = self.classes_optimal[class_name]['All'][1] if category == 'All' else self.classes_optimal[class_name]['True Positive'][1]
+                # optimal_threshold_index = dice_thresholds.index(optimal_threshold)
+                best_dices_per_patient = results['PiW Dice'].values #[optimal_threshold_index::nb_tresholds]
                 optimal_overlap = self.classes_optimal[class_name]['All'][0] if category == 'All' else self.classes_optimal[class_name]['True Positive'][0]
                 output_folder = self.output_folder
                 if study_name != "":
@@ -176,19 +197,31 @@ class AbstractStudy(ABC):
         """
         from raidionicsval.Plotting.agreement_plot import compute_agreement_plot
         try:
-            filename_extra = '' if category == 'All' else '_tp'
+            filename_extra = '' if category == 'All' else '_' + category
             if data is None:
                 results_filename = os.path.join(self.input_folder, 'Validation', class_name + '_dice_scores.csv')
                 results = pd.read_csv(results_filename)
                 results.replace('inf', np.nan, inplace=True)
+                optimal_threshold = self.classes_optimal[class_name]['All'][1] if category == 'All' else \
+                    self.classes_optimal[class_name]['True Positive'][1]
+                if category != 'All':
+                    results = results.loc[results["True Positive"] == True]
+                    if category == "TP":
+                        optimal_overlap = self.classes_optimal[class_name]['All'][0] if category == 'All' else \
+                            self.classes_optimal[class_name]['True Positive'][0]
+                        results = results.loc[(results["Threshold"] == optimal_threshold) & (
+                                results["PiW Dice"] >= optimal_overlap)]
+                else:
+                    results = results.loc[results["Threshold"] == optimal_threshold]
             else:
                 results = deepcopy(data)
-            dice_thresholds = [np.round(x, 2) for x in list(np.unique(results['Threshold'].values))]
-            nb_tresholds = len(dice_thresholds)
-            optimal_threshold = self.classes_optimal[class_name]['All'][1] if category == 'All' else self.classes_optimal[class_name]['True Positive'][1]
-            optimal_threshold_index = dice_thresholds.index(optimal_threshold)
-            gt_volumes = results['GT volume (ml)'].values[optimal_threshold_index::nb_tresholds]
-            det_volumes = results['Detection volume (ml)'].values[optimal_threshold_index::nb_tresholds]
+            # dice_thresholds = [np.round(x, 2) for x in list(np.unique(results['Threshold'].values))]
+            # nb_tresholds = len(dice_thresholds)
+            # optimal_threshold = self.classes_optimal[class_name]['All'][1] if category == 'All' else self.classes_optimal[class_name]['True Positive'][1]
+            # optimal_threshold_index = dice_thresholds.index(optimal_threshold)
+
+            gt_volumes = results['GT volume (ml)'].values #[optimal_threshold_index::nb_tresholds]
+            det_volumes = results['Detection volume (ml)'].values #[optimal_threshold_index::nb_tresholds]
             compute_agreement_plot(folder=self.output_folder, array1=gt_volumes, array2=det_volumes,
                                               postfix='_overall' + suffix + '_' + class_name + filename_extra)
         except Exception as e:
@@ -199,28 +232,40 @@ class AbstractStudy(ABC):
                                              metric2='GT Volume (ml)', category: str = 'All', study_name: str = "",
                                              suffix=''):
         try:
-            filename_extra = '' if category == 'All' else '_tp'
+            filename_extra = '' if category == 'All' else '_' + category
             if data is None:
                 results_filename = os.path.join(self.input_folder, 'Validation', class_name + '_dice_scores.csv')
                 results = pd.read_csv(results_filename)
                 results.replace('inf', np.nan, inplace=True)
+                optimal_threshold = self.classes_optimal[class_name]['All'][1] if category == 'All' else \
+                    self.classes_optimal[class_name]['True Positive'][1]
+                if category != 'All':
+                    results = results.loc[results["True Positive"] == True]
+                    if category == "TP":
+                        optimal_overlap = self.classes_optimal[class_name]['All'][0] if category == 'All' else \
+                            self.classes_optimal[class_name]['True Positive'][0]
+                        results = results.loc[(results["Threshold"] == optimal_threshold) & (
+                                results["PiW Dice"] >= optimal_overlap)]
+                else:
+                    results = results.loc[results["Threshold"] == optimal_threshold]
             else:
                 results = deepcopy(data)
 
             # if self.extra_patient_parameters is None:
             #     return
 
-            if category != 'All':
-                results = results.loc[results["True Positive"] == True]
+            # if category != 'All':
+            #     results = results.loc[results["True Positive"] == True]
 
             number_bins = 10
             if metric2 == "SpacZ":
                 number_bins = 5
-            total_thresholds = [np.round(x, 2) for x in list(np.unique(results['Threshold'].values))]
-            nb_thresholds = len(np.unique(results['Threshold'].values))
-            optimal_threshold = self.classes_optimal[class_name]['All'][1] if category == 'All' else self.classes_optimal[class_name]['True Positive'][1]
-            optimal_thresold_index = total_thresholds.index(optimal_threshold)
-            optimal_results_per_patient = results[optimal_thresold_index::nb_thresholds]
+            # total_thresholds = [np.round(x, 2) for x in list(np.unique(results['Threshold'].values))]
+            # nb_thresholds = len(np.unique(results['Threshold'].values))
+            # optimal_threshold = self.classes_optimal[class_name]['All'][1] if category == 'All' else self.classes_optimal[class_name]['True Positive'][1]
+            # optimal_thresold_index = total_thresholds.index(optimal_threshold)
+            # optimal_results_per_patient = results[optimal_thresold_index::nb_thresholds]
+            optimal_results_per_patient = results
             # Not elegant, but either the two files have been merged before or not, so this test should be sufficient.
             if self.extra_patient_parameters is not None:
                 if True in [x not in list(results.columns) for x in list(self.extra_patient_parameters.columns)]:
@@ -246,7 +291,7 @@ class AbstractStudy(ABC):
             existing_folds = np.unique(results['Fold'].values)
             for f, fold in enumerate(existing_folds):
                 results_fold = results.loc[results['Fold'] == fold]
-                optimal_results_per_patient = results_fold[optimal_thresold_index::nb_thresholds]
+                optimal_results_per_patient = results_fold #[optimal_thresold_index::nb_thresholds]
                 if self.extra_patient_parameters is not None:
                     if True in [x not in list(results.columns) for x in list(self.extra_patient_parameters.columns)]:
                         optimal_results_per_patient['Patient'] = optimal_results_per_patient.Patient.astype(str)
@@ -268,7 +313,7 @@ class AbstractStudy(ABC):
         except Exception as e:
             print('{}'.format(traceback.format_exc()))
 
-    def compute_and_plot_metric_over_metric_categories(self, class_name: str, data=None, metric1='PiW Dice',
+    def compute_and_plot_metric_over_metric_categories(self, class_name: str, metric1='PiW Dice',
                                                        metric2='Volume', metric2_cutoffs=None, category='All',
                                                        suffix='') -> None:
         """
@@ -287,19 +332,26 @@ class AbstractStudy(ABC):
             print("Computing and plotting {} over {} with the following cut-off values [{}].\n".format(metric1,
                                                                                                     metric2,
                                                                                                     metric2_cutoffs))
-            if data is None:
-                results_filename = os.path.join(self.input_folder, 'Validation', class_name + '_dice_scores.csv')
-                results = pd.read_csv(results_filename)
-                results.replace('inf', np.nan, inplace=True)
-                # if category == 'True Positive':
-                #     results = results.loc[results["True Positive"] == True]
+            # if data is None:
+            results_filename = os.path.join(self.input_folder, 'Validation', class_name + '_dice_scores.csv')
+            results = pd.read_csv(results_filename)
+            results.replace('inf', np.nan, inplace=True)
+            optimal_threshold = self.classes_optimal[class_name]['All'][1] if category == 'All' else \
+                self.classes_optimal[class_name]['True Positive'][1]
+            if category != 'All':
+                results = results.loc[results["True Positive"] == True]
+                if category == "TP":
+                    optimal_overlap = self.classes_optimal[class_name]['All'][0] if category == 'All' else \
+                        self.classes_optimal[class_name]['True Positive'][0]
+                    results = results.loc[(results["Threshold"] == optimal_threshold) & (
+                            results["PiW Dice"] >= optimal_overlap)]
             else:
-                results = deepcopy(data)
-            total_thresholds = [np.round(x, 2) for x in list(np.unique(results['Threshold'].values))]
-            nb_thresholds = len(np.unique(results['Threshold'].values))
-            optimal_threshold = self.classes_optimal[class_name]['All'][1] if category == 'All' else self.classes_optimal[class_name]['True Positive'][1]
-            optimal_thresold_index = total_thresholds.index(optimal_threshold)
-            optimal_results_per_patient = results[optimal_thresold_index::nb_thresholds]
+                results = results.loc[results["Threshold"] == optimal_threshold]
+            # total_thresholds = [np.round(x, 2) for x in list(np.unique(results['Threshold'].values))]
+            # nb_thresholds = len(np.unique(results['Threshold'].values))
+            # optimal_threshold = self.classes_optimal[class_name]['All'][1] if category == 'All' else self.classes_optimal[class_name]['True Positive'][1]
+            # optimal_thresold_index = total_thresholds.index(optimal_threshold)
+            optimal_results_per_patient = results #[optimal_thresold_index::nb_thresholds]
             optimal_results_per_patient['Patient'] = optimal_results_per_patient.Patient.astype(str)
             if self.extra_patient_parameters is not None:
                 total_optimal_results = pd.merge(optimal_results_per_patient, self.extra_patient_parameters, on="Patient")
@@ -356,7 +408,7 @@ class AbstractStudy(ABC):
             print('{}'.format(traceback.format_exc()))
 
     def compute_and_plot_categorical_metric_over_metric_categories(self, class_name: str, metric1,
-                                                                   metric2, data=None, metric2_cutoffs=None,
+                                                                   metric2, metric2_cutoffs=None,
                                                                    category='All', suffix='') -> None:
         """
         Performs the computation and plotting of a dense metric against a categorical metric.
@@ -376,19 +428,27 @@ class AbstractStudy(ABC):
             print("Computing and plotting {} over {} with the following cut-off values [{}].\n".format(metric1,
                                                                                                        metric2,
                                                                                                        metric2_cutoffs))
-            if data is None:
-                results_filename = os.path.join(self.input_folder, 'Validation', class_name + '_dice_scores.csv')
-                results = pd.read_csv(results_filename)
-                results.replace('inf', np.nan, inplace=True)
-                # if category == 'True Positive':
-                #     results = results.loc[results["True Positive"] == True]
+            # if data is None:
+            results_filename = os.path.join(self.input_folder, 'Validation', class_name + '_dice_scores.csv')
+            results = pd.read_csv(results_filename)
+            results.replace('inf', np.nan, inplace=True)
+            optimal_threshold = self.classes_optimal[class_name]['All'][1] if category == 'All' else \
+                self.classes_optimal[class_name]['True Positive'][1]
+            if category != 'All':
+                results = results.loc[results["True Positive"] == True]
+                if category == "TP":
+                    optimal_overlap = self.classes_optimal[class_name]['All'][0] if category == 'All' else \
+                        self.classes_optimal[class_name]['True Positive'][0]
+                    results = results.loc[(results["Threshold"] == optimal_threshold) & (
+                            results["PiW Dice"] >= optimal_overlap)]
             else:
-                results = deepcopy(data)
-            total_thresholds = [np.round(x, 2) for x in list(np.unique(results['Threshold'].values))]
-            nb_thresholds = len(np.unique(results['Threshold'].values))
-            optimal_threshold = self.classes_optimal[class_name]['All'][1] if category == 'All' else self.classes_optimal[class_name]['True Positive'][1]
-            optimal_thresold_index = total_thresholds.index(optimal_threshold)
-            optimal_results_per_patient = results[optimal_thresold_index::nb_thresholds]
+                results = results.loc[results["Threshold"] == optimal_threshold]
+
+            # total_thresholds = [np.round(x, 2) for x in list(np.unique(results['Threshold'].values))]
+            # nb_thresholds = len(np.unique(results['Threshold'].values))
+            # optimal_threshold = self.classes_optimal[class_name]['All'][1] if category == 'All' else self.classes_optimal[class_name]['True Positive'][1]
+            # optimal_thresold_index = total_thresholds.index(optimal_threshold)
+            optimal_results_per_patient = results #[optimal_thresold_index::nb_thresholds]
             optimal_results_per_patient['Patient'] = optimal_results_per_patient.Patient.astype(str)
             if self.extra_patient_parameters is not None:
                 total_optimal_results = pd.merge(optimal_results_per_patient, self.extra_patient_parameters, on="Patient")
@@ -438,14 +498,14 @@ class AbstractStudy(ABC):
                                                           category=category,
                                                           study_name=study_name,
                                                           suffix=suffix + '_' + metric2 + '_' + cat)
-            suffix = category
             suffix = category + '_' + metric2 + '_'
             export_segmentation_df_to_latex_paper(folder=self.output_folder, class_name=class_name, study=study_name,
                                                   categories=list(optimal_results_per_cutoff.keys()), suffix=suffix)
         except Exception as e:
             print('{}'.format(traceback.format_exc()))
 
-    def compute_fold_average(self, folder, data=None, class_optimal={}, metrics=[], suffix='', class_names=None, condition='All'):
+    def compute_fold_average(self, folder, data=None, class_optimal={}, metrics=[], suffix='', class_names=None,
+                             condition='All'):
         # @TODO. Should not collect the classes from validation_class_names, as it might differ from the studied classes.
         if class_names is None:
             classes = SharedResources.getInstance().validation_class_names
@@ -471,8 +531,18 @@ class AbstractStudy(ABC):
             if data is None:
                 results_filename = os.path.join(folder, class_name + '_dice_scores.csv')
                 results = pd.read_csv(results_filename)
-                # if true_positive_state:
-                #     results = results.loc[results["True Positive"] == True]
+                optimal_overlap = self.classes_optimal[class_name]['All'][0] if condition == 'All' else \
+                    self.classes_optimal[class_name]['True Positive'][0]
+                optimal_threshold = self.classes_optimal[class_name]['All'][1] if condition == 'All' else \
+                    self.classes_optimal[class_name]['True Positive'][1]
+                if condition != 'All':
+                    if condition != 'All':
+                        results = results.loc[results["True Positive"] == True]
+                        if condition == "TP":
+                            results = results.loc[(results["Threshold"] == optimal_threshold) & (
+                                    results["PiW Dice"] >= optimal_overlap)]
+                    else:
+                        results = results.loc[results["Threshold"] == optimal_threshold]
             else:
                 results = deepcopy(data)
 
@@ -581,14 +651,24 @@ class AbstractStudy(ABC):
         results_filename = os.path.join(self.input_folder, 'Validation', class_name + '_dice_scores.csv')
         results = pd.read_csv(results_filename)
         results.replace('inf', np.nan, inplace=True)
-        if category == 'True Positive':
-            results = results.loc[results["True Positive"] == True]
+        optimal_overlap = self.classes_optimal[class_name]['All'][0] if category == 'All' else \
+            self.classes_optimal[class_name]['True Positive'][0]
+        optimal_threshold = self.classes_optimal[class_name]['All'][1] if category == 'All' else \
+            self.classes_optimal[class_name]['True Positive'][1]
+        if category != 'All':
+            if category != 'All':
+                results = results.loc[results["True Positive"] == True]
+                if category == "TP":
+                    results = results.loc[(results["Threshold"] == optimal_threshold) & (
+                            results["PiW Dice"] >= optimal_overlap)]
+            else:
+                results = results.loc[results["Threshold"] == optimal_threshold]
 
-        total_thresholds = [np.round(x, 2) for x in list(np.unique(results['Threshold'].values))]
-        nb_thresholds = len(np.unique(results['Threshold'].values))
-        optimal_threshold = self.classes_optimal[class_name]['All'][1] if category == 'All' else self.classes_optimal[class_name]['True Positive'][1]
-        optimal_thresold_index = total_thresholds.index(optimal_threshold)
-        optimal_results_per_patient = results[optimal_thresold_index::nb_thresholds]
+        # total_thresholds = [np.round(x, 2) for x in list(np.unique(results['Threshold'].values))]
+        # nb_thresholds = len(np.unique(results['Threshold'].values))
+        # optimal_threshold = self.classes_optimal[class_name]['All'][1] if category == 'All' else self.classes_optimal[class_name]['True Positive'][1]
+        # optimal_thresold_index = total_thresholds.index(optimal_threshold)
+        optimal_results_per_patient = results #[optimal_thresold_index::nb_thresholds]
         optimal_results_per_patient['Patient'] = optimal_results_per_patient.Patient.astype(str)
         if self.extra_patient_parameters is not None:
             total_optimal_results = pd.merge(optimal_results_per_patient, self.extra_patient_parameters, on="Patient")
@@ -675,9 +755,10 @@ class AbstractStudy(ABC):
                                           data=combined_df,
                                           class_optimal=self.classes_optimal, metrics=self.metric_names,
                                           suffix='_' + sel,
-                                          class_names=SharedResources.getInstance().studies_class_names
+                                          class_names=SharedResources.getInstance().studies_class_names,
+                                          condition=category
                                           )
                 export_segmentation_df_to_latex_paper(folder=dest_folder, class_name=class_name, study=sel,
-                                                      input_csv_filename=os.path.join(dest_folder, class_name + '_overall_metrics_average__' + sel + '.csv'))
+                                                      input_csv_filename=os.path.join(dest_folder, class_name + '_overall_metrics_average_' + category + '_' + sel + '.csv'))
             else:
                 print("No results for the following combination: {}. Skipping...".format(sel))

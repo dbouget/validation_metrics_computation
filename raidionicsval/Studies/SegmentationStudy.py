@@ -65,7 +65,10 @@ class SegmentationStudy(AbstractStudy):
 
             # Correlation matrix between all metrics
             super().compute_and_plot_metrics_correlation_matrix(class_name=c, category='All')
-            super().compute_and_plot_metrics_correlation_matrix(class_name=c, category='True Positive')
+            super().compute_and_plot_metrics_correlation_matrix(class_name=c, category='Positive')
+            super().compute_and_plot_metrics_correlation_matrix(class_name=c, category='TP')
 
             # Cascading results based on a combination of the selected dense/categorical parameters
             self.compute_and_plot_metric_over_metric_cascading_categories(class_name=c, category='All')
+            self.compute_and_plot_metric_over_metric_cascading_categories(class_name=c, category='Positive')
+            self.compute_and_plot_metric_over_metric_cascading_categories(class_name=c, category='TP')

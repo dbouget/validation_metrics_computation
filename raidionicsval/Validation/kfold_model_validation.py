@@ -50,7 +50,7 @@ class ModelValidation:
             self.__compute_extra_metrics(class_optimal=class_optimal)
         # All
         compute_fold_average(self.input_folder, class_optimal=class_optimal, metrics=self.metric_names, condition='All')
-        # Positive, based on given volume limit
+        # Positive, based on given ground truth volume limit
         compute_fold_average(self.input_folder, class_optimal=class_optimal, metrics=self.metric_names, condition='Positive')
         # True positive, based on given detection_overlap_thresholds
         compute_fold_average(self.input_folder, class_optimal=class_optimal, metrics=self.metric_names, condition='TP')
@@ -271,10 +271,10 @@ class ModelValidation:
             #
             #     if detection_ni.shape != ground_truth_ni.shape:
             #         return False
-            detection_array, file_extension, input_spec = open_image_file(detection_filename)
             # If there's no ground truth, we assume the class to be empty for this patient and create an
             # empty ground truth volume.
             if ground_truth_filename is None or not os.path.exists(ground_truth_filename):
+                detection_array, file_extension, input_spec = open_image_file(detection_filename)
                 ground_truth_filename = os.path.join(os.path.dirname(detection_filename), uid + "_groundtruth_" +
                                                      classes[c] + file_extension)
                 if not os.path.exists(ground_truth_filename):
@@ -282,14 +282,15 @@ class ModelValidation:
                     save_image_file(empty_gt, ground_truth_filename, specifics=input_spec)
             else:
                 file_stats = os.stat(detection_filename)
-                ground_truth_array, _, ground_truth_input_spec = open_image_file(ground_truth_filename)
 
                 if file_stats.st_size == 0:
+                    ground_truth_array, _, ground_truth_input_spec = open_image_file(ground_truth_filename)
+                    detection_array, file_extension, input_spec = open_image_file(detection_filename)
                     save_image_file(np.zeros(shape=ground_truth_array.shape), detection_filename,
                                     specifics=ground_truth_input_spec)
 
-                if detection_array.shape != ground_truth_array.shape:
-                    return False
+                # if detection_array.shape != ground_truth_array.shape:
+                #     return False
 
             patient_filenames[classes[c]] = [ground_truth_filename, detection_filename]
         patient_metrics.set_patient_filenames(patient_filenames)
