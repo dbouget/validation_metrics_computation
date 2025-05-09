@@ -92,6 +92,8 @@ class AbstractStudy(ABC):
                 if category == "TP":
                     optimal_overlap = self.classes_optimal[class_name]['All'][0] if category == 'All' else self.classes_optimal[class_name]['True Positive'][0]
                     results_df = results_df.loc[(results_df["Threshold"] == optimal_threshold) & (results_df["PiW Dice"] >= optimal_overlap)]
+                else:
+                    results_df = results_df.loc[results_df["Threshold"] == optimal_threshold]
             else:
                 results_df = results_df.loc[results_df["Threshold"] == optimal_threshold]
 
@@ -128,6 +130,8 @@ class AbstractStudy(ABC):
                     if category == "TP":
                         results_df = results_df.loc[(results_df["Threshold"] == optimal_threshold) & (
                                 results_df["PiW Dice"] >= optimal_overlap)]
+                    else:
+                        results_df = results_df.loc[results_df["Threshold"] == optimal_threshold]
                 else:
                     results_df = results_df.loc[results_df["Threshold"] == optimal_threshold]
 
@@ -345,6 +349,8 @@ class AbstractStudy(ABC):
                         self.classes_optimal[class_name]['True Positive'][0]
                     results = results.loc[(results["Threshold"] == optimal_threshold) & (
                             results["PiW Dice"] >= optimal_overlap)]
+                else:
+                    results = results.loc[results["Threshold"] == optimal_threshold]
             else:
                 results = results.loc[results["Threshold"] == optimal_threshold]
             # total_thresholds = [np.round(x, 2) for x in list(np.unique(results['Threshold'].values))]
@@ -434,15 +440,17 @@ class AbstractStudy(ABC):
             results.replace('inf', np.nan, inplace=True)
             optimal_threshold = self.classes_optimal[class_name]['All'][1] if category == 'All' else \
                 self.classes_optimal[class_name]['True Positive'][1]
-            if category != 'All':
-                results = results.loc[results["True Positive"] == True]
-                if category == "TP":
-                    optimal_overlap = self.classes_optimal[class_name]['All'][0] if category == 'All' else \
-                        self.classes_optimal[class_name]['True Positive'][0]
-                    results = results.loc[(results["Threshold"] == optimal_threshold) & (
-                            results["PiW Dice"] >= optimal_overlap)]
-            else:
-                results = results.loc[results["Threshold"] == optimal_threshold]
+            # if category != 'All':
+            #     results = results.loc[results["True Positive"] == True]
+            #     if category == "TP":
+            #         optimal_overlap = self.classes_optimal[class_name]['All'][0] if category == 'All' else \
+            #             self.classes_optimal[class_name]['True Positive'][0]
+            #         results = results.loc[(results["Threshold"] == optimal_threshold) & (
+            #                 results["PiW Dice"] >= optimal_overlap)]
+            #     else:
+            #         results = results.loc[results["Threshold"] == optimal_threshold]
+            # else:
+            #     results = results.loc[results["Threshold"] == optimal_threshold]
 
             # total_thresholds = [np.round(x, 2) for x in list(np.unique(results['Threshold'].values))]
             # nb_thresholds = len(np.unique(results['Threshold'].values))
@@ -531,18 +539,18 @@ class AbstractStudy(ABC):
             if data is None:
                 results_filename = os.path.join(folder, class_name + '_dice_scores.csv')
                 results = pd.read_csv(results_filename)
-                optimal_overlap = self.classes_optimal[class_name]['All'][0] if condition == 'All' else \
-                    self.classes_optimal[class_name]['True Positive'][0]
-                optimal_threshold = self.classes_optimal[class_name]['All'][1] if condition == 'All' else \
-                    self.classes_optimal[class_name]['True Positive'][1]
-                if condition != 'All':
-                    if condition != 'All':
-                        results = results.loc[results["True Positive"] == True]
-                        if condition == "TP":
-                            results = results.loc[(results["Threshold"] == optimal_threshold) & (
-                                    results["PiW Dice"] >= optimal_overlap)]
-                    else:
-                        results = results.loc[results["Threshold"] == optimal_threshold]
+                # optimal_overlap = self.classes_optimal[class_name]['All'][0] if condition == 'All' else \
+                #     self.classes_optimal[class_name]['True Positive'][0]
+                # optimal_threshold = self.classes_optimal[class_name]['All'][1] if condition == 'All' else \
+                #     self.classes_optimal[class_name]['True Positive'][1]
+                # if condition != 'All':
+                #     if condition != 'All':
+                #         results = results.loc[results["True Positive"] == True]
+                #         if condition == "TP":
+                #             results = results.loc[(results["Threshold"] == optimal_threshold) & (
+                #                     results["PiW Dice"] >= optimal_overlap)]
+                #     else:
+                #         results = results.loc[results["Threshold"] == optimal_threshold]
             else:
                 results = deepcopy(data)
 
@@ -655,14 +663,16 @@ class AbstractStudy(ABC):
             self.classes_optimal[class_name]['True Positive'][0]
         optimal_threshold = self.classes_optimal[class_name]['All'][1] if category == 'All' else \
             self.classes_optimal[class_name]['True Positive'][1]
-        if category != 'All':
-            if category != 'All':
-                results = results.loc[results["True Positive"] == True]
-                if category == "TP":
-                    results = results.loc[(results["Threshold"] == optimal_threshold) & (
-                            results["PiW Dice"] >= optimal_overlap)]
-            else:
-                results = results.loc[results["Threshold"] == optimal_threshold]
+        # if category != 'All':
+        #     if category != 'All':
+        #         results = results.loc[results["True Positive"] == True]
+        #         if category == "TP":
+        #             results = results.loc[(results["Threshold"] == optimal_threshold) & (
+        #                     results["PiW Dice"] >= optimal_overlap)]
+        #         else:
+        #             results = results.loc[results["Threshold"] == optimal_threshold]
+        #     else:
+        #         results = results.loc[results["Threshold"] == optimal_threshold]
 
         # total_thresholds = [np.round(x, 2) for x in list(np.unique(results['Threshold'].values))]
         # nb_thresholds = len(np.unique(results['Threshold'].values))

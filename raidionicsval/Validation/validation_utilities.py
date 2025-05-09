@@ -293,6 +293,9 @@ def compute_singe_fold_average_metrics(results, fold_number, best_threshold, bes
     elif condition == 'TP':
         all_for_thresh = all_for_thresh.loc[(all_for_thresh['GT volume (ml)'] > volume_threshold) & (all_for_thresh['PiW Dice'] > best_overlap)]
     upper_default_metrics_index = SharedResources.getInstance().upper_default_metrics_index
+    if len(all_for_thresh) == 0:
+        # Returning a list to avoid crashing, even if the selection is empty.
+        return [0.] * (upper_default_metrics_index - 3) + [0.] * len(metric_names) , [0.] * (upper_default_metrics_index - 3) + [0.] * len(metric_names)
     default_metrics_average = list(np.mean(all_for_thresh.values[:, 3:upper_default_metrics_index], axis=0))
     default_metrics_std = [np.std(all_for_thresh.values[:, x], axis=0) for x in range(3, upper_default_metrics_index)]
 
