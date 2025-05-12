@@ -2,6 +2,7 @@ import traceback
 import logging
 from .Studies.study_connector import StudyConnector
 from .Validation.kfold_model_validation import ModelValidation
+from .Validation.kfold_model_validation_classification import ClassificationModelValidation
 from .Utils.resources import SharedResources
 
 
@@ -26,9 +27,13 @@ def compute(config_filename: str, logging_filename: str = None) -> None:
         print('{}'.format(traceback.format_exc()))
 
     task = SharedResources.getInstance().task
+    objective = SharedResources.getInstance().overall_objective
     try:
-        if task == 'validation':
+        if task == 'validation' and objective == "segmentation":
             processor = ModelValidation()
+            processor.run()
+        elif task == 'validation' and objective == "classification":
+            processor = ClassificationModelValidation()
             processor.run()
         elif task == 'study':
             runner = StudyConnector()
