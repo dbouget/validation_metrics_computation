@@ -56,54 +56,47 @@ def compute_fold_average(folder, data=None, metrics=[], suffix=''):
                                                                                                  'Validation',
                                                                                                  '_folds_multiclass_metrics_average_' + suffix + '.csv')
     metrics_per_fold_df.to_csv(study_filename, index=False)
-    #@TODO. Have to dump the classwise results in a file also.
+
+    #Saving the classwise results to file
+    for c in classes:
+        class_filename = os.path.join(folder, 'Validation',
+                                      f'folds_{c}_metrics_average.csv') if suffix == '' else os.path.join(folder,
+                                                                                                                'Validation',
+                                                                                                                f'_folds_{c}_metrics_average_' + suffix + '.csv')
+        res = []
+        for cf in range(len(classwise_per_fold)):
+            res.append([cf] + classwise_per_fold[cf][c])
+        class_metrics_per_fold_df = pd.DataFrame(data=res, columns=fold_average_columns)
+        class_metrics_per_fold_df.to_csv(class_filename, index=False)
+
 
     ####### Averaging the results from the different folds ###########
     total_samples = metrics_per_fold_df['# samples'].sum()
-    patientwise_fold_metrics_to_average = metrics_per_fold_df.values[:, 2:8]
-    fold_metrics_to_average = metrics_per_fold_df.values[:, 8:][:, 0::2]
-    fold_std_metrics_to_average = metrics_per_fold_df.values[:, 8:][:, 1::2]
-    total_fold_metrics_to_average = np.concatenate((patientwise_fold_metrics_to_average, fold_metrics_to_average), axis=1)
-    fold_metrics_average = np.mean(total_fold_metrics_to_average, axis=0)
-    fold_metrics_std = np.std(total_fold_metrics_to_average, axis=0)
-    fold_averaged_results = [total_samples]
-    for m in range(len(fold_metrics_average)):
-        fold_averaged_results.append(fold_metrics_average[m])
-        fold_averaged_results.append(fold_metrics_std[m])
+    total_fold_metrics_to_average = metrics_per_fold_df.values[:, 6:]
 
     # Performing pooled estimates (taking into account the sample size for each fold) when relevant
     pooled_fold_averaged_results = [len(unique_folds), total_samples]
-    pw_index = 6  # Length of the initial fold_average_columns, without the first two elements.
     for m in range(total_fold_metrics_to_average.shape[1]):
         mean_final = 0
-        std_final = 0
         for f in range(len(unique_folds)):
             fold_val = total_fold_metrics_to_average[f, m]
             fold_sample_size = list(metrics_per_fold_df['# samples'])[f]
             mean_final = mean_final + (fold_val * fold_sample_size)
-            # For patient-wise metrics, there is no std value for within each fold
-            if m < pw_index:
-                std_final = std_final
-            else:
-                std_final = std_final + ((fold_sample_size - 1) * math.pow(fold_std_metrics_to_average[f, m-pw_index], 2) + (fold_sample_size) * math.pow(fold_val, 2))
         mean_final = mean_final / total_samples
-        if m >= pw_index:
-            std_final = math.sqrt((1 / (total_samples - 1)) * (std_final - (total_samples * math.pow(mean_final, 2))))
-        else:
-            std_final = np.std(total_fold_metrics_to_average[:, m])
+        std_final = np.std(total_fold_metrics_to_average[:, m])
         pooled_fold_averaged_results.extend([mean_final, std_final])
 
     overall_average_columns = ['Fold', '# samples']
-    for m in ['Patient-wise recall', 'Patient-wise precision', 'Patient-wise specificity', 'Patient-wise F1',
+    for m in ['TP proba avg', 'Patient-wise recall', 'Patient-wise precision', 'Patient-wise specificity', 'Patient-wise F1',
               'Patient-wise Accuracy', 'Patient-wise Balanced accuracy']:
         overall_average_columns.extend([m + ' (Mean)', m + ' (Std)'])
 
-    for m in metric_names:
-        overall_average_columns.extend([m + ' (Mean)', m + ' (Std)'])
+    # for m in metric_names:
+    #     overall_average_columns.extend([m + ' (Mean)', m + ' (Std)'])
     pooled_fold_averaged_results_df = pd.DataFrame(data=np.asarray(pooled_fold_averaged_results).reshape(1, len(overall_average_columns)), columns=overall_average_columns)
-    study_filename = os.path.join(folder, 'Validation', class_name + '_overall_metrics_average.csv') if suffix == '' else os.path.join(folder,
+    study_filename = os.path.join(folder, 'Validation', 'multiclass_overall_metrics_average.csv') if suffix == '' else os.path.join(folder,
                                                                                                  'Validation',
-                                                                                                 class_name + '_overall_metrics_average_' + suffix + '.csv')
+                                                                                                 'multiclass_overall_metrics_average_' + suffix + '.csv')
     pooled_fold_averaged_results_df.to_csv(study_filename, index=False)
 
 

@@ -38,8 +38,9 @@ class AbstractStudy(ABC):
         self._class_names = SharedResources.getInstance().studies_class_names
         self._classes_optimal = {}
 
-        for c in self.class_names:
-            self.__retrieve_optimum_values(c)
+        if SharedResources.getInstance().overall_objective == "segmentation":
+            for c in self.class_names:
+                self.__retrieve_optimum_values(c)
 
     @property
     def class_names(self) -> List[str]:

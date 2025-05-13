@@ -40,6 +40,8 @@ class ClassificationModelValidation:
         self.metric_names = []
         self.metric_names.extend(SharedResources.getInstance().validation_metric_names)
         self.gt_files_suffix = SharedResources.getInstance().validation_gt_files_suffix
+        self.gt_master_file = "/home/dbouget/Data/Studies/TumorTypeClassification/tumortype_classifier_patients_parameters.csv"  # @TODO. Should be in the config file
+        self.gt_master_file_df = pd.read_csv(self.gt_master_file)
         self.prediction_files_suffix = SharedResources.getInstance().validation_prediction_files_suffix
         self.patients_metrics = {}
 
@@ -105,7 +107,7 @@ class ClassificationModelValidation:
                                                  objective="classification")
                 patient_metrics.init_from_file(self.output_folder)
 
-                success = self.__identify_patient_files(patient_metrics, sub_folder_index, fold_number)
+                success = self.__identify_patient_files(patient_metrics, sub_folder_index, fold_number, self.gt_master_file_df)
                 self.patients_metrics[uid] = patient_metrics
 
                 # Checking if values have already been computed for the current patient to skip it if so.
@@ -122,7 +124,7 @@ class ClassificationModelValidation:
                 continue
         return 0
 
-    def __identify_patient_files(self, patient_metrics, folder_index, fold_number):
+    def __identify_patient_files(self, patient_metrics, folder_index, fold_number, masterfile=None):
         """
         Asserts the existence of the raw files on disk for computing the metrics for the current patient.
         :return:
@@ -152,12 +154,8 @@ class ClassificationModelValidation:
         gt_results_filename = os.path.join(detection_image_base,
                                            os.path.basename(detection_filename).split(pred_suffix)[0] + 'gt.csv')
         if not os.path.exists(gt_results_filename):
-            filename_split = os.path.basename(detection_filename).split('_')
-            gt_class = None
-            for c in classes:
-                if c in filename_split:
-                    gt_class = c
-                    break
+            image_uid = uid + '_pre' # @TODO. Have to generalize
+            gt_class = masterfile.loc[masterfile["Patient"] == image_uid]["TumorType"].values[0]
             gt_result = np.zeros(len(classes)).astype('uint8')
             gt_result[classes.index(gt_class)] = 1
             np.savetxt(gt_results_filename, gt_result, delimiter=";")
