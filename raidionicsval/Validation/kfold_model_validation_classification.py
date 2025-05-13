@@ -40,7 +40,7 @@ class ClassificationModelValidation:
         self.metric_names = []
         self.metric_names.extend(SharedResources.getInstance().validation_metric_names)
         self.gt_files_suffix = SharedResources.getInstance().validation_gt_files_suffix
-        self.gt_master_file = "/home/dbouget/Data/Studies/TumorTypeClassification/tumortype_classifier_patients_parameters.csv"  # @TODO. Should be in the config file
+        self.gt_master_file = "/home/dbouget/Data/Studies/SequenceClassifier/seqclassifier_patients_parameters.csv"  # @TODO. Should be in the config file
         self.gt_master_file_df = pd.read_csv(self.gt_master_file)
         self.prediction_files_suffix = SharedResources.getInstance().validation_prediction_files_suffix
         self.patients_metrics = {}
@@ -141,24 +141,34 @@ class ClassificationModelValidation:
            detection_image_base = os.path.join(self.input_folder, 'predictions', str(fold_number),
                                                folder_index + '_' + uid)
 
-        detection_filename = None
+        detection_filenames = []
         for _, _, files in os.walk(detection_image_base):
             for f in files:
                 if pred_suffix in f:
-                    detection_filename = os.path.join(detection_image_base, f)
+                    detection_filenames.append(os.path.join(detection_image_base, f))
             break
-        if not os.path.exists(detection_filename):
+        if len(detection_filenames) == 0:
             print("No detection file found in patient {}".format(patient_metrics.unique_id))
             return False
+        elif len(detection_filenames) == 1:
+            detection_filename = detection_filenames[0]
+        else:
+            ts = patient_metrics.patient_id.split('_')[1]
+            for f in detection_filenames:
+                if ts in os.path.basename(f.split('.')[0]):
+                    detection_filename = f
+                    break
 
         gt_results_filename = os.path.join(detection_image_base,
                                            os.path.basename(detection_filename).split(pred_suffix)[0] + 'gt.csv')
-        if not os.path.exists(gt_results_filename):
-            image_uid = uid + '_pre' # @TODO. Have to generalize
-            gt_class = masterfile.loc[masterfile["Patient"] == image_uid]["TumorType"].values[0]
-            gt_result = np.zeros(len(classes)).astype('uint8')
-            gt_result[classes.index(gt_class)] = 1
-            np.savetxt(gt_results_filename, gt_result, delimiter=";")
+
+        # ts = os.path.basename(detection_filename).split('.')[0].split('_')[-3]
+        # image_uid = uid + '_' + ts
+        # gt_class = masterfile.loc[masterfile["Patient"] == image_uid]["Sequence"].values[0]
+        gt_class = os.path.basename(detection_filename).split('.')[0].split('_')[-4]
+        gt_result = np.zeros(len(classes)).astype('uint8')
+        gt_result[classes.index(gt_class)] = 1
+        np.savetxt(gt_results_filename, gt_result, delimiter=";")
 
         patient_filenames = [gt_results_filename, detection_filename]
         patient_metrics.set_patient_filenames(patient_filenames)
