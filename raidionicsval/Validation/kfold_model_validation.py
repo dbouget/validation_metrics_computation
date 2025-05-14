@@ -7,7 +7,7 @@ from math import ceil
 
 from tqdm import tqdm
 
-from ..Computation.dice_computation import separate_dice_computation
+from ..Computation.dice_computation_instance import separate_dice_computation
 from ..Validation.instance_segmentation_validation import *
 from ..Utils.resources import SharedResources
 from ..Utils.PatientMetricsStructure import PatientMetrics
@@ -75,7 +75,9 @@ class ModelValidation:
         self.results_df_base_columns.extend(["PiW Dice", "PiW Recall", "PiW Precision", "PiW F1"])
         # self.results_df_base_columns.extend(["PaW Dice", "PaW Recall", "PaW Precision", "PaW F1"])
         self.results_df_base_columns.extend(["GT volume (ml)", "True Positive", "Detection volume (ml)"])
-        self.results_df_base_columns.extend(["OW Dice", "OW Recall", "OW Precision", "OW F1", "OW Dice Largest Object", '#GT', '#Det'])
+        self.results_df_base_columns.extend(["OW Global Recall", "OW Global Precision", "OW Global F1", "OW Dice",
+                                             "OW Dice (std)", "OW Recall", "OW Recall (std)", "OW Precision",
+                                             "OW Precision (std)", "OW F1", "OW F1 (std)", '#GT', '#Det'])
         self.results_df_base_columns.extend(SharedResources.getInstance().validation_metric_names)
 
         if not os.path.exists(self.dice_output_filename):

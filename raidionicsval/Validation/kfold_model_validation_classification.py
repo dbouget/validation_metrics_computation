@@ -10,7 +10,7 @@ from math import ceil
 
 from tqdm import tqdm
 
-from ..Computation.dice_computation import separate_dice_computation
+from ..Computation.dice_computation_instance import separate_dice_computation
 from ..Validation.instance_segmentation_validation import *
 from ..Utils.resources import SharedResources
 from ..Utils.PatientMetricsStructure import PatientMetrics

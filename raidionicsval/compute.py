@@ -3,6 +3,7 @@ import logging
 from .Studies.study_connector import StudyConnector
 from .Validation.kfold_model_validation import ModelValidation
 from .Validation.kfold_model_validation_classification import ClassificationModelValidation
+from .Computation.standalone_computation import StandaloneComputation
 from .Utils.resources import SharedResources
 
 
@@ -37,6 +38,9 @@ def compute(config_filename: str, logging_filename: str = None) -> None:
             processor.run()
         elif task == 'study':
             runner = StudyConnector()
+            runner.run()
+        elif task == 'standalone':
+            runner = StandaloneComputation()
             runner.run()
     except Exception as e:
         print('Compute could not proceed. Issue arose during task {}. Collected: \n'.format(task))
