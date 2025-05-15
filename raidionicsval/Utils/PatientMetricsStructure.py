@@ -132,9 +132,12 @@ class PatientMetrics:
             patientwise_values = list(thr_results[7:10])
             objectwise_values = list(thr_results[10:SharedResources.getInstance().upper_default_metrics_index])
             extra_values = list(thr_results[SharedResources.getInstance().upper_default_metrics_index:])
-            [extra_values.append(None) for x in range(len(list(thr_results[SharedResources.getInstance().upper_default_metrics_index:])), len(SharedResources.getInstance().validation_metric_names))]
+            [extra_values.append(None) for x in range(len(list(thr_results[SharedResources.getInstance().upper_default_metrics_index:])), 2 * len(SharedResources.getInstance().validation_metric_names))]
             extra_values_description = list(scores_df.columns[SharedResources.getInstance().upper_default_metrics_index:])
-            [extra_values_description.append(x) for x in SharedResources.getInstance().validation_metric_names]
+            extra_metric_names = []
+            for m in SharedResources.getInstance().validation_metric_names:
+                extra_metric_names.extend([f'PiW {m}', f'OW {m}'])
+            [extra_values_description.append(x) for x in extra_metric_names]
             self._pixelwise_metrics.append([thr_val] + pixelwise_values)
             self._patientwise_metrics.append([thr_val] + patientwise_values)
             self._objectwise_metrics.append([thr_val] + objectwise_values)
@@ -236,25 +239,28 @@ class PatientMetrics:
 
         """
         thr_list = self._class_metrics[self.class_names[0]].get_probability_thresholds_list()
+        complete_metric_names = []
+        for m in metric_names:
+            complete_metric_names.extend([f'PiW {m}', f'OW {m}'])
         if self._extra_metrics is None:
             self._extra_metrics = []
             for thr in thr_list:
                 curr_thr = [thr]
-                for m in metric_names:
+                for m in complete_metric_names:
                     curr_thr.append([m, float('nan')])
                 self._extra_metrics.append(curr_thr)
         else:
             existing_metrics = [x[0] for x in self._extra_metrics[0][1:]]
-            matching_metrics_states = all(element in existing_metrics for element in metric_names)
+            matching_metrics_states = all(element in existing_metrics for element in complete_metric_names)
             if not matching_metrics_states:
-                for m in metric_names:
+                for m in complete_metric_names:
                     if m not in existing_metrics:
                         for th in range(len(self._extra_metrics)):
                             self._extra_metrics[th].append([m, float('nan')])
 
         # Performs the same operation on the extra metrics for each class
         for cl in self._class_names:
-            self._class_metrics[cl].setup_extra_metrics(metric_names)
+            self._class_metrics[cl].setup_extra_metrics(complete_metric_names)
 
 
 class ClassMetrics:
@@ -337,9 +343,12 @@ class ClassMetrics:
             patientwise_values = list(thr_results[7:10])
             objectwise_values = list(thr_results[10:SharedResources.getInstance().upper_default_metrics_index])
             extra_values = list(thr_results[SharedResources.getInstance().upper_default_metrics_index:])
-            [extra_values.append(float('nan')) for x in range(len(list(thr_results[SharedResources.getInstance().upper_default_metrics_index:])), len(SharedResources.getInstance().validation_metric_names))]
+            [extra_values.append(float('nan')) for x in range(len(list(thr_results[SharedResources.getInstance().upper_default_metrics_index:])), 2 * len(SharedResources.getInstance().validation_metric_names))]
             extra_values_description = list(scores_df.columns[SharedResources.getInstance().upper_default_metrics_index:])
-            [extra_values_description.append(x) for x in SharedResources.getInstance().validation_metric_names if x not in extra_values_description]
+            extra_metric_names = []
+            for m in SharedResources.getInstance().validation_metric_names:
+                extra_metric_names.extend([f'PiW {m}', f'OW {m}'])
+            [extra_values_description.append(x) for x in extra_metric_names if x not in extra_values_description]
             self._pixelwise_metrics.append([thr_val] + pixelwise_values)
             self._patientwise_metrics.append([thr_val] + patientwise_values)
             self._objectwise_metrics.append([thr_val] + objectwise_values)
@@ -383,7 +392,9 @@ class ClassMetrics:
             return [x[1][1::2] for x in self._extra_metrics]
         else:
             #return [[None]] * len(self._pixelwise_metrics)
-            return [[None] * len(SharedResources.getInstance().validation_metric_names)] * len(self._pixelwise_metrics)
+            # return [[None] * len(SharedResources.getInstance().validation_metric_names)] * len(self._pixelwise_metrics)
+            # Twice the length because pixelwise and objectwise versions.
+            return [[None] * 2 * len(SharedResources.getInstance().validation_metric_names)] * len(self._pixelwise_metrics)
 
     def get_probability_thresholds_list(self) -> List[float]:
         res = [x[0] for x in self.pixelwise_metrics]

@@ -7,14 +7,9 @@ import subprocess
 import traceback
 import zipfile
 
-try:
-    import requests
-except:
-    subprocess.check_call([sys.executable, "-m", "pip", "install", 'requests'])
-    import requests
 
 
-def inference_test_docker():
+def inference_test_docker(test_dir):
     """
     Testing the CLI within a Docker container for the validation unit test, running on CPU.
     The latest Docker image is being hosted at: dbouget/raidionics-val:v1.0-py38-cpu
@@ -26,33 +21,6 @@ def inference_test_docker():
     logging.basicConfig()
     logging.getLogger().setLevel(logging.DEBUG)
     logging.info("Running validation unit test in Docker container.\n")
-    logging.info("Downloading unit test resources.\n")
-    test_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'unit_tests_results_dir')
-    if os.path.exists(test_dir):
-        shutil.rmtree(test_dir)
-    os.makedirs(test_dir)
-
-    try:
-        resources_url = 'https://github.com/raidionics/Raidionics-models/releases/download/1.2.0/Samples-RaidionicsValLib_UnitTest1.zip'
-
-        archive_dl_dest = os.path.join(test_dir, 'resources.zip')
-        headers = {}
-        response = requests.get(resources_url, headers=headers, stream=True)
-        response.raise_for_status()
-        if response.status_code == requests.codes.ok:
-            with open(archive_dl_dest, "wb") as f:
-                for chunk in response.iter_content(chunk_size=1048576):
-                    f.write(chunk)
-        with zipfile.ZipFile(archive_dl_dest, 'r') as zip_ref:
-            zip_ref.extractall(test_dir)
-
-        if not os.path.exists(os.path.join(test_dir, 'Input_dataset')):
-            raise ValueError('Resources download or extraction failed, content not available on disk.')
-    except Exception as e:
-        logging.error("Error during resources download with: \n {}.\n".format(traceback.format_exc()))
-        if os.path.exists(test_dir):
-            shutil.rmtree(test_dir)
-        raise ValueError("Error during resources download.\n")
 
     logging.info("Preparing configuration file.\n")
     try:

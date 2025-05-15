@@ -24,8 +24,8 @@ def compute(config_filename: str, logging_filename: str = None) -> None:
             logger.setLevel(logging.DEBUG)
             logger.addHandler(handler)
     except Exception as e:
-        print('Compute could not proceed. Issue arose during environment setup. Collected: \n')
-        print('{}'.format(traceback.format_exc()))
+        logging.error(f'Compute could not proceed. Issue arose during environment setup.'
+                      f' Collected: {e}\n{traceback.format_exc()}')
 
     task = SharedResources.getInstance().task
     objective = SharedResources.getInstance().overall_objective
@@ -43,5 +43,5 @@ def compute(config_filename: str, logging_filename: str = None) -> None:
             runner = StandaloneComputation()
             runner.run()
     except Exception as e:
-        print('Compute could not proceed. Issue arose during task {}. Collected: \n'.format(task))
-        print('{}'.format(traceback.format_exc()))
+        logging.error(f'Compute could not proceed. Issue arose during environment setup.'
+                      f' Collected: {e}\n{traceback.format_exc()}')

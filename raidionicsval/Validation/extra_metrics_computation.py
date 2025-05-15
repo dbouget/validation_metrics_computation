@@ -24,9 +24,18 @@ def compute_patient_extra_metrics(patient_object, class_index, optimal_threshold
         if (patient_object.get_optimal_class_extra_metrics(class_index, optimal_threshold) is not None and
                 patient_object.get_optimal_class_extra_metrics(class_index, optimal_threshold)[1:] is not None):
             metric_values = [x[1] for x in patient_object.get_optimal_class_extra_metrics(class_index, optimal_threshold)[1:]]
-            if False not in [x == x for x in metric_values]:
-                # If all metric values have been computed, i.e., no nan or None etc...
-                return patient_object.get_optimal_class_extra_metrics(class_index, optimal_threshold)[1:]
+            if 'objectwise' in SharedResources.getInstance().validation_metric_spaces and 'patientwise' in SharedResources.getInstance().validation_metric_spaces:
+                if False not in [x == x for x in metric_values]:
+                    # If all metric values have been computed, i.e., no nan or None etc...
+                    return patient_object.get_optimal_class_extra_metrics(class_index, optimal_threshold)[1:]
+            elif 'patientwise' not in SharedResources.getInstance().validation_metric_spaces:
+                if False not in [x == x for x in metric_values[1::2]]:
+                    # If all metric values have been computed, i.e., no nan or None etc...
+                    return patient_object.get_optimal_class_extra_metrics(class_index, optimal_threshold)[1:]
+            elif 'objectwise' not in SharedResources.getInstance().validation_metric_spaces:
+                if False not in [x == x for x in metric_values[0::2]]:
+                    # If all metric values have been computed, i.e., no nan or None etc...
+                    return patient_object.get_optimal_class_extra_metrics(class_index, optimal_threshold)[1:]
         else:
             metric_values = [None] * len(metrics)
 
@@ -96,8 +105,8 @@ def compute_patient_extra_metrics(patient_object, class_index, optimal_threshold
                 except Exception as e:
                     print('Issue computing metric {} for patient {}'.format(metric, patient_object.unique_id))
                     print(traceback.format_exc())
+        extra_metrics_results = [[f'PiW {x[0]}', x[1]] for x in extra_metrics_results]
 
-        extra_metrics_ow_results = []
         if "objectwise" in SharedResources.getInstance().validation_metric_spaces:
             obj_val = InstanceSegmentationValidation(gt_image=gt, detection_image=detection,
                                                      tiny_objects_removal_threshold=SharedResources.getInstance().validation_tiny_objects_removal_threshold)
@@ -109,71 +118,82 @@ def compute_patient_extra_metrics(patient_object, class_index, optimal_threshold
             for g, go in enumerate(obj_val.gt_candidates):
                 gt_label = g + 1
                 if gt_label in np.asarray(obj_val.matching_results)[:, 0]:
-                    # @TODO. If multiple matches for the same GT,should select the highest Dice match
-                    det_label = obj_val.matching_results[list(np.asarray(obj_val.matching_results)[:, 0]).index(gt_label)][1]
+                    indices = np.where(np.asarray(obj_val.matching_results)[:, 0] == gt_label)[0]
+                    if len(indices) > 1:
+                        # Should not happen anymore
+                        print(f"Warning - Entering a use-case which should not be possible!")
+                        pass
+                    det_label = np.asarray(obj_val.matching_results)[indices[0]][1]
+                    # det_label = obj_val.matching_results[list(np.asarray(obj_val.matching_results)[:, 0]).index(gt_label)][1]
                     instance_gt_array = np.zeros(gt.shape, dtype="uint8")
                     instance_det_array = np.zeros(detection.shape, dtype="uint8")
                     instance_gt_array[obj_val.gt_labels == gt_label] = 1
                     instance_det_array[obj_val.detection_labels == det_label] = 1
-                else:
-                    instance_gt_array = np.zeros(gt.shape, dtype="uint8")
-                    instance_det_array = np.zeros(detection.shape, dtype="uint8")
-                tp_array = np.zeros(instance_gt_array.shape)
-                fp_array = np.zeros(instance_gt_array.shape)
-                tn_array = np.zeros(instance_gt_array.shape)
-                fn_array = np.zeros(instance_gt_array.shape)
 
-                tp_array[(instance_gt_array == 1) & (instance_det_array == 1)] = 1
-                fp_array[(instance_gt_array == 0) & (instance_det_array == 1)] = 1
-                tn_array[(instance_gt_array == 0) & (instance_det_array == 0)] = 1
-                fn_array[(instance_gt_array == 1) & (instance_det_array == 0)] = 1
-                instance_results = []
-                if SharedResources.getInstance().number_processes > 1:
-                    try:
-                        pool = multiprocessing.Pool(processes=SharedResources.getInstance().number_processes)
-                        instance_results = pool.map(parallel_metric_computation, zip(metrics, metric_values,
-                                                                                          itertools.repeat(instance_gt_array),
-                                                                                          itertools.repeat(instance_det_array),
-                                                                                          itertools.repeat(
-                                                                                              det_input_specs[1]),
-                                                                                          itertools.repeat(
-                                                                                              gt_input_specs[1]),
-                                                                                          itertools.repeat(tp_array),
-                                                                                          itertools.repeat(tn_array),
-                                                                                          itertools.repeat(fp_array),
-                                                                                          itertools.repeat(fn_array)))
-                        pool.close()
-                        pool.join()
-                    except Exception as e:
-                        print("Issue computing metrics for patient {} in the multiprocessing loop.".format(
-                            patient_object.unique_id))
-                        print(traceback.format_exc())
-                else:
-                    for metric in metrics:
+                    tp_array = np.zeros(instance_gt_array.shape)
+                    fp_array = np.zeros(instance_gt_array.shape)
+                    tn_array = np.zeros(instance_gt_array.shape)
+                    fn_array = np.zeros(instance_gt_array.shape)
+
+                    tp_array[(instance_gt_array == 1) & (instance_det_array == 1)] = 1
+                    fp_array[(instance_gt_array == 0) & (instance_det_array == 1)] = 1
+                    tn_array[(instance_gt_array == 0) & (instance_det_array == 0)] = 1
+                    fn_array[(instance_gt_array == 1) & (instance_det_array == 0)] = 1
+                    instance_results = []
+                    if SharedResources.getInstance().number_processes > 1:
                         try:
-                            metric_value = compute_specific_metric_value(metric=metric, gt=instance_gt_array, detection=instance_det_array,
-                                                                         tp=np.sum(tp_array), tn=np.sum(tn_array),
-                                                                         fp=np.sum(fp_array), fn=np.sum(fn_array),
-                                                                         gt_spacing=gt_input_specs[1],
-                                                                         det_spacing=det_input_specs[1])
-                            instance_results.append([metric, metric_value])
+                            pool = multiprocessing.Pool(processes=SharedResources.getInstance().number_processes)
+                            instance_results = pool.map(parallel_metric_computation, zip(metrics, metric_values,
+                                                                                              itertools.repeat(instance_gt_array),
+                                                                                              itertools.repeat(instance_det_array),
+                                                                                              itertools.repeat(
+                                                                                                  det_input_specs[1]),
+                                                                                              itertools.repeat(
+                                                                                                  gt_input_specs[1]),
+                                                                                              itertools.repeat(tp_array),
+                                                                                              itertools.repeat(tn_array),
+                                                                                              itertools.repeat(fp_array),
+                                                                                              itertools.repeat(fn_array)))
+                            pool.close()
+                            pool.join()
                         except Exception as e:
-                            print('Issue computing metric {} for patient {}'.format(metric, patient_object.unique_id))
+                            print("Issue computing metrics for patient {} in the multiprocessing loop.".format(
+                                patient_object.unique_id))
                             print(traceback.format_exc())
-                all_instance_results.append(instance_results)
+                    else:
+                        for metric in metrics:
+                            try:
+                                metric_value = compute_specific_metric_value(metric=metric, gt=instance_gt_array, detection=instance_det_array,
+                                                                             tp=np.sum(tp_array), tn=np.sum(tn_array),
+                                                                             fp=np.sum(fp_array), fn=np.sum(fn_array),
+                                                                             gt_spacing=gt_input_specs[1],
+                                                                             det_spacing=det_input_specs[1])
+                                instance_results.append([metric, metric_value])
+                            except Exception as e:
+                                print('Issue computing metric {} for patient {}'.format(metric, patient_object.unique_id))
+                                print(traceback.format_exc())
+                    all_instance_results.append(instance_results)
 
             if len(all_instance_results) != 0:
-                for k in all_instance_results[0].keys():
+                for m in metrics:
                     all_values = []
                     tp_values = []
                     for i in range(len(all_instance_results)):
-                        if all_instance_results[i][k] != 0 and all_instance_results[i][k] != math.inf:
-                            tp_values.append(all_instance_results[i][k])
-                        all_values.append(all_instance_results[i][k])
+                        for j in range(len(all_instance_results[i])):
+                            if all_instance_results[i][j][0] == m:
+                                if all_instance_results[i][j][1] != math.inf:
+                                    tp_values.append(all_instance_results[i][j][1])
+                                else:
+                                    all_values.append(all_instance_results[i][j][1])
+                                break
                     all_mean = np.mean(all_values)
                     all_std = np.std(all_values)
                     tp_mean = np.mean(tp_values)
                     tp_std = np.std(tp_values)
+                    extra_metrics_results.append([f'OW {m}', tp_mean])
+            else:
+                for m in metrics:
+                    extra_metrics_results.append([f'OW {m}', -999.])
     except Exception as e:
         print('Global issue computing metrics for patient {}'.format(patient_object.unique_id))
         print(traceback.format_exc())
@@ -384,7 +404,7 @@ def compute_overall_metrics_correlation(input_folder, output_folder, data=None, 
     """
     results = None
     if data is None:
-        results_filename = os.path.join(input_folder, 'Validation', class_name + '_dice_scores.csv')
+        results_filename = os.path.join(input_folder, class_name + '_dice_scores.csv')
         results = pd.read_csv(results_filename)
     else:
         results = deepcopy(data)

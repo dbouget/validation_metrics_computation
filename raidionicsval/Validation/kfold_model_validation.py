@@ -1,6 +1,6 @@
 import multiprocessing
 import itertools
-
+import logging
 import time
 import pandas as pd
 from math import ceil
@@ -37,23 +37,26 @@ class ModelValidation:
         self.metric_names = []
         self.metric_names.extend(SharedResources.getInstance().validation_metric_names)
         self.detection_overlap_thresholds = SharedResources.getInstance().validation_detection_overlap_thresholds
-        print("Detection overlap: ", self.detection_overlap_thresholds)
         self.gt_files_suffix = SharedResources.getInstance().validation_gt_files_suffix
         self.prediction_files_suffix = SharedResources.getInstance().validation_prediction_files_suffix
         self.patients_metrics = {}
 
     def run(self):
+        logging.info("Computing metrics for cohort.")
         self.__compute_metrics()
-        class_optimal = best_segmentation_probability_threshold_analysis(self.input_folder,
+        logging.info("Running optimal thresholds analysis.")
+        class_optimal = best_segmentation_probability_threshold_analysis(self.output_folder,
                                                                          detection_overlap_thresholds=self.detection_overlap_thresholds)
         if len(SharedResources.getInstance().validation_metric_names) != 0:
+            logging.info("Computing extra metrics for cohort.")
             self.__compute_extra_metrics(class_optimal=class_optimal)
+        logging.info("Computing average metrics for the cohort.")
         # All
-        compute_fold_average(self.input_folder, class_optimal=class_optimal, metrics=self.metric_names, condition='All')
+        compute_fold_average(self.output_folder, class_optimal=class_optimal, metrics=self.metric_names, condition='All')
         # Positive, based on given ground truth volume limit
-        compute_fold_average(self.input_folder, class_optimal=class_optimal, metrics=self.metric_names, condition='Positive')
+        compute_fold_average(self.output_folder, class_optimal=class_optimal, metrics=self.metric_names, condition='Positive')
         # True positive, based on given detection_overlap_thresholds
-        compute_fold_average(self.input_folder, class_optimal=class_optimal, metrics=self.metric_names, condition='TP')
+        compute_fold_average(self.output_folder, class_optimal=class_optimal, metrics=self.metric_names, condition='TP')
 
     def __compute_metrics(self):
         """
@@ -78,7 +81,12 @@ class ModelValidation:
         self.results_df_base_columns.extend(["OW Global Recall", "OW Global Precision", "OW Global F1", "OW Dice",
                                              "OW Dice (std)", "OW Recall", "OW Recall (std)", "OW Precision",
                                              "OW Precision (std)", "OW F1", "OW F1 (std)", '#GT', '#Det'])
-        self.results_df_base_columns.extend(SharedResources.getInstance().validation_metric_names)
+        # For each extra metric, adding a pixelwise (PiW) and objectwise (OW) version of it!
+        extra_metrics = []
+        for m in SharedResources.getInstance().validation_metric_names:
+            extra_metrics.extend([f'PiW {m}', f'OW {m}'])
+        self.results_df_base_columns.extend(extra_metrics)
+        # self.results_df_base_columns.extend(SharedResources.getInstance().validation_metric_names)
 
         if not os.path.exists(self.dice_output_filename):
             self.results_df = pd.DataFrame(columns=self.results_df_base_columns)
@@ -98,7 +106,7 @@ class ModelValidation:
                 self.class_results_df[c] = pd.read_csv(self.class_dice_output_filenames[c])
                 if self.class_results_df[c].columns[0] != 'Fold':
                     self.class_results_df[c] = pd.read_csv(self.class_dice_output_filenames[c], index_col=0)
-                missing_metrics = [x for x in SharedResources.getInstance().validation_metric_names if
+                missing_metrics = [x for x in extra_metrics if
                                    not x in list(self.class_results_df[c].columns)[1:]]
                 for m in missing_metrics:
                     self.class_results_df[c][m] = None
@@ -109,7 +117,7 @@ class ModelValidation:
 
         results_per_folds = []
         for fold in range(0, self.fold_number):
-            print('\nProcessing fold {}/{}.\n'.format(fold + 1, self.fold_number))
+            logging.info(f'\nProcessing fold {fold+1}/{self.fold_number}.\n')
             if self.split_way == 'two-way':
                 test_set, _ = get_fold_from_file(filename=cross_validation_description_file, fold_number=fold)
             else:
@@ -354,7 +362,7 @@ class ModelValidation:
                 # buff_df = pd.DataFrame(ind_values.reshape(1, len(self.results_df_base_columns)),
                 #                        columns=list(self.results_df_base_columns))
                 if len(sub_df) == 0:
-                    extra_metrics = [None] * len(SharedResources.getInstance().validation_metric_names)
+                    extra_metrics = [None] * 2 * len(SharedResources.getInstance().validation_metric_names)
                     ind_values = np.asarray(pat_results[ind][0] + extra_metrics)
                     buff_df = pd.DataFrame(ind_values.reshape(1, len(self.results_df_base_columns)),
                                            columns=list(self.results_df_base_columns))
@@ -403,7 +411,6 @@ class ModelValidation:
         """
 
         """
-        print("Computing extra metrics for all patients.\n")
         classes = SharedResources.getInstance().validation_class_names
         for c in classes:
             optimal_values = class_optimal[c]['All']

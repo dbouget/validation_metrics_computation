@@ -74,7 +74,7 @@ jobs:
         uses: actions/checkout@v1
 
       - name: k-fold cross-validation unit test
-        run: cd ${{github.workspace}}/tests && python validation_pipeline_test.py
+        run: cd ${{github.workspace}}/tests && python test_validation_pipeline.py
 
       - name: Segmentation study unit test
         run: cd ${{github.workspace}}/tests && python studies_pipeline_test.py

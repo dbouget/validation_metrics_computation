@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel", "cibuildwheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "raidionicsval"
+version = "1.1.0"
+description = "Raidionics backend for running validation and metrics computation"
+readme = "README.md"
+license = { text = "BSD-2-Clause" }
+requires-python = ">=3.8"
+authors = [{ name = "David Bouget", email = "david.bouget@sintef.no" }]
+
+dependencies = [
+  "arch",
+  "h5py",
+  "nibabel",
+  "pandas",
+  "SimpleITK<=2.4.1",
+  "statsmodels",
+  "scikit-image",
+  "tqdm",
+  "scikit-learn",
+  "seaborn",
+  "Jinja2",
+]
+
+[project.scripts]
+raidionicsval = "raidionicsval.__main__:main"
+
+[tool.setuptools.packages.find]
+include = [
+  "raidionicsval",
+  "raidionicsval.Utils",
+  "raidionicsval.Validation",
+  "raidionicsval.Studies",
+  "raidionicsval.Plotting",
+  "raidionicsval.Computation",
+  "tests", ]
+
+[tool.black]
+line-length=120
+
+[tool.flake8]
+max-line-length = 120
+ignore = ["E203"]

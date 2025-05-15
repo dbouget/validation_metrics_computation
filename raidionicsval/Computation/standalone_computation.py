@@ -25,9 +25,6 @@ class StandaloneComputation:
             raise ValueError("Provided detection filename does not exist on disk.")
         self.gt_array, self.gt_ext, self.gt_input_specifics = open_image_file(gt_filename)
         self.det_array, self.det_ext, self.det_input_specifics = open_image_file(det_filename)
-        # self.det_array[self.det_array >= 0.5] = 1
-        # self.det_array[self.det_array < 0.5] = 0
-        # self.det_array = self.det_array.astype("uint8")
         if self.gt_array.shape != self.det_array.shape:
             raise ValueError("Provided ground truth and detection arrays do not have matching dimensions.")
         self.class_names = SharedResources.getInstance().standalone_class_names
@@ -106,9 +103,6 @@ class StandaloneComputation:
             fn_array[(gt == 1) & (det == 0)] = 1
             for metric in self.metric_names:
                 try:
-                    # if metric in []:
-                    #     # Not running some objectwise metrics or...?
-                    #     continue
                     metric_value = compute_specific_metric_value(metric=metric, gt=gt, detection=det,
                                                                  tp=np.sum(tp_array), tn=np.sum(tn_array),
                                                                  fp=np.sum(fp_array), fn=np.sum(fn_array),
@@ -135,8 +129,12 @@ class StandaloneComputation:
         for g, go in enumerate(obj_val.gt_candidates):
             gt_label = g + 1
             if gt_label in np.asarray(obj_val.matching_results)[:, 0]:
-                # @TODO. If multiple matches for the same GT,should select the highest Dice match
-                det_label = obj_val.matching_results[list(np.asarray(obj_val.matching_results)[:, 0]).index(gt_label)][1]
+                indices = np.where(np.asarray(obj_val.matching_results)[:, 0] == gt_label)[0]
+                if len(indices) > 1:
+                    # Should not happen anymore
+                    print(f"Warning - Entering a use-case which should not be possible!")
+                    pass
+                det_label = np.asarray(obj_val.matching_results)[indices[0]][1]
                 instance_gt_array = np.zeros(gt.shape, dtype="uint8")
                 instance_det_array = np.zeros(det.shape, dtype="uint8")
                 instance_gt_array[obj_val.gt_labels == gt_label] = 1
