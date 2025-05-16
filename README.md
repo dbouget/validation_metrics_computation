@@ -3,7 +3,9 @@
 [![License](https://img.shields.io/badge/License-BSD%202--Clause-orange.svg)](https://opensource.org/licenses/BSD-2-Clause)
 [![](https://img.shields.io/badge/python-3.8|3.9|3.10|3.11|3.12-blue.svg)](https://www.python.org/downloads/)
 [![Paper](https://zenodo.org/badge/DOI/10.3389/fneur.2022.932219.svg)](https://www.frontiersin.org/articles/10.3389/fneur.2022.932219/full)
+[![codecov](https://codecov.io/gh/dbouget/validation_metrics_computation/branch/master/graph/badge.svg?token=ZSPQVR7RKX)](https://codecov.io/gh/dbouget/validation_metrics_computation)
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/gist/dbouget/7560fe410db03e384a45ddc77bbe9a57/compute_validation_example.ipynb)
+[![PyPI version](https://img.shields.io/pypi/v/raidionicsval.svg)](https://pypi.org/project/raidionicsval/)
 
 The code corresponds to the Raidionics backend for running the k-fold cross-validation and metrics computation.
 The module can either be used as a Python library, as CLI, or as Docker container. It supports both 2D and 3D inputs,
@@ -15,20 +17,6 @@ the only hard requirement is the expected folder structure to use as input.
 ```
 pip install git+https://github.com/dbouget/validation_metrics_computation.git
 ```
-
-## [Continuous integration](https://github.com/dbouget/validation_metrics_computation#continuous-integration)
-
-<div style="display: flex;">
-  <div style="flex: 1; margin-right: 20px;">
-
-| Operating System | Status                                                                                                             |
-|------------------|--------------------------------------------------------------------------------------------------------------------|
-| **Windows**      | [![Build macOS](https://github.com/dbouget/validation_metrics_computation/actions/workflows/build_windows.yml/badge.svg)](https://github.com/dbouget/validation_metrics_computation/actions/workflows/build_windows.yml) |
-| **Ubuntu**       | [![Build macOS](https://github.com/dbouget/validation_metrics_computation/actions/workflows/build_ubuntu.yml/badge.svg)](https://github.com/dbouget/validation_metrics_computation/actions/workflows/build_ubuntu.yml) |
-| **macOS**        | [![Build macOS](https://github.com/dbouget/validation_metrics_computation/actions/workflows/build_macos.yml/badge.svg)](https://github.com/dbouget/validation_metrics_computation/actions/workflows/build_macos.yml) |
-| **macOS ARM**    | [![Build macOS](https://github.com/dbouget/validation_metrics_computation/actions/workflows/build_macos_arm.yml/badge.svg)](https://github.com/dbouget/validation_metrics_computation/actions/workflows/build_macos_arm.yml) |
-  </div>
-</div>
 
 ## [Getting started](https://github.com/dbouget/validation_metrics_computation#getting-started)
 
@@ -173,14 +161,13 @@ An example of its content is given below when **not** using an index-based namin
 
 ### [2. Installation](https://github.com/dbouget/validation_metrics_computation#2-installation)
 </summary>
-Create a virtual environment using at least Python 3.8, and install all dependencies from
-the requirements.txt file.
+Create a virtual environment using at least Python 3.8, and install the library.
 
 ```
   cd /path/to/validation_metrics_computation  
   virtualenv -p python3 venv  
   source venv/bin/activate  
-  TMPDIR=$PWD/venv pip install --cache-dir=$PWD/venv -r requirements.txt (--no-deps)
+  TMPDIR=$PWD/venv pip install --cache-dir=$PWD/venv -e .
 ```
 
 Then the final step is to do the following in a terminal.
