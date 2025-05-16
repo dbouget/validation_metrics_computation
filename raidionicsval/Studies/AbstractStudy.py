@@ -1,5 +1,6 @@
 import sys
 import os
+import logging
 import pandas as pd
 import numpy as np
 from copy import deepcopy
@@ -383,7 +384,7 @@ class AbstractStudy(ABC):
                 cat_optimal_results = total_optimal_results.loc[total_optimal_results[metric2] > metric2_cutoffs[-1]]
                 optimal_results_per_cutoff['>' + str(metric2_cutoffs[-1])] = cat_optimal_results
 
-            study_name = metric1.replace(" ", "-") + "_Versus_" + metric2.replace(" ", "-")
+            study_name = metric1.replace(" ", "") + "_" + metric2.replace(" ", "") + '-Wise'
             study_output_folder = os.path.join(self.output_folder, study_name)
             os.makedirs(study_output_folder, exist_ok=True)
             for cat in optimal_results_per_cutoff.keys():

@@ -1,3 +1,4 @@
+import logging
 from ..Studies.AbstractStudy import AbstractStudy
 from ..Utils.resources import SharedResources
 
@@ -30,6 +31,10 @@ class SegmentationStudy(AbstractStudy):
             self.compute_and_plot_metric_over_metric_categories(class_name=c, metric1='PiW Dice', metric2='SpacZ',
                                                                 metric2_cutoffs=[2.], category='All')
         """
+
+        if len(self.class_names):
+            logging.warning("No class names were provided, the study will not run as intended!")
+
         for c in self.class_names:
             super().compute_and_plot_overall(c, category='All')
             super().compute_and_plot_overall(c, category='Positive')

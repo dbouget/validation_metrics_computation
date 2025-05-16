@@ -117,14 +117,13 @@ def test_validation_pipeline_extra_metrics(test_dir):
         gt_metrics_filename = os.path.join(test_dir, 'Test1', 'verif', "tumor_overall_metrics_average_TP_extra_metrics.csv")
         results_df = pd.read_csv(overall_metrics_filename)
         gt_df = pd.read_csv(gt_metrics_filename)
-        assert round(gt_df['Patient-wise recall (Mean)'][0], 2) == round(results_df['Patient-wise recall (Mean)'][0], 2), "Patient-wise recall (Mean) values do not match"
-        assert round(gt_df['OW Recall (Mean)'][0], 2) == round(results_df['OW Recall (Mean)'][0],2), "OW Recall (Mean) values do not match"
+        assert round(gt_df['OW HD95 (Mean)'][0], 2) == round(results_df['OW HD95 (Mean)'][0], 2), "OW HD95 (Mean) values do not match"
+        assert round(gt_df['OW MI (Std)'][0], 2) == round(results_df['OW MI (Std)'][0],2), "OW MI (Std) values do not match"
     except Exception as e:
-        logging.error(f"Error during k-fold cross-validation unit test with: {e} \n {traceback.format_exc()}.\n")
+        logging.error(f"Error during test with: {e} \n {traceback.format_exc()}.\n")
         if os.path.exists(output_folder):
             shutil.rmtree(output_folder)
-        raise ValueError("Error during k-fold cross-validation unit test with.\n")
+        raise ValueError(f"{e}.\n")
 
-    logging.info("k-fold cross-validation unit test succeeded.\n")
     if os.path.exists(output_folder):
         shutil.rmtree(output_folder)

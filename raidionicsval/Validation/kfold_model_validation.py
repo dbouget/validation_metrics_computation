@@ -35,7 +35,8 @@ class ModelValidation:
         self.fold_number = SharedResources.getInstance().validation_nb_folds
         self.split_way = SharedResources.getInstance().validation_split_way
         self.metric_names = []
-        self.metric_names.extend(SharedResources.getInstance().validation_metric_names)
+        for m in SharedResources.getInstance().validation_metric_names:
+            self.metric_names.extend([f'PiW {m}', f'OW {m}'])
         self.detection_overlap_thresholds = SharedResources.getInstance().validation_detection_overlap_thresholds
         self.gt_files_suffix = SharedResources.getInstance().validation_gt_files_suffix
         self.prediction_files_suffix = SharedResources.getInstance().validation_prediction_files_suffix
@@ -82,10 +83,10 @@ class ModelValidation:
                                              "OW Dice (std)", "OW Recall", "OW Recall (std)", "OW Precision",
                                              "OW Precision (std)", "OW F1", "OW F1 (std)", '#GT', '#Det'])
         # For each extra metric, adding a pixelwise (PiW) and objectwise (OW) version of it!
-        extra_metrics = []
-        for m in SharedResources.getInstance().validation_metric_names:
-            extra_metrics.extend([f'PiW {m}', f'OW {m}'])
-        self.results_df_base_columns.extend(extra_metrics)
+        # extra_metrics = []
+        # for m in SharedResources.getInstance().validation_metric_names:
+        #     extra_metrics.extend([f'PiW {m}', f'OW {m}'])
+        self.results_df_base_columns.extend(self.metric_names)
         # self.results_df_base_columns.extend(SharedResources.getInstance().validation_metric_names)
 
         if not os.path.exists(self.dice_output_filename):
@@ -106,7 +107,7 @@ class ModelValidation:
                 self.class_results_df[c] = pd.read_csv(self.class_dice_output_filenames[c])
                 if self.class_results_df[c].columns[0] != 'Fold':
                     self.class_results_df[c] = pd.read_csv(self.class_dice_output_filenames[c], index_col=0)
-                missing_metrics = [x for x in extra_metrics if
+                missing_metrics = [x for x in self.metric_names if
                                    not x in list(self.class_results_df[c].columns)[1:]]
                 for m in missing_metrics:
                     self.class_results_df[c][m] = None

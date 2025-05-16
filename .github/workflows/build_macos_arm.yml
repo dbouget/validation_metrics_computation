@@ -76,4 +76,4 @@ jobs:
         run: cd ${{github.workspace}}/tests && python3 test_validation_pipeline.py
 
       - name: Segmentation study unit test
-        run: cd ${{github.workspace}}/tests && python3 studies_pipeline_test.py
+        run: cd ${{github.workspace}}/tests && python3 test_studies_pipeline.py
