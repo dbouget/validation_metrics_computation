@@ -1,4 +1,4 @@
-FROM python:3.8-slim
+FROM python:3.9-slim
 
 MAINTAINER David Bouget <david.bouget@sintef.no>
 

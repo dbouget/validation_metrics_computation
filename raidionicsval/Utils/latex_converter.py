@@ -58,12 +58,14 @@ def export_segmentation_df_to_latex_paper(folder: str, class_name: str, study: s
                   'PiW Precision (Std)',
                   'OW Dice (Mean)', 'OW Dice (Std)', 'OW Recall (Mean)', 'OW Recall (Std)', 'OW Precision (Mean)',
                   'OW Precision (Std)']
+
     if study == "":
-        overall_metrics_filename = os.path.join(folder, "Validation", class_name + '_overall_metrics_average.csv')
-        tp_metrics_filename = os.path.join(folder, "Validation", class_name + '_overall_metrics_average_detectedtp.csv')
+        overall_metrics_filename = os.path.join(folder, "Validation", class_name + '_overall_metrics_average.csv') if suffix == "All" else os.path.join(
+            folder, 'Validation', class_name + '_overall_metrics_average_' + suffix + '.csv')
         overall_metrics_df = pd.read_csv(overall_metrics_filename)
-        tp_metrics_df = pd.read_csv(tp_metrics_filename)
-        matrix_filename = os.path.join(folder, 'Validation', class_name + '_overall_metrics_latex.txt') if suffix == "" else os.path.join(folder, 'Validation', class_name + '_overall_metrics_latex' + suffix + '.txt')
+        matrix_filename = os.path.join(folder, 'Validation',
+                                       class_name + '_overall_metrics_latex.txt') if suffix == "" else os.path.join(
+            folder, 'Validation', class_name + '_overall_metrics_latex' + suffix + '.txt')
         pfile = open(matrix_filename, 'w')
         pfile.write('\\begin{table}[h]\n')
         pfile.write('\\adjustbox{max width=\\textwidth}{\n')
@@ -74,18 +76,22 @@ def export_segmentation_df_to_latex_paper(folder: str, class_name: str, study: s
             header_line = header_line + elem + ' & '
         header_line = header_line + columns[-1]
         pfile.write(header_line + '\\tabularnewline\n')
-        line = str(int(overall_metrics_df['Fold'].values[0])) + ' & ' + str(int(overall_metrics_df['# samples'].values[0]))
+        line = str(int(overall_metrics_df['Fold'].values[0])) + ' & ' + str(
+            int(overall_metrics_df['# samples'].values[0]))
         for c in range(0, len(df_columns[:8]), 2):
-            line = line + ' & ${:05.2f}\pm{:05.2f}$'.format(np.round(overall_metrics_df[df_columns[c]].values[0] * 100., 2),
-                                                            np.round(overall_metrics_df[df_columns[c+1]].values[0] * 100., 2))
+            line = line + ' & ${:05.2f}\pm{:05.2f}$'.format(
+                np.round(overall_metrics_df[df_columns[c]].values[0] * 100., 2),
+                np.round(overall_metrics_df[df_columns[c + 1]].values[0] * 100., 2))
         for c in range(8, len(df_columns), 2):
-            line = line + ' & ${:05.2f}\pm{:05.2f}$'.format(np.round(tp_metrics_df[df_columns[c]].values[0] * 100., 2),
-                                                            np.round(tp_metrics_df[df_columns[c+1]].values[0] * 100., 2))
+            line = line + ' & ${:05.2f}\pm{:05.2f}$'.format(np.round(overall_metrics_df[df_columns[c]].values[0] * 100., 2),
+                                                            np.round(overall_metrics_df[df_columns[c + 1]].values[0] * 100.,
+                                                                     2))
         pfile.write(line + '\\tabularnewline\n')
         pfile.write('\\end{tabular}\n')
         pfile.write('}\n')
         pfile.write('\\end{table}')
         pfile.close()
+
     elif input_csv_filename is not None:
         matrix_filename = os.path.join(os.path.dirname(input_csv_filename), os.path.basename(input_csv_filename).replace('.csv', '_latex_table.txt'))
         pfile = open(matrix_filename, 'w')
@@ -112,7 +118,7 @@ def export_segmentation_df_to_latex_paper(folder: str, class_name: str, study: s
         pfile.close()
     else:
         study_path = os.path.join(folder, study)
-        matrix_filename = os.path.join(study_path, class_name + '_overall_metrics_average_GT_volume_(ml)_latex.txt') if suffix == "" else os.path.join(study_path, class_name + '_overall_metrics_average_GT_volume_(ml)_latex' + suffix + '.txt')
+        matrix_filename = os.path.join(study_path, class_name + '_overall_metrics_average_GT_volume_(ml)_latex.txt') if suffix == "" else os.path.join(study_path, class_name + '_overall_metrics_average_' + suffix + 'latex.txt')
         pfile = open(matrix_filename, 'w')
         pfile.write('\\begin{table}[h]\n')
         pfile.write('\\adjustbox{max width=\\textwidth}{\n')
@@ -125,7 +131,7 @@ def export_segmentation_df_to_latex_paper(folder: str, class_name: str, study: s
         header_line = header_line + columns[-1]
         pfile.write(header_line + '\\tabularnewline\n')
         for cat in categories:
-            overall_metrics_filename = os.path.join(study_path, class_name + '_overall_metrics_average__GT volume (ml)_' + cat + '.csv')
+            overall_metrics_filename = os.path.join(study_path, class_name + '_overall_metrics_average__GT volume (ml)_' + cat + '.csv')  if suffix == "" else os.path.join(study_path, class_name + '_overall_metrics_average_' + suffix + cat + '.csv')
             overall_metrics_df = pd.read_csv(overall_metrics_filename)
             line = cat + ' & ' + str(int(overall_metrics_df['# samples'].values[0]))
             for c in range(0, len(df_columns), 2):

@@ -1,3 +1,4 @@
+import logging
 from ..Studies.AbstractStudy import AbstractStudy
 from ..Utils.resources import SharedResources
 
@@ -30,9 +31,14 @@ class SegmentationStudy(AbstractStudy):
             self.compute_and_plot_metric_over_metric_categories(class_name=c, metric1='PiW Dice', metric2='SpacZ',
                                                                 metric2_cutoffs=[2.], category='All')
         """
+
+        if len(self.class_names):
+            logging.warning("No class names were provided, the study will not run as intended!")
+
         for c in self.class_names:
             super().compute_and_plot_overall(c, category='All')
-            super().compute_and_plot_overall(c, category='True Positive')
+            super().compute_and_plot_overall(c, category='Positive')
+            super().compute_and_plot_overall(c, category='TP')
 
             # Plotting the results based on the selection of dense parameters
             for s in SharedResources.getInstance().studies_selections_dense:
@@ -64,7 +70,10 @@ class SegmentationStudy(AbstractStudy):
 
             # Correlation matrix between all metrics
             super().compute_and_plot_metrics_correlation_matrix(class_name=c, category='All')
-            super().compute_and_plot_metrics_correlation_matrix(class_name=c, category='True Positive')
+            super().compute_and_plot_metrics_correlation_matrix(class_name=c, category='Positive')
+            super().compute_and_plot_metrics_correlation_matrix(class_name=c, category='TP')
 
             # Cascading results based on a combination of the selected dense/categorical parameters
             self.compute_and_plot_metric_over_metric_cascading_categories(class_name=c, category='All')
+            self.compute_and_plot_metric_over_metric_cascading_categories(class_name=c, category='Positive')
+            self.compute_and_plot_metric_over_metric_cascading_categories(class_name=c, category='TP')

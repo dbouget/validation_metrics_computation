@@ -1,5 +1,6 @@
 from ..Utils.resources import SharedResources
 from ..Studies.SegmentationStudy import SegmentationStudy
+from ..Studies.ClassificationStudy import ClassificationStudy
 
 
 class StudyConnector:
@@ -12,4 +13,7 @@ class StudyConnector:
     def run(self):
         if self.perform_study == 'segmentation':
             processor = SegmentationStudy()
+            processor.run()
+        elif self.perform_study == 'classification':
+            processor = ClassificationStudy()
             processor.run()

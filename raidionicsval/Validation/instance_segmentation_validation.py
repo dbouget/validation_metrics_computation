@@ -5,7 +5,9 @@ import os
 import h5py
 import nibabel as nib
 from copy import deepcopy
+from scipy.optimize import linear_sum_assignment
 from ..Utils.resources import SharedResources
+from ..Computation.dice_computation import pixelwise_computation
 
 
 def box_overlap(box1, box2):
@@ -42,7 +44,7 @@ class InstanceSegmentationValidation:
     Perform the instance detection validation side (i.e., recall, precision).
     N.B.: most likely not fully optimal when compared to CVPR/PAMI processes.
     """
-    def __init__(self, gt_image, detection_image):
+    def __init__(self, gt_image, detection_image, tiny_objects_removal_threshold: int = 50):
         self.gt_image = gt_image
         self.detection_image = detection_image
 
@@ -53,8 +55,8 @@ class InstanceSegmentationValidation:
         self.gt_candidates = []
         self.detection_candidates = []
         self.matching_results = []
-        self.instance_detection_results = [None, None, None, None, None]  # Dice, Recall, Precision, F1, Largest Focus Dice
-        self.tiny_objects_removal_threshold = SharedResources.getInstance().validation_tiny_objects_removal_threshold
+        self.instance_detection_results = [0., 1., 0.5, 0., 0., 0., 0., 1., 0., 0.5, 0.]  # Global Recall, Global Precision, Global F1, Dice (avg/std), Recall (avg/std), Precision (avg/std), F1 (avg/std)
+        self.tiny_objects_removal_threshold = tiny_objects_removal_threshold
 
     def set_trace_parameters(self, output_folder, fold_number, patient, threshold):
         """
@@ -72,22 +74,30 @@ class InstanceSegmentationValidation:
 
     def run(self):
         self.__select_candidates()
-        if len(self.detection_candidates) != 0:
+        if len(self.detection_candidates) != 0 and len(self.gt_candidates) != 0:
             self.__pair_candidates()
             self.__compute_metrics()
-        else:
-            if len(self.gt_candidates) == 0:
-                self.instance_detection_results[0] = 1.
-                self.instance_detection_results[1] = 1.
-                self.instance_detection_results[2] = 1.
-                self.instance_detection_results[3] = 1.
-                self.instance_detection_results[4] = 0.
-            else:
-                self.instance_detection_results[0] = 0.
-                self.instance_detection_results[1] = 0.
-                self.instance_detection_results[2] = 1.
-                self.instance_detection_results[3] = 0.5
-                self.instance_detection_results[4] = 0.
+        elif len(self.gt_candidates) == 0 and len(self.detection_candidates) == 0:
+            self.instance_detection_results[0] = 1.
+            self.instance_detection_results[1] = 1.
+            self.instance_detection_results[2] = 1.
+            self.instance_detection_results[5] = 1.
+            self.instance_detection_results[7] = 1.
+            self.instance_detection_results[9] = 1.
+        elif len(self.gt_candidates) != 0 and len(self.detection_candidates) == 0:
+            self.instance_detection_results[0] = 0.
+            self.instance_detection_results[1] = 1.
+            self.instance_detection_results[2] = 0.5
+            self.instance_detection_results[5] = 0.
+            self.instance_detection_results[7] = 1.
+            self.instance_detection_results[9] = 0.5
+        elif len(self.gt_candidates) == 0 and len(self.detection_candidates) != 0:
+            self.instance_detection_results[0] = 1.
+            self.instance_detection_results[1] = 0.
+            self.instance_detection_results[2] = 0.5
+            self.instance_detection_results[5] = 1.
+            self.instance_detection_results[7] = 0.
+            self.instance_detection_results[9] = 0.5
 
         return 1
 
@@ -147,10 +157,12 @@ class InstanceSegmentationValidation:
     def __pair_candidates(self, study_state=False):
         """
         Identify matching objects between the ground truth and detection candidates generated in self.__select_candidates.
-        @TODO. Optimally, and to avoid any bias which may or may not apply, if two detection candidates overlap with the
-        same ground truth candidate, only the one with the highest Dice should be kept as the correct pair and the second
-        detection candidate should be considered as a false positive.
+
+        If multiple detection candidates overlap with the same ground truth candidate, only the one with the highest
+        Dice is kept as the correct pair and the second detection candidate should be considered as a false positive.
+        Using the Hungarian algorithm for it, using the Dice overlap as criteria
         """
+        dice_matrix = np.zeros(shape=(len(self.gt_candidates), len(self.detection_candidates)))
         for g, go in enumerate(self.gt_candidates):
             gt_object = go.slice
             gt_label_value = g + 1
@@ -173,11 +185,19 @@ class InstanceSegmentationValidation:
                     sub_det_object[sub_det_object == det_label_value] = 1
 
                     dice_overlap = np.sum(sub_det_object[sub_gt_object == 1]) * 2.0 / (np.sum(sub_gt_object) + np.sum(sub_det_object))
-                    if dice_overlap > 0.0:
-                        if study_state:
-                            self.matching_results.append([gt_label_value, det_label_value, dice_overlap, sub_gt_object, sub_det_object])
-                        else:
-                            self.matching_results.append([gt_label_value, det_label_value, dice_overlap])
+                    # if dice_overlap > 0.0:
+                    #     if study_state:
+                    #         self.matching_results.append([gt_label_value, det_label_value, dice_overlap, sub_gt_object, sub_det_object])
+                    #     else:
+                    #         self.matching_results.append([gt_label_value, det_label_value, dice_overlap])
+                    dice_matrix[g, d] = dice_overlap
+                else:
+                    dice_matrix[g, d] = 0.
+        cost_matrix = -dice_matrix
+        gt_inds, pred_inds = linear_sum_assignment(cost_matrix)
+        matches = [(i, j) for i, j in zip(gt_inds, pred_inds) if dice_matrix[i, j] > 0.1]
+        for m in matches:
+            self.matching_results.append([m[0] + 1, m[1] + 1, dice_matrix[m[0], m[1]]])
         if self.dump_trace:
             output_file = os.path.join(self.output_folder, str(self.fold_number), '1_' + self.patient.split('_')[0],
                                        'matching_' + str(int(self.threshold * 100)) + '.hd5')
@@ -189,6 +209,46 @@ class InstanceSegmentationValidation:
             f.close()
 
     def __compute_metrics(self):
+        """
+        :return:
+        """
+        recall = 0.0
+        precision = 1.0
+        f1_score = 0.0
+        averaged_objectwise_results = [0] * 8
+        try:
+            if len(self.matching_results) != 0:
+                array_matching = np.asarray(self.matching_results)
+                recall = len(np.unique(array_matching[:, 0])) / len(self.gt_candidates)
+                precision = len(np.unique(array_matching[:, 1])) / len(self.detection_candidates)
+                f1_score = 2. * ((precision * recall) / (precision + recall))
+                if len(self.gt_candidates) == 0 and len(self.detection_candidates) > 0:
+                    precision = 0
+
+                instance_results = []
+                for g, go in enumerate(self.gt_candidates):
+                    gt_label = g + 1
+                    if gt_label in array_matching[:, 0]:
+                        indices = np.where(array_matching[:, 0] == gt_label)[0]
+                        if len(indices) > 1:
+                            # Should not happen anymore
+                            print(f"Warning - Entering a use-case which should not be possible!")
+                            pass
+                        else:
+                            det_label = self.matching_results[indices[0]][1]
+                        instance_gt_array = np.zeros(self.gt_image.shape, dtype="uint8")
+                        instance_det_array = np.zeros(self.detection_image.shape, dtype="uint8")
+                        instance_gt_array[self.gt_labels == gt_label] = 1
+                        instance_det_array[self.detection_labels == det_label] = 1
+                        inst_metric = pixelwise_computation(instance_gt_array, instance_det_array)
+                        instance_results.append(inst_metric)
+                averaged_objectwise_results = [x for pair in zip(list(np.mean(np.asarray(instance_results), axis=0)), list(np.std(np.asarray(instance_results), axis=0))) for x in pair]
+            global_objectwise_results = [recall, precision, f1_score]
+            self.instance_detection_results = global_objectwise_results + averaged_objectwise_results
+        except Exception as e:
+            print(f'Issue computing the objectwise metrics with {e}\n {traceback.format_exc()}')
+
+    def __compute_metrics_old(self):
         """
         @TODO. Might need to improve the object-wise metrics computation, here again with TP/TN/FP/FN
         :return:
@@ -212,5 +272,5 @@ class InstanceSegmentationValidation:
                 if len(self.gt_candidates) == 0 and len(self.detection_candidates) > 0:
                     precision = 0
         except Exception as e:
-            print(traceback.format_exc())
+            print(f'Issue computing the objectwise metrics with {e}\n {traceback.format_exc()}')
         self.instance_detection_results = [average_dice, recall, precision, f1_score, largest_component_dice]

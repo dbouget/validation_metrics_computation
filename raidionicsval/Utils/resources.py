@@ -34,11 +34,12 @@ class SharedResources:
         self.config = None
         self.home_path = ''
 
-        self.upper_default_metrics_index = 17  # Single place for holding this attribute, "safer" approach
+        self.upper_default_metrics_index = 23  # Single place for holding this attribute, "safer" approach, column index after # GT and # Det
 
         self.data_root = ""
         self.task = None
         self.number_processes = 8
+        self.overall_objective = "segmentation"
 
         self.studies_input_folder = ''
         self.studies_output_folder = ''
@@ -63,6 +64,15 @@ class SharedResources:
         self.validation_true_positive_volume_thresholds = []
         self.validation_use_brats_data = []
 
+        self.standalone_gt_filename = None
+        self.standalone_detection_filename = None
+        self.standalone_class_names = []
+        self.standalone_metrics_spaces = []
+        self.standalone_extra_metric_names = []
+        self.standalone_detection_overlap_thresholds = []
+        self.standalone_tiny_objects_removal_threshold = 50
+        self.standalone_true_positive_volume_thresholds = []
+
     def set_environment(self, config_filename):
         self.config = configparser.ConfigParser()
         if not os.path.exists(config_filename):
@@ -77,6 +87,7 @@ class SharedResources:
         self.__parse_default_parameters()
         self.__parse_validation_parameters()
         self.__parse_studies_parameters()
+        self.__parse_standalone_parameters()
 
     def __parse_default_parameters(self):
         """
@@ -97,6 +108,13 @@ class SharedResources:
         if self.config.has_option('Default', 'number_processes'):
             if self.config['Default']['number_processes'].split('#')[0].strip() != '':
                 self.number_processes = int(self.config['Default']['number_processes'].split('#')[0].strip())
+
+        if self.config.has_option('Default', 'objective'):
+            if self.config['Default']['objective'].split('#')[0].strip() != '':
+                self.overall_objective = self.config['Default']['objective'].split('#')[0].strip()
+        if self.overall_objective not in ["segmentation", "classification"]:
+            raise ValueError("Provided ['Default']['objective'] should be inside [segmentation, classification]."
+                             "\n Please provide a correct value!")
 
     def __parse_studies_parameters(self):
         """
@@ -218,3 +236,39 @@ class SharedResources:
         if self.config.has_option('Validation', 'use_brats_data'):
             if self.config['Validation']['use_brats_data'].split('#')[0].strip() != '':
                 self.validation_use_brats_data = True if self.config['Validation']['use_brats_data'].split('#')[0].strip().lower() == 'true' else False
+
+    def __parse_standalone_parameters(self):
+        """
+
+        """
+        if self.config.has_option('Standalone', 'groundtruth_filename'):
+            if self.config['Standalone']['groundtruth_filename'].split('#')[0].strip() != '':
+                self.standalone_gt_filename = self.config['Standalone']['groundtruth_filename'].split('#')[0].strip()
+
+        if self.config.has_option('Standalone', 'prediction_filename'):
+            if self.config['Standalone']['prediction_filename'].split('#')[0].strip() != '':
+                self.standalone_detection_filename = self.config['Standalone']['prediction_filename'].split('#')[0].strip()
+
+        if self.config.has_option('Standalone', 'metrics_space'):
+            if self.config['Standalone']['metrics_space'].split('#')[0].strip() != '':
+                self.standalone_metrics_spaces = [x.strip() for x in self.config['Standalone']['metrics_space'].split('#')[0].strip().split(',')]
+
+        if self.config.has_option('Standalone', 'extra_metrics'):
+            if self.config['Standalone']['extra_metrics'].split('#')[0].strip() != '':
+                self.standalone_extra_metric_names = [x.strip() for x in self.config['Standalone']['extra_metrics'].split('#')[0].strip().split(',')]
+
+        if self.config.has_option('Standalone', 'detection_overlap_thresholds'):
+            if self.config['Standalone']['detection_overlap_thresholds'].split('#')[0].strip() != '':
+                self.standalone_detection_overlap_thresholds = [float(x) for x in (self.config['Standalone']['detection_overlap_thresholds'].split('#')[0].strip().split(','))]
+
+        if self.config.has_option('Standalone', 'class_names'):
+            if self.config['Standalone']['class_names'].split('#')[0].strip() != '':
+                self.standalone_class_names = [x.strip() for x in self.config['Standalone']['class_names'].split('#')[0].strip().split(',')]
+
+        if self.config.has_option('Standalone', 'tiny_objects_removal_threshold'):
+            if self.config['Standalone']['tiny_objects_removal_threshold'].split('#')[0].strip() != '':
+                self.standalone_tiny_objects_removal_threshold = int(self.config['Standalone']['tiny_objects_removal_threshold'].split('#')[0].strip())
+
+        if self.config.has_option('Standalone', 'true_positive_volume_thresholds'):
+            if self.config['Standalone']['true_positive_volume_thresholds'].split('#')[0].strip() != '':
+                self.standalone_true_positive_volume_thresholds = [float(x.strip()) for x in self.config['Standalone']['true_positive_volume_thresholds'].split('#')[0].strip().split(',')]

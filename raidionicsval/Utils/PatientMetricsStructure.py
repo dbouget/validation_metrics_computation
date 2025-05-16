@@ -9,6 +9,7 @@ from ..Utils.resources import SharedResources
 
 class PatientMetrics:
     _unique_id = ""  # Internal unique identifier for the patient
+    _objective = "segmentation"  #
     _patient_id = ""  # Unique identifier for the patient (might be multiple times the same patient in different folds)
     _fold_number = None  # Fold integer to which the patient belongs to
     _ground_truth_filepaths = None
@@ -16,16 +17,19 @@ class PatientMetrics:
     _patientwise_metrics = None
     _pixelwise_metrics = None
     _objectwise_metrics = None
+    _classification_metrics = None
     _extra_metrics = None
     _class_names = None
     _class_metrics = None
 
-    def __init__(self, id: str, patient_id: str, fold_number: int, class_names: List[str]) -> None:
+    def __init__(self, id: str, patient_id: str, fold_number: int, class_names: List[str],
+                 objective: str = "segmentation") -> None:
         """
 
         """
         self.__reset()
         self._unique_id = id
+        self._objective = objective
         self._patient_id = patient_id
         self._fold_number = fold_number
         self._class_names = class_names
@@ -39,6 +43,7 @@ class PatientMetrics:
         An instance or non-static variables are different for different objects (every object has a copy).
         """
         self._unique_id = ""
+        self._objective = "segmentation"
         self._patient_id = ""
         self._fold_number = None
         self._prediction_filepaths = None
@@ -46,6 +51,7 @@ class PatientMetrics:
         self._patientwise_metrics = None
         self._pixelwise_metrics = None
         self._objectwise_metrics = None
+        self._classification_metrics = None
         self._extra_metrics = None
         self._class_metrics = None
         self._class_names = None
@@ -53,6 +59,14 @@ class PatientMetrics:
     @property
     def unique_id(self) -> str:
         return self._unique_id
+
+    @property
+    def objective(self) -> str:
+        return self._objective
+
+    @objective.setter
+    def objective(self, objective: str) -> None:
+        self._objective = objective
 
     @property
     def patient_id(self) -> str:
@@ -87,6 +101,12 @@ class PatientMetrics:
         self._prediction_filepaths = prediction_filepaths
 
     def init_from_file(self, study_folder: str):
+        if self.objective == "segmentation":
+            self.__init_from_file_segmentation(study_folder=study_folder)
+        else:
+            self.__init_from_file_classification(study_folder=study_folder)
+
+    def __init_from_file_segmentation(self, study_folder: str):
         all_scores_filename = os.path.join(study_folder, 'all_dice_scores.csv')
 
         for c in list(self._class_metrics.keys()):
@@ -112,9 +132,12 @@ class PatientMetrics:
             patientwise_values = list(thr_results[7:10])
             objectwise_values = list(thr_results[10:SharedResources.getInstance().upper_default_metrics_index])
             extra_values = list(thr_results[SharedResources.getInstance().upper_default_metrics_index:])
-            [extra_values.append(None) for x in range(len(list(thr_results[SharedResources.getInstance().upper_default_metrics_index:])), len(SharedResources.getInstance().validation_metric_names))]
+            [extra_values.append(None) for x in range(len(list(thr_results[SharedResources.getInstance().upper_default_metrics_index:])), 2 * len(SharedResources.getInstance().validation_metric_names))]
             extra_values_description = list(scores_df.columns[SharedResources.getInstance().upper_default_metrics_index:])
-            [extra_values_description.append(x) for x in SharedResources.getInstance().validation_metric_names]
+            extra_metric_names = []
+            for m in SharedResources.getInstance().validation_metric_names:
+                extra_metric_names.extend([f'PiW {m}', f'OW {m}'])
+            [extra_values_description.append(x) for x in extra_metric_names]
             self._pixelwise_metrics.append([thr_val] + pixelwise_values)
             self._patientwise_metrics.append([thr_val] + patientwise_values)
             self._objectwise_metrics.append([thr_val] + objectwise_values)
@@ -124,32 +147,54 @@ class PatientMetrics:
         if len(self._extra_metrics) == 0:
             self._extra_metrics = None
 
+    def __init_from_file_classification(self, study_folder: str):
+        all_scores_filename = os.path.join(study_folder, 'all_scores.csv')
+        if not os.path.exists(all_scores_filename):
+            return
+
+        scores_df = pd.read_csv(all_scores_filename)
+        scores_df['Patient'] = scores_df.Patient.astype(str)
+        if len(scores_df.loc[(scores_df["Patient"] == self._patient_id) & (scores_df["Fold"] == self._fold_number)]) == 0:
+            return
+
+        patient_scores = scores_df.loc[(scores_df["Patient"] == self._patient_id) & (scores_df["Fold"] == self._fold_number)]
+        self._classification_metrics = []
+        classification_values = list(patient_scores[2:7])
+        self._classification_metrics.append(classification_values)
+
     def is_complete(self):
         """
         @TODO. Will require much deeper checks to see if any value is missing and a recompute triggered
         :return:
         """
         status = False
-        complete_pixelwise_metrics = True not in [-1. in x for x in
-                                                  self._pixelwise_metrics] if self._pixelwise_metrics is not None else False
-        complete_objectwise_metrics = True not in [-1. in x for x in
-                                                  self._objectwise_metrics] if self._objectwise_metrics is not None else False
-        if 'objectwise' not in SharedResources.getInstance().validation_metric_spaces:
-            status = complete_pixelwise_metrics
-        else:
-            status = complete_pixelwise_metrics & complete_objectwise_metrics
+        if self.objective == "segmentation":
+            complete_pixelwise_metrics = True not in [-1. in x for x in
+                                                      self._pixelwise_metrics] if self._pixelwise_metrics is not None else False
+            complete_objectwise_metrics = True not in [-1. in x for x in
+                                                      self._objectwise_metrics] if self._objectwise_metrics is not None else False
+            if 'objectwise' not in SharedResources.getInstance().validation_metric_spaces:
+                status = complete_pixelwise_metrics
+            else:
+                status = complete_pixelwise_metrics & complete_objectwise_metrics
 
-        for c in list(self._class_metrics.keys()):
-            status = status & self._class_metrics[c].is_complete()
+            for c in list(self._class_metrics.keys()):
+                status = status & self._class_metrics[c].is_complete()
+        else:
+            status = self._classification_metrics is not None
         return status
 
     def set_patient_filenames(self, filenames: dict) -> None:
         self._ground_truth_filepaths = []
         self._prediction_filepaths = []
 
-        for c in list(filenames.keys()):
-            self._ground_truth_filepaths.append(filenames[c][0])
-            self._prediction_filepaths.append(filenames[c][1])
+        if self.objective == "segmentation":
+            for c in list(filenames.keys()):
+                self._ground_truth_filepaths.append(filenames[c][0])
+                self._prediction_filepaths.append(filenames[c][1])
+        else:
+            self._ground_truth_filepaths.append(filenames[0])
+            self._prediction_filepaths.append(filenames[1])
 
     def get_class_filenames(self, class_index: int) -> List[str]:
         return [self._ground_truth_filepaths[class_index], self.prediction_filepaths[class_index]]
@@ -194,25 +239,28 @@ class PatientMetrics:
 
         """
         thr_list = self._class_metrics[self.class_names[0]].get_probability_thresholds_list()
+        complete_metric_names = []
+        for m in metric_names:
+            complete_metric_names.extend([f'PiW {m}', f'OW {m}'])
         if self._extra_metrics is None:
             self._extra_metrics = []
             for thr in thr_list:
                 curr_thr = [thr]
-                for m in metric_names:
+                for m in complete_metric_names:
                     curr_thr.append([m, float('nan')])
                 self._extra_metrics.append(curr_thr)
         else:
             existing_metrics = [x[0] for x in self._extra_metrics[0][1:]]
-            matching_metrics_states = all(element in existing_metrics for element in metric_names)
+            matching_metrics_states = all(element in existing_metrics for element in complete_metric_names)
             if not matching_metrics_states:
-                for m in metric_names:
+                for m in complete_metric_names:
                     if m not in existing_metrics:
                         for th in range(len(self._extra_metrics)):
                             self._extra_metrics[th].append([m, float('nan')])
 
         # Performs the same operation on the extra metrics for each class
         for cl in self._class_names:
-            self._class_metrics[cl].setup_extra_metrics(metric_names)
+            self._class_metrics[cl].setup_extra_metrics(complete_metric_names)
 
 
 class ClassMetrics:
@@ -295,9 +343,12 @@ class ClassMetrics:
             patientwise_values = list(thr_results[7:10])
             objectwise_values = list(thr_results[10:SharedResources.getInstance().upper_default_metrics_index])
             extra_values = list(thr_results[SharedResources.getInstance().upper_default_metrics_index:])
-            [extra_values.append(float('nan')) for x in range(len(list(thr_results[SharedResources.getInstance().upper_default_metrics_index:])), len(SharedResources.getInstance().validation_metric_names))]
+            [extra_values.append(float('nan')) for x in range(len(list(thr_results[SharedResources.getInstance().upper_default_metrics_index:])), 2 * len(SharedResources.getInstance().validation_metric_names))]
             extra_values_description = list(scores_df.columns[SharedResources.getInstance().upper_default_metrics_index:])
-            [extra_values_description.append(x) for x in SharedResources.getInstance().validation_metric_names if x not in extra_values_description]
+            extra_metric_names = []
+            for m in SharedResources.getInstance().validation_metric_names:
+                extra_metric_names.extend([f'PiW {m}', f'OW {m}'])
+            [extra_values_description.append(x) for x in extra_metric_names if x not in extra_values_description]
             self._pixelwise_metrics.append([thr_val] + pixelwise_values)
             self._patientwise_metrics.append([thr_val] + patientwise_values)
             self._objectwise_metrics.append([thr_val] + objectwise_values)
@@ -341,7 +392,9 @@ class ClassMetrics:
             return [x[1][1::2] for x in self._extra_metrics]
         else:
             #return [[None]] * len(self._pixelwise_metrics)
-            return [[None] * len(SharedResources.getInstance().validation_metric_names)] * len(self._pixelwise_metrics)
+            # return [[None] * len(SharedResources.getInstance().validation_metric_names)] * len(self._pixelwise_metrics)
+            # Twice the length because pixelwise and objectwise versions.
+            return [[None] * 2 * len(SharedResources.getInstance().validation_metric_names)] * len(self._pixelwise_metrics)
 
     def get_probability_thresholds_list(self) -> List[float]:
         res = [x[0] for x in self.pixelwise_metrics]

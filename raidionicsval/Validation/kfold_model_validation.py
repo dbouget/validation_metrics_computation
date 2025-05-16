@@ -1,13 +1,13 @@
 import multiprocessing
 import itertools
-
+import logging
 import time
 import pandas as pd
 from math import ceil
 
 from tqdm import tqdm
 
-from ..Computation.dice_computation import separate_dice_computation
+from ..Computation.dice_computation_instance import separate_dice_computation
 from ..Validation.instance_segmentation_validation import *
 from ..Utils.resources import SharedResources
 from ..Utils.PatientMetricsStructure import PatientMetrics
@@ -35,25 +35,29 @@ class ModelValidation:
         self.fold_number = SharedResources.getInstance().validation_nb_folds
         self.split_way = SharedResources.getInstance().validation_split_way
         self.metric_names = []
-        self.metric_names.extend(SharedResources.getInstance().validation_metric_names)
+        for m in SharedResources.getInstance().validation_metric_names:
+            self.metric_names.extend([f'PiW {m}', f'OW {m}'])
         self.detection_overlap_thresholds = SharedResources.getInstance().validation_detection_overlap_thresholds
-        print("Detection overlap: ", self.detection_overlap_thresholds)
         self.gt_files_suffix = SharedResources.getInstance().validation_gt_files_suffix
         self.prediction_files_suffix = SharedResources.getInstance().validation_prediction_files_suffix
         self.patients_metrics = {}
 
     def run(self):
+        logging.info("Computing metrics for cohort.")
         self.__compute_metrics()
-        class_optimal = best_segmentation_probability_threshold_analysis(self.input_folder,
+        logging.info("Running optimal thresholds analysis.")
+        class_optimal = best_segmentation_probability_threshold_analysis(self.output_folder,
                                                                          detection_overlap_thresholds=self.detection_overlap_thresholds)
         if len(SharedResources.getInstance().validation_metric_names) != 0:
+            logging.info("Computing extra metrics for cohort.")
             self.__compute_extra_metrics(class_optimal=class_optimal)
-        compute_fold_average(self.input_folder, class_optimal=class_optimal, metrics=self.metric_names,
-                             true_positive_state=False)
-        compute_fold_average(self.input_folder, class_optimal=class_optimal, metrics=self.metric_names,
-                             true_positive_state=True)
-        compute_fold_average(self.input_folder, class_optimal=class_optimal, metrics=self.metric_names,
-                             true_positive_state=True, positive_detected_state=True)
+        logging.info("Computing average metrics for the cohort.")
+        # All
+        compute_fold_average(self.output_folder, class_optimal=class_optimal, metrics=self.metric_names, condition='All')
+        # Positive, based on given ground truth volume limit
+        compute_fold_average(self.output_folder, class_optimal=class_optimal, metrics=self.metric_names, condition='Positive')
+        # True positive, based on given detection_overlap_thresholds
+        compute_fold_average(self.output_folder, class_optimal=class_optimal, metrics=self.metric_names, condition='TP')
 
     def __compute_metrics(self):
         """
@@ -75,8 +79,15 @@ class ModelValidation:
         self.results_df_base_columns.extend(["PiW Dice", "PiW Recall", "PiW Precision", "PiW F1"])
         # self.results_df_base_columns.extend(["PaW Dice", "PaW Recall", "PaW Precision", "PaW F1"])
         self.results_df_base_columns.extend(["GT volume (ml)", "True Positive", "Detection volume (ml)"])
-        self.results_df_base_columns.extend(["OW Dice", "OW Recall", "OW Precision", "OW F1", "OW Dice Largest Object", '#GT', '#Det'])
-        self.results_df_base_columns.extend(SharedResources.getInstance().validation_metric_names)
+        self.results_df_base_columns.extend(["OW Global Recall", "OW Global Precision", "OW Global F1", "OW Dice",
+                                             "OW Dice (std)", "OW Recall", "OW Recall (std)", "OW Precision",
+                                             "OW Precision (std)", "OW F1", "OW F1 (std)", '#GT', '#Det'])
+        # For each extra metric, adding a pixelwise (PiW) and objectwise (OW) version of it!
+        # extra_metrics = []
+        # for m in SharedResources.getInstance().validation_metric_names:
+        #     extra_metrics.extend([f'PiW {m}', f'OW {m}'])
+        self.results_df_base_columns.extend(self.metric_names)
+        # self.results_df_base_columns.extend(SharedResources.getInstance().validation_metric_names)
 
         if not os.path.exists(self.dice_output_filename):
             self.results_df = pd.DataFrame(columns=self.results_df_base_columns)
@@ -96,7 +107,7 @@ class ModelValidation:
                 self.class_results_df[c] = pd.read_csv(self.class_dice_output_filenames[c])
                 if self.class_results_df[c].columns[0] != 'Fold':
                     self.class_results_df[c] = pd.read_csv(self.class_dice_output_filenames[c], index_col=0)
-                missing_metrics = [x for x in SharedResources.getInstance().validation_metric_names if
+                missing_metrics = [x for x in self.metric_names if
                                    not x in list(self.class_results_df[c].columns)[1:]]
                 for m in missing_metrics:
                     self.class_results_df[c][m] = None
@@ -107,7 +118,7 @@ class ModelValidation:
 
         results_per_folds = []
         for fold in range(0, self.fold_number):
-            print('\nProcessing fold {}/{}.\n'.format(fold + 1, self.fold_number))
+            logging.info(f'\nProcessing fold {fold+1}/{self.fold_number}.\n')
             if self.split_way == 'two-way':
                 test_set, _ = get_fold_from_file(filename=cross_validation_description_file, fold_number=fold)
             else:
@@ -116,7 +127,6 @@ class ModelValidation:
             results_per_folds.append(results)
 
     def __compute_metrics_for_fold(self, data_list, fold_number):
-        data_list = ["5_1000_MR_FLAIR_post_4125", "5_1000_MR_FLAIR_pre_2366"]
         for i, patient in enumerate(tqdm(data_list)):
             uid = None
             try:
@@ -272,10 +282,10 @@ class ModelValidation:
             #
             #     if detection_ni.shape != ground_truth_ni.shape:
             #         return False
-            detection_array, file_extension, input_spec = open_image_file(detection_filename)
             # If there's no ground truth, we assume the class to be empty for this patient and create an
             # empty ground truth volume.
             if ground_truth_filename is None or not os.path.exists(ground_truth_filename):
+                detection_array, file_extension, input_spec = open_image_file(detection_filename)
                 ground_truth_filename = os.path.join(os.path.dirname(detection_filename), uid + "_groundtruth_" +
                                                      classes[c] + file_extension)
                 if not os.path.exists(ground_truth_filename):
@@ -283,14 +293,15 @@ class ModelValidation:
                     save_image_file(empty_gt, ground_truth_filename, specifics=input_spec)
             else:
                 file_stats = os.stat(detection_filename)
-                ground_truth_array, _, ground_truth_input_spec = open_image_file(ground_truth_filename)
 
                 if file_stats.st_size == 0:
+                    ground_truth_array, _, ground_truth_input_spec = open_image_file(ground_truth_filename)
+                    detection_array, file_extension, input_spec = open_image_file(detection_filename)
                     save_image_file(np.zeros(shape=ground_truth_array.shape), detection_filename,
                                     specifics=ground_truth_input_spec)
 
-                if detection_array.shape != ground_truth_array.shape:
-                    return False
+                # if detection_array.shape != ground_truth_array.shape:
+                #     return False
 
             patient_filenames[classes[c]] = [ground_truth_filename, detection_filename]
         patient_metrics.set_patient_filenames(patient_filenames)
@@ -352,7 +363,7 @@ class ModelValidation:
                 # buff_df = pd.DataFrame(ind_values.reshape(1, len(self.results_df_base_columns)),
                 #                        columns=list(self.results_df_base_columns))
                 if len(sub_df) == 0:
-                    extra_metrics = [None] * len(SharedResources.getInstance().validation_metric_names)
+                    extra_metrics = [None] * 2 * len(SharedResources.getInstance().validation_metric_names)
                     ind_values = np.asarray(pat_results[ind][0] + extra_metrics)
                     buff_df = pd.DataFrame(ind_values.reshape(1, len(self.results_df_base_columns)),
                                            columns=list(self.results_df_base_columns))
@@ -401,7 +412,6 @@ class ModelValidation:
         """
 
         """
-        print("Computing extra metrics for all patients.\n")
         classes = SharedResources.getInstance().validation_class_names
         for c in classes:
             optimal_values = class_optimal[c]['All']

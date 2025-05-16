@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 import math
 from copy import deepcopy
+import logging
 import matplotlib.pyplot as plt
 from ..Utils.resources import SharedResources
 
@@ -38,8 +39,8 @@ def best_segmentation_probability_threshold_analysis_inner(folder, detection_ove
     :return: optimal probability threshold and Dice cut-off.
     """
     suffix = "_tp" if true_positive_state else ""
-    patient_dices_filename = os.path.join(folder, 'Validation', class_name + '_dice_scores.csv')
-    study_filename = os.path.join(folder, 'Validation', class_name + '_optimal_dice_study' + suffix + '.csv')
+    patient_dices_filename = os.path.join(folder, class_name + '_dice_scores.csv')
+    study_filename = os.path.join(folder, class_name + '_optimal_dice_study' + suffix + '.csv')
     study_file = open(study_filename, 'w')
     study_writer = csv.writer(study_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
     study_writer.writerow(
@@ -93,7 +94,7 @@ def best_segmentation_probability_threshold_analysis_inner(folder, detection_ove
     study_writer.writerow(['', '', '', '', '', '', '', ''])
     study_writer.writerow([max_overlap, max_threshold, '', '', '', '', '', ''])
     study_file.close()
-    print('Class \'{}\' - Selected values (Overlap: {}, Threshold: {}) for global metric of {:.3f} (Dice: {:.2f}% and Recall: {:.2f}%).'
+    logging.info('Class \'{}\' - Selected values (Overlap: {}, Threshold: {}) for global metric of {:.3f} (Dice: {:.2f}% and Recall: {:.2f}%).'
           ' True positive case: {}'.format(class_name, max_overlap, max_threshold, max_global_metrics_value,
                                            max_mean_dice * 100. , max_recall * 100., true_positive_state))
 
@@ -137,14 +138,14 @@ def best_segmentation_probability_threshold_analysis_inner(folder, detection_ove
     ax4.legend(loc='lower center')
     # plt.show()
 
-    os.makedirs(os.path.join(folder, 'Validation', 'OptimalSearch'), exist_ok=True)
-    fig.savefig(os.path.join(folder, 'Validation', 'OptimalSearch', 'dice_over_threshold.png'), dpi=300,
+    os.makedirs(os.path.join(folder, 'OptimalSearch'), exist_ok=True)
+    fig.savefig(os.path.join(folder, 'OptimalSearch', 'dice_over_threshold.png'), dpi=300,
                 bbox_inches="tight")
-    fig2.savefig(os.path.join(folder, 'Validation', 'OptimalSearch', 'F1_over_threshold.png'), dpi=300,
+    fig2.savefig(os.path.join(folder, 'OptimalSearch', 'F1_over_threshold.png'), dpi=300,
                  bbox_inches="tight")
-    fig3.savefig(os.path.join(folder, 'Validation', 'OptimalSearch', 'F1_over_dice.png'), dpi=300,
+    fig3.savefig(os.path.join(folder, 'OptimalSearch', 'F1_over_dice.png'), dpi=300,
                  bbox_inches="tight")
-    fig4.savefig(os.path.join(folder, 'Validation', 'OptimalSearch', 'metrics_scatter_over_threshold.png'), dpi=300,
+    fig4.savefig(os.path.join(folder, 'OptimalSearch', 'metrics_scatter_over_threshold.png'), dpi=300,
                  bbox_inches="tight")
 
     plt.close(fig)
@@ -154,23 +155,20 @@ def best_segmentation_probability_threshold_analysis_inner(folder, detection_ove
     return max_overlap, max_threshold
 
 
-def compute_fold_average(folder, data=None, class_optimal={}, metrics=[], suffix='', true_positive_state=False,
-                         positive_detected_state=False):
+def compute_fold_average(folder, data=None, class_optimal={}, metrics=[], suffix='', condition='All'):
     """
     @TODO. Issue if running without external when they exist in the file (ValueError: 80 columns passed, passed data had 36 columns)
     """
     classes = SharedResources.getInstance().validation_class_names
-    optimal_tag = 'All' if not true_positive_state else 'True Positive'
+    optimal_tag = 'All' if condition=='All' else 'True Positive'
     for c in classes:
         optimal_values = class_optimal[c][optimal_tag]
         compute_fold_average_inner(folder, data=data, class_name=c, best_threshold=optimal_values[1],
-                                   best_overlap=optimal_values[0], metrics=metrics, suffix=suffix,
-                                   true_positive_state=true_positive_state,
-                                   positive_detected_state=positive_detected_state)
+                                   best_overlap=optimal_values[0], metrics=metrics, suffix=suffix,condition=condition)
 
 
 def compute_fold_average_inner(folder, class_name, data=None, best_threshold=0.5, best_overlap=0.0, metrics=[],
-                               suffix='', true_positive_state=False, positive_detected_state=False):
+                               suffix='', condition='All'):
     """
     @TODO. Should add the #Found in addition to #samples to know how many patients/images are positively detected.
 
@@ -182,17 +180,15 @@ def compute_fold_average_inner(folder, class_name, data=None, best_threshold=0.5
     """
     results = None
     if data is None:
-        results_filename = os.path.join(folder, 'Validation', class_name + '_dice_scores.csv')
+        results_filename = os.path.join(folder, class_name + '_dice_scores.csv')
         tmp = pd.read_csv(results_filename)
         use_cols = list(tmp.columns)[0:SharedResources.getInstance().upper_default_metrics_index] + metrics
         results = pd.read_csv(results_filename, usecols=use_cols)
-        if true_positive_state:
-            results = results.loc[results["True Positive"] == True]
     else:
         results = deepcopy(data)
 
-    suffix = "tp" + suffix if true_positive_state else suffix
-    suffix = "detected" + suffix if positive_detected_state else suffix
+    suffix = "Positive" + suffix if condition=='Positive' else suffix
+    suffix = "TP" + suffix if condition=='TP' else suffix
     results.replace('inf', np.nan, inplace=True)
     results.replace(float('inf'), np.nan, inplace=True)
     results.replace('', np.nan, inplace=True)
@@ -200,12 +196,12 @@ def compute_fold_average_inner(folder, class_name, data=None, best_threshold=0.5
     unique_folds = np.unique(results['Fold'])
     nb_folds = len(unique_folds)
     metrics_per_fold = []
-    tp_volume_threshold = 0.
+    volume_threshold = 0.
     if len(SharedResources.getInstance().validation_true_positive_volume_thresholds) == 1:
-        tp_volume_threshold = SharedResources.getInstance().validation_true_positive_volume_thresholds[0]
+        volume_threshold = SharedResources.getInstance().validation_true_positive_volume_thresholds[0]
     else:
         index_cl = SharedResources.getInstance().validation_class_names.index(class_name)
-        tp_volume_threshold = SharedResources.getInstance().validation_true_positive_volume_thresholds[index_cl]
+        volume_threshold = SharedResources.getInstance().validation_true_positive_volume_thresholds[index_cl]
 
     metric_names = list(results.columns[3:])
     # if metrics is not None:
@@ -221,10 +217,9 @@ def compute_fold_average_inner(folder, class_name, data=None, best_threshold=0.5
     # used for other metrics computation?
     for f in unique_folds:
         patientwise_metrics = compute_patientwise_fold_metrics(results, f, best_threshold, best_overlap,
-                                                               tp_volume_threshold)
+                                                               volume_threshold, condition)
         fold_average_metrics, fold_std_metrics = compute_singe_fold_average_metrics(results, f, best_threshold,
-                                                                                    best_overlap, metrics,
-                                                                                    positive_detected_state=positive_detected_state)
+                                                                                    best_overlap, metrics, volume_threshold, condition)
         fold_metrics = []
         for m in range(len(fold_average_metrics)):
             fold_metrics.append(fold_average_metrics[m])
@@ -233,8 +228,7 @@ def compute_fold_average_inner(folder, class_name, data=None, best_threshold=0.5
         metrics_per_fold.append(fold_average)
 
     metrics_per_fold_df = pd.DataFrame(data=metrics_per_fold, columns=fold_average_columns)
-    study_filename = os.path.join(folder, 'Validation', class_name + '_folds_metrics_average.csv') if suffix == '' else os.path.join(folder,
-                                                                                                 'Validation',
+    study_filename = os.path.join(folder, class_name + '_folds_metrics_average.csv') if suffix == '' else os.path.join(folder,
                                                                                                  class_name + '_folds_metrics_average_' + suffix + '.csv')
     metrics_per_fold_df.to_csv(study_filename, index=False)
 
@@ -281,23 +275,26 @@ def compute_fold_average_inner(folder, class_name, data=None, best_threshold=0.5
     for m in metric_names:
         overall_average_columns.extend([m + ' (Mean)', m + ' (Std)'])
     pooled_fold_averaged_results_df = pd.DataFrame(data=np.asarray(pooled_fold_averaged_results).reshape(1, len(overall_average_columns)), columns=overall_average_columns)
-    study_filename = os.path.join(folder, 'Validation', class_name + '_overall_metrics_average.csv') if suffix == '' else os.path.join(folder,
-                                                                                                 'Validation',
+    study_filename = os.path.join(folder, class_name + '_overall_metrics_average.csv') if suffix == '' else os.path.join(folder,
                                                                                                  class_name + '_overall_metrics_average_' + suffix + '.csv')
     pooled_fold_averaged_results_df.to_csv(study_filename, index=False)
 
 
-def compute_singe_fold_average_metrics(results, fold_number, best_threshold, best_overlap, metric_names,
-                                       positive_detected_state=False):
+def compute_singe_fold_average_metrics(results, fold_number, best_threshold, best_overlap, metric_names, volume_threshold, condition):
     fold_results = results.loc[results['Fold'] == fold_number]
     thresh_index = (np.round(fold_results['Threshold'], 1) == best_threshold)
     all_for_thresh = fold_results.loc[thresh_index]
     if len(all_for_thresh) == 0:
         # Empty fold? Can indicate something went wrong, or was not computed properly beforehand
         return None
-    if positive_detected_state:
-        all_for_thresh = all_for_thresh.loc[all_for_thresh['PiW Dice'] >= best_overlap]
+    if condition == 'Positive':
+        all_for_thresh = all_for_thresh.loc[all_for_thresh['GT volume (ml)'] > volume_threshold]
+    elif condition == 'TP':
+        all_for_thresh = all_for_thresh.loc[(all_for_thresh['GT volume (ml)'] > volume_threshold) & (all_for_thresh['PiW Dice'] > best_overlap)]
     upper_default_metrics_index = SharedResources.getInstance().upper_default_metrics_index
+    if len(all_for_thresh) == 0:
+        # Returning a list to avoid crashing, even if the selection is empty.
+        return [0.] * (upper_default_metrics_index - 3) + [0.] * len(metric_names) , [0.] * (upper_default_metrics_index - 3) + [0.] * len(metric_names)
     default_metrics_average = list(np.mean(all_for_thresh.values[:, 3:upper_default_metrics_index], axis=0))
     default_metrics_std = [np.std(all_for_thresh.values[:, x], axis=0) for x in range(3, upper_default_metrics_index)]
 
@@ -319,7 +316,7 @@ def compute_singe_fold_average_metrics(results, fold_number, best_threshold, bes
     return default_metrics_average + extra_metrics_average, default_metrics_std + extra_metrics_std
 
 
-def compute_patientwise_fold_metrics(results, fold_number, best_threshold, best_overlap, det_vol_thr):
+def compute_patientwise_fold_metrics(results, fold_number, best_threshold, best_overlap, det_vol_thr, condition):
     fold_results = results.loc[results['Fold'] == fold_number]
     thresh_index = (np.round(fold_results['Threshold'], 1) == best_threshold)
     all_for_thresh = fold_results.loc[thresh_index]
@@ -328,10 +325,24 @@ def compute_patientwise_fold_metrics(results, fold_number, best_threshold, best_
         fold_average = [-1., -1., -1., -1., -1., -1.]
         return fold_average
 
-    true_positives = fold_results.loc[thresh_index & (fold_results['PiW Dice'] > best_overlap) & (fold_results['True Positive'] == True)]
-    false_positives = fold_results.loc[thresh_index & (fold_results['True Positive'] == False) & (fold_results['Detection volume (ml)'] >= det_vol_thr)]
-    true_negatives = fold_results.loc[thresh_index & (fold_results['True Positive'] == False) & (fold_results['Detection volume (ml)'] < det_vol_thr)]
-    false_negatives = fold_results.loc[thresh_index & (fold_results['PiW Dice'] <= best_overlap) & (fold_results['True Positive'] == True)]
+    if condition == 'All':
+        true_positives = fold_results.loc[thresh_index & (fold_results['Detection volume (ml)'] > 0) & (fold_results['GT volume (ml)'] > 0)]
+        false_positives = fold_results.loc[thresh_index & (fold_results['Detection volume (ml)'] > 0) & (fold_results['GT volume (ml)'] <= 0)]
+        true_negatives = fold_results.loc[thresh_index & (fold_results['Detection volume (ml)'] <= 0) & (fold_results['GT volume (ml)'] <= 0)]
+        false_negatives = fold_results.loc[thresh_index & (fold_results['Detection volume (ml)'] <= 0) & (fold_results['GT volume (ml)'] > 0)]
+
+    elif condition == 'Positive':
+        true_positives = fold_results.loc[thresh_index & (fold_results['Detection volume (ml)'] > det_vol_thr) & (fold_results['GT volume (ml)'] > det_vol_thr)]
+        false_positives = fold_results.loc[thresh_index & (fold_results['Detection volume (ml)'] > det_vol_thr) & (fold_results['GT volume (ml)'] <= det_vol_thr)]
+        true_negatives = fold_results.loc[thresh_index & (fold_results['Detection volume (ml)'] <= det_vol_thr) & (fold_results['GT volume (ml)'] <= det_vol_thr)]
+        false_negatives = fold_results.loc[thresh_index & (fold_results['Detection volume (ml)'] <= det_vol_thr) & (fold_results['GT volume (ml)'] > det_vol_thr)]
+
+    elif condition == 'TP':
+        true_positives = fold_results.loc[thresh_index & (fold_results['PiW Dice'] > best_overlap) & (fold_results['GT volume (ml)'] > det_vol_thr)]
+        false_positives = fold_results.loc[thresh_index & (fold_results['Detection volume (ml)'] > det_vol_thr) & (fold_results['GT volume (ml)'] <= det_vol_thr)]
+        true_negatives = fold_results.loc[thresh_index & (fold_results['Detection volume (ml)'] <= det_vol_thr) & (fold_results['GT volume (ml)'] <= det_vol_thr)]
+        false_negatives = fold_results.loc[thresh_index & (fold_results['PiW Dice'] <= best_overlap) & (fold_results['GT volume (ml)'] > det_vol_thr)]
+
     patient_wise_recall = len(true_positives) / (len(true_positives) + len(false_negatives) + 1e-6)
     patient_wise_precision = len(true_positives) / (len(true_positives) + len(false_positives) + 1e-6)
     patient_wise_specificity = 1. if len(true_negatives) + len(false_positives) == 0 else len(true_negatives) / (len(true_negatives) + len(false_positives) + 1e-6)
