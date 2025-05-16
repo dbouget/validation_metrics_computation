@@ -38,7 +38,7 @@ Below are two Jupyter Notebooks which include simple examples on how to get star
 ### [Usage](https://github.com/dbouget/validation_metrics_computation#usage)
 
 In the following, a description of how the data should be organized on disk is provided, and a test dataset can
-be downloaded [here](https://github.com/raidionics/Raidionics-models/releases/download/1.2.0/Samples-RaidionicsValLib_UnitTest1.zip).
+be downloaded [here](https://github.com/raidionics/Raidionics-models/releases/download/v1.3.0-rc/Samples-RaidionicsValLib_UnitTest1-v1.1.zip).
 
 <details>
 <summary>
