@@ -239,28 +239,28 @@ class PatientMetrics:
 
         """
         thr_list = self._class_metrics[self.class_names[0]].get_probability_thresholds_list()
-        complete_metric_names = []
-        for m in metric_names:
-            complete_metric_names.extend([f'PiW {m}', f'OW {m}'])
+        # complete_metric_names = []
+        # for m in metric_names:
+        #     complete_metric_names.extend([f'PiW {m}', f'OW {m}'])
         if self._extra_metrics is None:
             self._extra_metrics = []
             for thr in thr_list:
                 curr_thr = [thr]
-                for m in complete_metric_names:
+                for m in metric_names:
                     curr_thr.append([m, float('nan')])
                 self._extra_metrics.append(curr_thr)
         else:
             existing_metrics = [x[0] for x in self._extra_metrics[0][1:]]
-            matching_metrics_states = all(element in existing_metrics for element in complete_metric_names)
+            matching_metrics_states = all(element in existing_metrics for element in metric_names)
             if not matching_metrics_states:
-                for m in complete_metric_names:
+                for m in metric_names:
                     if m not in existing_metrics:
                         for th in range(len(self._extra_metrics)):
                             self._extra_metrics[th].append([m, float('nan')])
 
         # Performs the same operation on the extra metrics for each class
         for cl in self._class_names:
-            self._class_metrics[cl].setup_extra_metrics(complete_metric_names)
+            self._class_metrics[cl].setup_extra_metrics(metric_names)
 
 
 class ClassMetrics:

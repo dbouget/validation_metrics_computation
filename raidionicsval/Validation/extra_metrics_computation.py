@@ -115,64 +115,65 @@ def compute_patient_extra_metrics(patient_object, class_index, optimal_threshold
             obj_val.run()
             # Computing all metrics in an object-wise fashion
             all_instance_results = []
-            for g, go in enumerate(obj_val.gt_candidates):
-                gt_label = g + 1
-                if gt_label in np.asarray(obj_val.matching_results)[:, 0]:
-                    indices = np.where(np.asarray(obj_val.matching_results)[:, 0] == gt_label)[0]
-                    if len(indices) > 1:
-                        # Should not happen anymore
-                        print(f"Warning - Entering a use-case which should not be possible!")
-                        pass
-                    det_label = np.asarray(obj_val.matching_results)[indices[0]][1]
-                    # det_label = obj_val.matching_results[list(np.asarray(obj_val.matching_results)[:, 0]).index(gt_label)][1]
-                    instance_gt_array = np.zeros(gt.shape, dtype="uint8")
-                    instance_det_array = np.zeros(detection.shape, dtype="uint8")
-                    instance_gt_array[obj_val.gt_labels == gt_label] = 1
-                    instance_det_array[obj_val.detection_labels == det_label] = 1
+            if len(obj_val.matching_results) != 0:
+                for g, go in enumerate(obj_val.gt_candidates):
+                    gt_label = g + 1
+                    if gt_label in np.asarray(obj_val.matching_results)[:, 0]:
+                        indices = np.where(np.asarray(obj_val.matching_results)[:, 0] == gt_label)[0]
+                        if len(indices) > 1:
+                            # Should not happen anymore
+                            print(f"Warning - Entering a use-case which should not be possible!")
+                            pass
+                        det_label = np.asarray(obj_val.matching_results)[indices[0]][1]
+                        # det_label = obj_val.matching_results[list(np.asarray(obj_val.matching_results)[:, 0]).index(gt_label)][1]
+                        instance_gt_array = np.zeros(gt.shape, dtype="uint8")
+                        instance_det_array = np.zeros(detection.shape, dtype="uint8")
+                        instance_gt_array[obj_val.gt_labels == gt_label] = 1
+                        instance_det_array[obj_val.detection_labels == det_label] = 1
 
-                    tp_array = np.zeros(instance_gt_array.shape)
-                    fp_array = np.zeros(instance_gt_array.shape)
-                    tn_array = np.zeros(instance_gt_array.shape)
-                    fn_array = np.zeros(instance_gt_array.shape)
+                        tp_array = np.zeros(instance_gt_array.shape)
+                        fp_array = np.zeros(instance_gt_array.shape)
+                        tn_array = np.zeros(instance_gt_array.shape)
+                        fn_array = np.zeros(instance_gt_array.shape)
 
-                    tp_array[(instance_gt_array == 1) & (instance_det_array == 1)] = 1
-                    fp_array[(instance_gt_array == 0) & (instance_det_array == 1)] = 1
-                    tn_array[(instance_gt_array == 0) & (instance_det_array == 0)] = 1
-                    fn_array[(instance_gt_array == 1) & (instance_det_array == 0)] = 1
-                    instance_results = []
-                    if SharedResources.getInstance().number_processes > 1:
-                        try:
-                            pool = multiprocessing.Pool(processes=SharedResources.getInstance().number_processes)
-                            instance_results = pool.map(parallel_metric_computation, zip(metrics, metric_values,
-                                                                                              itertools.repeat(instance_gt_array),
-                                                                                              itertools.repeat(instance_det_array),
-                                                                                              itertools.repeat(
-                                                                                                  det_input_specs[1]),
-                                                                                              itertools.repeat(
-                                                                                                  gt_input_specs[1]),
-                                                                                              itertools.repeat(tp_array),
-                                                                                              itertools.repeat(tn_array),
-                                                                                              itertools.repeat(fp_array),
-                                                                                              itertools.repeat(fn_array)))
-                            pool.close()
-                            pool.join()
-                        except Exception as e:
-                            print("Issue computing metrics for patient {} in the multiprocessing loop.".format(
-                                patient_object.unique_id))
-                            print(traceback.format_exc())
-                    else:
-                        for metric in metrics:
+                        tp_array[(instance_gt_array == 1) & (instance_det_array == 1)] = 1
+                        fp_array[(instance_gt_array == 0) & (instance_det_array == 1)] = 1
+                        tn_array[(instance_gt_array == 0) & (instance_det_array == 0)] = 1
+                        fn_array[(instance_gt_array == 1) & (instance_det_array == 0)] = 1
+                        instance_results = []
+                        if SharedResources.getInstance().number_processes > 1:
                             try:
-                                metric_value = compute_specific_metric_value(metric=metric, gt=instance_gt_array, detection=instance_det_array,
-                                                                             tp=np.sum(tp_array), tn=np.sum(tn_array),
-                                                                             fp=np.sum(fp_array), fn=np.sum(fn_array),
-                                                                             gt_spacing=gt_input_specs[1],
-                                                                             det_spacing=det_input_specs[1])
-                                instance_results.append([metric, metric_value])
+                                pool = multiprocessing.Pool(processes=SharedResources.getInstance().number_processes)
+                                instance_results = pool.map(parallel_metric_computation, zip(metrics, metric_values,
+                                                                                                  itertools.repeat(instance_gt_array),
+                                                                                                  itertools.repeat(instance_det_array),
+                                                                                                  itertools.repeat(
+                                                                                                      det_input_specs[1]),
+                                                                                                  itertools.repeat(
+                                                                                                      gt_input_specs[1]),
+                                                                                                  itertools.repeat(tp_array),
+                                                                                                  itertools.repeat(tn_array),
+                                                                                                  itertools.repeat(fp_array),
+                                                                                                  itertools.repeat(fn_array)))
+                                pool.close()
+                                pool.join()
                             except Exception as e:
-                                print('Issue computing metric {} for patient {}'.format(metric, patient_object.unique_id))
+                                print("Issue computing metrics for patient {} in the multiprocessing loop.".format(
+                                    patient_object.unique_id))
                                 print(traceback.format_exc())
-                    all_instance_results.append(instance_results)
+                        else:
+                            for metric in metrics:
+                                try:
+                                    metric_value = compute_specific_metric_value(metric=metric, gt=instance_gt_array, detection=instance_det_array,
+                                                                                 tp=np.sum(tp_array), tn=np.sum(tn_array),
+                                                                                 fp=np.sum(fp_array), fn=np.sum(fn_array),
+                                                                                 gt_spacing=gt_input_specs[1],
+                                                                                 det_spacing=det_input_specs[1])
+                                    instance_results.append([metric, metric_value])
+                                except Exception as e:
+                                    print('Issue computing metric {} for patient {}'.format(metric, patient_object.unique_id))
+                                    print(traceback.format_exc())
+                        all_instance_results.append(instance_results)
 
             if len(all_instance_results) != 0:
                 for m in metrics:
@@ -193,7 +194,7 @@ def compute_patient_extra_metrics(patient_object, class_index, optimal_threshold
                     extra_metrics_results.append([f'OW {m}', tp_mean])
             else:
                 for m in metrics:
-                    extra_metrics_results.append([f'OW {m}', -999.])
+                    extra_metrics_results.append([f'OW {m}', math.inf])
     except Exception as e:
         print('Global issue computing metrics for patient {}'.format(patient_object.unique_id))
         print(traceback.format_exc())

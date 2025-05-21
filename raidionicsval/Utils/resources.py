@@ -34,7 +34,7 @@ class SharedResources:
         self.config = None
         self.home_path = ''
 
-        self.upper_default_metrics_index = 23  # Single place for holding this attribute, "safer" approach, column index after # GT and # Det
+        self.upper_default_metrics_index = 23 # Single place for holding this attribute, "safer" approach, column index after # GT and # Det
 
         self.data_root = ""
         self.task = None

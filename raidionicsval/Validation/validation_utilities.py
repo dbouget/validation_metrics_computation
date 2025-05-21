@@ -302,7 +302,7 @@ def compute_singe_fold_average_metrics(results, fold_number, best_threshold, bes
     extra_metrics_std = []
     for m in metric_names:
         if m in fold_results.columns.values:
-            if m in ['HD95', 'ASSD', 'RAVD', 'VC', 'OASSD']:
+            if m.split(' ')[1] in ['HD95', 'ASSD', 'RAVD', 'VC', 'OASSD']:
                 avg = fold_results.loc[thresh_index][fold_results.loc[thresh_index][m] != -1.0][m].dropna().astype(
                     'float32').mean()
                 std = fold_results.loc[thresh_index][fold_results.loc[thresh_index][m] != -1.0][m].dropna().astype(
