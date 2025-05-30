@@ -523,9 +523,13 @@ class AbstractStudy(ABC):
             classes = class_names
         optimal_tag = 'All' if condition == 'All' else 'True Positive'
         for c in classes:
-            optimal_values = class_optimal[c][optimal_tag]
-            self.compute_fold_average_inner(folder, data=data, class_name=c, best_threshold=optimal_values[1],
-                                       best_overlap=optimal_values[0], metrics=metrics, suffix=suffix, condition=condition)
+            try:
+                optimal_values = class_optimal[c][optimal_tag]
+                self.compute_fold_average_inner(folder, data=data, class_name=c, best_threshold=optimal_values[1],
+                                           best_overlap=optimal_values[0], metrics=metrics, suffix=suffix, condition=condition)
+            except Exception as e:
+                logging.error(f"Fold average for class {c} failed with: {e}\n{traceback.format_exc()}")
+                continue
 
     def compute_fold_average_inner(self, folder, class_name, data=None, best_threshold=0.5, best_overlap=0.0, metrics=[],
                                    suffix='', condition='All'):
@@ -756,21 +760,25 @@ class AbstractStudy(ABC):
             data_per_complete_selection = new_data_per_complete_selection
 
         for sel in list(data_per_complete_selection.keys()):
-            combined_df = data_per_complete_selection[sel]
-            if len(combined_df) != 0:
-                # self.__compute_results_metric_over_metric(data=combined_df, class_name=class_name, metric1='PiW Dice',
-                #                                           metric2='GT volume (ml)', category=category,
-                #                                           study_name='Cascaded_Selection/' + sel, suffix='_' + sel)
-                dest_folder = os.path.join(self.output_folder, 'Cascaded_Selection', sel)
-                os.makedirs(dest_folder, exist_ok=True)
-                self.compute_fold_average(folder=dest_folder,
-                                          data=combined_df,
-                                          class_optimal=self.classes_optimal, metrics=self.metric_names,
-                                          suffix='_' + sel,
-                                          class_names=SharedResources.getInstance().studies_class_names,
-                                          condition=category
-                                          )
-                export_segmentation_df_to_latex_paper(folder=dest_folder, class_name=class_name, study=sel,
-                                                      input_csv_filename=os.path.join(dest_folder, class_name + '_overall_metrics_average_' + category + '_' + sel + '.csv'))
-            else:
-                print("No results for the following combination: {}. Skipping...".format(sel))
+            try:
+                combined_df = data_per_complete_selection[sel]
+                if len(combined_df) != 0:
+                    # self.__compute_results_metric_over_metric(data=combined_df, class_name=class_name, metric1='PiW Dice',
+                    #                                           metric2='GT volume (ml)', category=category,
+                    #                                           study_name='Cascaded_Selection/' + sel, suffix='_' + sel)
+                    dest_folder = os.path.join(self.output_folder, 'Cascaded_Selection', sel)
+                    os.makedirs(dest_folder, exist_ok=True)
+                    self.compute_fold_average(folder=dest_folder,
+                                              data=combined_df,
+                                              class_optimal=self.classes_optimal, metrics=self.metric_names,
+                                              suffix='_' + sel,
+                                              class_names=SharedResources.getInstance().studies_class_names,
+                                              condition=category
+                                              )
+                    export_segmentation_df_to_latex_paper(folder=dest_folder, class_name=class_name, study=sel,
+                                                          input_csv_filename=os.path.join(dest_folder, class_name + '_overall_metrics_average_' + category + '_' + sel + '.csv'))
+                else:
+                    print("No results for the following combination: {}. Skipping...".format(sel))
+            except Exception as e:
+                logging.error(f"Computing and exporting for the metrics combination {sel} failed with {e}\n{traceback.format_exc()}")
+                continue

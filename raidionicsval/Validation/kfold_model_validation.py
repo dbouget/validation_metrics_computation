@@ -2,6 +2,8 @@ import multiprocessing
 import itertools
 import logging
 import time
+import traceback
+
 import pandas as pd
 from math import ceil
 
@@ -416,15 +418,19 @@ class ModelValidation:
         for c in classes:
             optimal_values = class_optimal[c]['All']
             for p in tqdm(self.patients_metrics):
-                # Initializing/completing the list which will hold the extra metrics
-                self.patients_metrics[p].setup_extra_metrics(self.metric_names)
-                pat_metrics = compute_patient_extra_metrics(self.patients_metrics[p], classes.index(c), optimal_values[1],
-                                                            SharedResources.getInstance().validation_metric_names)
-                self.patients_metrics[p].set_optimal_class_extra_metrics(classes.index(c), optimal_values[1], pat_metrics)
+                try:
+                    # Initializing/completing the list which will hold the extra metrics
+                    self.patients_metrics[p].setup_extra_metrics(self.metric_names)
+                    pat_metrics = compute_patient_extra_metrics(self.patients_metrics[p], classes.index(c), optimal_values[1],
+                                                                SharedResources.getInstance().validation_metric_names)
+                    self.patients_metrics[p].set_optimal_class_extra_metrics(classes.index(c), optimal_values[1], pat_metrics)
 
-                # Filling in the overall dataframe and dumping results to csv after each patient
-                for pm in pat_metrics:
-                    metric_name = pm[0]
-                    metric_value = pm[1]
-                    self.class_results_df[c].at[self.class_results_df[c].loc[(self.class_results_df[c]['Patient'] == self.patients_metrics[p].patient_id) & (self.class_results_df[c]['Threshold'] == optimal_values[1])].index.values[0], metric_name] = metric_value
-                self.class_results_df[c].to_csv(self.class_dice_output_filenames[c], index=False)
+                    # Filling in the overall dataframe and dumping results to csv after each patient
+                    for pm in pat_metrics:
+                        metric_name = pm[0]
+                        metric_value = pm[1]
+                        self.class_results_df[c].at[self.class_results_df[c].loc[(self.class_results_df[c]['Patient'] == self.patients_metrics[p].patient_id) & (self.class_results_df[c]['Threshold'] == optimal_values[1])].index.values[0], metric_name] = metric_value
+                    self.class_results_df[c].to_csv(self.class_dice_output_filenames[c], index=False)
+                except Exception as e:
+                    logging.error(f"Computing extra metrics for patient {self.patients_metrics[p].patient_id} failed with: {e}.\n{traceback.format_exc()}")
+                    continue
