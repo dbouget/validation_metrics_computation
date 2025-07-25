@@ -379,7 +379,7 @@ class AbstractStudy(ABC):
                         cat_optimal_results = total_optimal_results.loc[total_optimal_results[metric2] <= cutoff]
                         optimal_results_per_cutoff['<=' + str(cutoff)] = cat_optimal_results
                     else:
-                        cat_optimal_results = total_optimal_results.loc[metric2_cutoffs[c-1] < total_optimal_results[metric2] <= cutoff]
+                        cat_optimal_results = total_optimal_results.loc[(total_optimal_results[metric2] > metric2_cutoffs[c-1]) & (total_optimal_results[metric2] <= cutoff)]
                         optimal_results_per_cutoff[']' + str(metric2_cutoffs[c-1]) + ',' + str(cutoff) + ']'] = cat_optimal_results
                 cat_optimal_results = total_optimal_results.loc[total_optimal_results[metric2] > metric2_cutoffs[-1]]
                 optimal_results_per_cutoff['>' + str(metric2_cutoffs[-1])] = cat_optimal_results
@@ -738,7 +738,7 @@ class AbstractStudy(ABC):
                         cat_optimal_results = total_optimal_results.loc[total_optimal_results[metric2] <= cutoff]
                         new_data_per_complete_selection[metric2 + '<=' + str(cutoff)] = cat_optimal_results
                     else:
-                        cat_optimal_results = total_optimal_results.loc[metric2_cutoffs[c-1] < total_optimal_results[metric2] <= cutoff]
+                        cat_optimal_results = total_optimal_results.loc[(total_optimal_results[metric2] > metric2_cutoffs[c-1]) &  (total_optimal_results[metric2] <= cutoff)]
                         new_data_per_complete_selection[metric2 + ']' + str(metric2_cutoffs[c-1]) + ',' + str(cutoff) + ']'] = cat_optimal_results
                 cat_optimal_results = total_optimal_results.loc[total_optimal_results[metric2] > metric2_cutoffs[-1]]
                 new_data_per_complete_selection[metric2 + '>' + str(metric2_cutoffs[-1])] = cat_optimal_results
@@ -750,8 +750,7 @@ class AbstractStudy(ABC):
                             cat_optimal_results = results_pool.loc[results_pool[metric2] <= cutoff]
                             new_data_per_complete_selection[sel + ';' + metric2 + '<=' + str(cutoff)] = cat_optimal_results
                         else:
-                            cat_optimal_results = results_pool.loc[
-                                metric2_cutoffs[c - 1] < results_pool[metric2] <= cutoff]
+                            cat_optimal_results = results_pool.loc[(results_pool[metric2] > metric2_cutoffs[c - 1]) & (results_pool[metric2] <= cutoff)]
                             new_data_per_complete_selection[sel + ';' + metric2 +
                                 ']' + str(metric2_cutoffs[c - 1]) + ',' + str(cutoff) + ']'] = cat_optimal_results
                     cat_optimal_results = results_pool.loc[

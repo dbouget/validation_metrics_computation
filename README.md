@@ -1,7 +1,7 @@
 # Segmentation validation and metrics computation backend for Raidionics related publications
 
 [![License](https://img.shields.io/badge/License-BSD%202--Clause-orange.svg)](https://opensource.org/licenses/BSD-2-Clause)
-[![](https://img.shields.io/badge/python-3.8|3.9|3.10|3.11|3.12-blue.svg)](https://www.python.org/downloads/)
+[![](https://img.shields.io/badge/python-3.9|3.10|3.11|3.12|3.13-blue.svg)](https://www.python.org/downloads/)
 [![Paper](https://zenodo.org/badge/DOI/10.3389/fneur.2022.932219.svg)](https://www.frontiersin.org/articles/10.3389/fneur.2022.932219/full)
 [![codecov](https://codecov.io/gh/dbouget/validation_metrics_computation/branch/master/graph/badge.svg?token=ZSPQVR7RKX)](https://codecov.io/gh/dbouget/validation_metrics_computation)
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/gist/dbouget/491b0d34e3df00e730cd7fe7a8989202/compute_validation_example.ipynb)
@@ -15,6 +15,8 @@ the only hard requirement is the expected folder structure to use as input.
 ## [Installation](https://github.com/dbouget/validation_metrics_computation#installation)
 
 ```
+pip install raidionicsval
+or 
 pip install git+https://github.com/dbouget/validation_metrics_computation.git
 ```
 

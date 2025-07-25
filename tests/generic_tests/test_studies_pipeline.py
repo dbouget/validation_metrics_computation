@@ -7,7 +7,7 @@ import sys
 import traceback
 
 
-def test_validation_pipeline_package(test_dir):
+def test_studies_pipeline_package(test_dir):
     logging.basicConfig()
     logging.getLogger().setLevel(logging.DEBUG)
     logging.info("Running standard reporting unit test.\n")
@@ -63,7 +63,7 @@ def test_validation_pipeline_package(test_dir):
         val_config.set('Studies', 'extra_parameters_filename', os.path.join(test_dir, 'Patient1',
                                                                             'Predictions',
                                                                             'external_patient_parameters.csv'))
-        val_config.set('Studies', 'selections_dense', "PiW Dice,GT volume (ml),4,TP")
+        val_config.set('Studies', 'selections_dense', "PiW Dice,GT volume (ml),2-4-8,TP")
         config_filename = os.path.join(output_folder, 'config.ini')
         with open(config_filename, 'w') as outfile:
             val_config.write(outfile)
@@ -84,4 +84,3 @@ def test_validation_pipeline_package(test_dir):
     logging.info("k-fold cross-validation unit test succeeded.\n")
     if os.path.exists(output_folder):
         shutil.rmtree(output_folder)
-
