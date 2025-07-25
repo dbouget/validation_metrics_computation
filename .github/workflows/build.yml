@@ -67,8 +67,6 @@ jobs:
       matrix:
         include:
           - os: ubuntu-22.04
-            python-version: "3.8"
-          - os: ubuntu-22.04
             python-version: "3.9"
           - os: ubuntu-22.04
             python-version: "3.10"
@@ -76,8 +74,8 @@ jobs:
             python-version: "3.11"
           - os: ubuntu-22.04
             python-version: "3.12"
-          - os: ubuntu-24.04
-            python-version: "3.8"
+          - os: ubuntu-22.04
+            python-version: "3.13"
           - os: ubuntu-24.04
             python-version: "3.9"
           - os: ubuntu-24.04
@@ -86,18 +84,8 @@ jobs:
             python-version: "3.11"
           - os: ubuntu-24.04
             python-version: "3.12"
-          - os: windows-2019
-            python-version: "3.8"
-          - os: windows-2019
-            python-version: "3.9"
-          - os: windows-2019
-            python-version: "3.10"
-          - os: windows-2019
-            python-version: "3.11"
-          - os: windows-2019
-            python-version: "3.12"
-          - os: windows-2022
-            python-version: "3.8"
+          - os: ubuntu-24.04
+            python-version: "3.13"
           - os: windows-2022
             python-version: "3.9"
           - os: windows-2022
@@ -106,8 +94,18 @@ jobs:
             python-version: "3.11"
           - os: windows-2022
             python-version: "3.12"
-          - os: macos-13
-            python-version: "3.8"
+          - os: windows-2022
+            python-version: "3.13"
+          - os: windows-2025
+            python-version: "3.9"
+          - os: windows-2025
+            python-version: "3.10"
+          - os: windows-2025
+            python-version: "3.11"
+          - os: windows-2025
+            python-version: "3.12"
+          - os: windows-2025
+            python-version: "3.13"
           - os: macos-13
             python-version: "3.9"
           - os: macos-13
@@ -120,10 +118,18 @@ jobs:
             python-version: "3.10"
           - os: macos-14
             python-version: "3.11"
+          - os: macos-14
+            python-version: "3.12"
+          - os: macos-14
+            python-version: "3.13"
           - os: macos-15
             python-version: "3.10"
           - os: macos-15
             python-version: "3.11"
+          - os: macos-15
+            python-version: "3.12"
+          - os: macos-15
+            python-version: "3.13"
 
     steps:
         - name: Set up Python ${{ matrix.python-version }}
