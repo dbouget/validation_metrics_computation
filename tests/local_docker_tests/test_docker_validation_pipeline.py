@@ -12,7 +12,7 @@ import pandas as pd
 def test_validation_docker(test_dir):
     """
     Testing the CLI within a Docker container for the validation unit test, running on CPU.
-    The latest Docker image is being hosted at: dbouget/raidionics-val:v1.1.1-py39
+    The latest Docker image is being hosted at: dbouget/raidionics-val:v1.1.1-py39-cpu
 
     Returns
     -------
@@ -57,7 +57,7 @@ def test_validation_docker(test_dir):
             import platform
             cmd_docker = ['docker', 'run', '-v', '{}:/workspace/resources'.format(test_dir),
                           '--network=host', '--ipc=host', '--user', str(os.geteuid()),
-                          'dbouget/raidionics-val:v1.1.1-py39',
+                          'dbouget/raidionics-val:v1.1.1-py39-cpu',
                           '-c', '/workspace/resources/test_val_config.ini', '-v', 'debug']
             logging.info("Executing the following Docker call: {}".format(cmd_docker))
             if platform.system() == 'Windows':
