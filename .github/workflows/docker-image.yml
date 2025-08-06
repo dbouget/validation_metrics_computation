@@ -1,0 +1,40 @@
+name: Build and Push Docker Image
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Python + toml parser
+        run: |
+          python -m pip install --upgrade pip
+          pip install toml
+
+      - name: Extract package version
+        id: vars
+        run: |
+          PACKAGE_VERSION=$(python -c "import toml; print(toml.load('pyproject.toml')['project']['version'])")
+          PYTHON_VERSION=$(grep FROM Dockerfile | grep -oP 'python:\K[0-9]+\.[0-9]+' | tr -d '.')
+          FLAVOR=cpu
+          echo "tag=v${VERSION}-py${PYTHON_VERSION}-${FLAVOR}" >> $GITHUB_OUTPUT
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: dbouget/raidionics-val:${{ steps.vars.outputs.tag }}
