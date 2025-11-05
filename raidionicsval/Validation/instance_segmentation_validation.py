@@ -12,29 +12,48 @@ from ..Computation.dice_computation import pixelwise_computation
 
 def box_overlap(box1, box2):
     overlap_perc = 0
-    dx = min(box1[0].stop, box2[0].stop) - max(box1[0].start, box2[0].start)
-    dy = min(box1[1].stop, box2[1].stop) - max(box1[1].start, box2[1].start)
-    dz = min(box1[2].stop, box2[2].stop) - max(box1[2].start, box2[2].start)
-    if (dx >= 0) and (dy >= 0) and (dz >= 0):
-        overlap = dx * dy * dz
-        tot_area = ((box1[0].stop - box1[0].start) * (box1[1].stop - box1[1].start) * (box1[2].stop - box1[2].start)) +\
-                   ((box2[0].stop - box2[0].start) * (box2[1].stop - box2[1].start) * (box2[2].stop - box2[2].start))
-        overlap_perc = (2 * overlap) / tot_area
+    if len(box1) == len(box2) == 2:
+        dx = min(box1[0].stop, box2[0].stop) - max(box1[0].start, box2[0].start)
+        dy = min(box1[1].stop, box2[1].stop) - max(box1[1].start, box2[1].start)
+        if (dx >= 0) and (dy >= 0):
+            overlap = dx * dy
+            tot_area = ((box1[0].stop - box1[0].start) * (box1[1].stop - box1[1].start)) + \
+                       ((box2[0].stop - box2[0].start) * (box2[1].stop - box2[1].start))
+            overlap_perc = (2 * overlap) / tot_area
+    elif len(box1) == len(box2) == 3:
+        dx = min(box1[0].stop, box2[0].stop) - max(box1[0].start, box2[0].start)
+        dy = min(box1[1].stop, box2[1].stop) - max(box1[1].start, box2[1].start)
+        dz = min(box1[2].stop, box2[2].stop) - max(box1[2].start, box2[2].start)
+        if (dx >= 0) and (dy >= 0) and (dz >= 0):
+            overlap = dx * dy * dz
+            tot_area = ((box1[0].stop - box1[0].start) * (box1[1].stop - box1[1].start) * (box1[2].stop - box1[2].start)) +\
+                       ((box2[0].stop - box2[0].start) * (box2[1].stop - box2[1].start) * (box2[2].stop - box2[2].start))
+            overlap_perc = (2 * overlap) / tot_area
 
     return overlap_perc
 
 
 def box_overlap_leniant(box1, box2):
     overlap_perc = 0
-    dx = min(box1[0].stop, box2[0].stop) - max(box1[0].start, box2[0].start)
-    dy = min(box1[1].stop, box2[1].stop) - max(box1[1].start, box2[1].start)
-    dz = min(box1[2].stop, box2[2].stop) - max(box1[2].start, box2[2].start)
-    if (dx >= 0) and (dy >= 0) and (dz >= 0):
-        overlap = dx * dy * dz
-        area_box1 = (box1[0].stop - box1[0].start) * (box1[1].stop - box1[1].start) * (box1[2].stop - box1[2].start)
-        area_box2 = (box2[0].stop - box2[0].start) * (box2[1].stop - box2[1].start) * (box2[2].stop - box2[2].start)
-        tot_area = area_box1 + area_box2
-        overlap_perc = overlap / min(area_box1, area_box2)
+    if len(box1) == len(box2) == 2:
+        dx = min(box1[0].stop, box2[0].stop) - max(box1[0].start, box2[0].start)
+        dy = min(box1[1].stop, box2[1].stop) - max(box1[1].start, box2[1].start)
+        if (dx >= 0) and (dy >= 0):
+            overlap = dx * dy
+            area_box1 = (box1[0].stop - box1[0].start) * (box1[1].stop - box1[1].start)
+            area_box2 = (box2[0].stop - box2[0].start) * (box2[1].stop - box2[1].start)
+            tot_area = area_box1 + area_box2
+            overlap_perc = overlap / min(area_box1, area_box2)
+    elif len(box1) == len(box2) == 3:
+        dx = min(box1[0].stop, box2[0].stop) - max(box1[0].start, box2[0].start)
+        dy = min(box1[1].stop, box2[1].stop) - max(box1[1].start, box2[1].start)
+        dz = min(box1[2].stop, box2[2].stop) - max(box1[2].start, box2[2].start)
+        if (dx >= 0) and (dy >= 0) and (dz >= 0):
+            overlap = dx * dy * dz
+            area_box1 = (box1[0].stop - box1[0].start) * (box1[1].stop - box1[1].start) * (box1[2].stop - box1[2].start)
+            area_box2 = (box2[0].stop - box2[0].start) * (box2[1].stop - box2[1].start) * (box2[2].stop - box2[2].start)
+            tot_area = area_box1 + area_box2
+            overlap_perc = overlap / min(area_box1, area_box2)
 
     return overlap_perc
 
@@ -171,12 +190,19 @@ class InstanceSegmentationValidation:
                 det_object = do.slice
                 is_overlap = box_overlap(gt_object, det_object)
                 if is_overlap > 0:
-                    roi = [min(gt_object[0].start, det_object[0].start), max(gt_object[0].stop, det_object[0].stop),
-                           min(gt_object[1].start, det_object[1].start), max(gt_object[1].stop, det_object[1].stop),
-                           min(gt_object[2].start, det_object[2].start), max(gt_object[2].stop, det_object[2].stop)]
+                    if len(gt_object) == 2:
+                        roi = [min(gt_object[0].start, det_object[0].start), max(gt_object[0].stop, det_object[0].stop),
+                               min(gt_object[1].start, det_object[1].start), max(gt_object[1].stop, det_object[1].stop)]
 
-                    sub_gt_object = deepcopy(self.gt_labels[roi[0]:roi[1], roi[2]:roi[3], roi[4]:roi[5]])
-                    sub_det_object = deepcopy(self.detection_labels[roi[0]:roi[1], roi[2]:roi[3], roi[4]:roi[5]])
+                        sub_gt_object = deepcopy(self.gt_labels[roi[0]:roi[1], roi[2]:roi[3]])
+                        sub_det_object = deepcopy(self.detection_labels[roi[0]:roi[1], roi[2]:roi[3]])
+                    elif len(gt_object) == 3:
+                        roi = [min(gt_object[0].start, det_object[0].start), max(gt_object[0].stop, det_object[0].stop),
+                               min(gt_object[1].start, det_object[1].start), max(gt_object[1].stop, det_object[1].stop),
+                               min(gt_object[2].start, det_object[2].start), max(gt_object[2].stop, det_object[2].stop)]
+
+                        sub_gt_object = deepcopy(self.gt_labels[roi[0]:roi[1], roi[2]:roi[3], roi[4]:roi[5]])
+                        sub_det_object = deepcopy(self.detection_labels[roi[0]:roi[1], roi[2]:roi[3], roi[4]:roi[5]])
 
                     sub_gt_object[sub_gt_object != gt_label_value] = 0
                     sub_gt_object[sub_gt_object == gt_label_value] = 1

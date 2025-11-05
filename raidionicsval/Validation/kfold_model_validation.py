@@ -1,6 +1,7 @@
 import multiprocessing
 import itertools
 import logging
+import os.path
 import time
 import traceback
 
@@ -13,7 +14,7 @@ from ..Computation.dice_computation_instance import separate_dice_computation
 from ..Validation.instance_segmentation_validation import *
 from ..Utils.resources import SharedResources
 from ..Utils.PatientMetricsStructure import PatientMetrics
-from ..Utils.io_converters import get_fold_from_file, open_image_file, save_image_file
+from ..Utils.io_converters import get_fold_from_file, open_image_file, save_image_file, is_valid_extension
 from ..Validation.validation_utilities import best_segmentation_probability_threshold_analysis, compute_fold_average
 from ..Validation.extra_metrics_computation import compute_patient_extra_metrics
 
@@ -129,6 +130,10 @@ class ModelValidation:
             results_per_folds.append(results)
 
     def __compute_metrics_for_fold(self, data_list, fold_number):
+        if not os.path.exists(os.path.join(SharedResources.getInstance().validation_input_folder, "predictions", str(fold_number))):
+            logging.warning(f"No predictions folder for fold {fold_number} -- Skipping!")
+            return 0
+
         for i, patient in enumerate(tqdm(data_list)):
             uid = None
             try:
@@ -207,7 +212,7 @@ class ModelValidation:
             detection_filename = None
             for _, _, files in os.walk(detection_image_base):
                 for f in files:
-                    if pred_suffix in f:
+                    if pred_suffix in f and is_valid_extension(fn=f, extensions=SharedResources.getInstance().valid_file_extensions):
                         if use_internal_convention and patient_metrics.patient_id.split('_')[1] in f.split('_'):
                             detection_filename = os.path.join(detection_image_base, f)
                         elif not use_internal_convention:
@@ -217,30 +222,28 @@ class ModelValidation:
                 print("No detection file found for class {} in patient {}".format(c, patient_metrics.unique_id))
                 return False
 
-            # @TODO. Second piece added to make it work when names are wrong in the cross validation file.
+            # Identification of the ground truth filename
             patient_extended = uid
-            patient_image_base = os.path.join(self.data_root, uid, patient_extended)
             if folder_index is not None:
                 patient_extended = os.path.basename(detection_filename).split(pred_suffix)[0][:-1]
-                patient_image_base = os.path.join(self.data_root, folder_index, uid, 'volumes', patient_extended)
-
-            patient_image_filename = None
-            for _, _, files in os.walk(os.path.dirname(patient_image_base)):
-                for f in files:
-                    if os.path.basename(patient_image_base) in f:
-                        patient_image_filename = os.path.join(os.path.dirname(patient_image_base), f)
-                break
 
             ground_truth_base = os.path.join(self.data_root, uid, patient_extended)
-            if folder_index is not None:
+            if SharedResources.getInstance().validation_use_index_naming_convention and folder_index is not None:
                 ground_truth_base = os.path.join(self.data_root, folder_index, uid, 'segmentations', patient_extended)
 
             ground_truth_filename = None
             for _, _, files in os.walk(os.path.dirname(ground_truth_base)):
                 for f in files:
-                    if os.path.basename(ground_truth_base) in f and gt_suffix in f:
+                    if os.path.basename(ground_truth_base) in f and gt_suffix in f and is_valid_extension(fn=f, extensions=SharedResources.getInstance().valid_file_extensions):
                         ground_truth_filename = os.path.join(os.path.dirname(ground_truth_base), f)
                 break
+            # The ground truth filename inside the folder does not match the folder name, looking for the first eligible file if any
+            if ground_truth_filename is None:
+                for _, _, files in os.walk(os.path.dirname(ground_truth_base)):
+                    for f in files:
+                        if gt_suffix in f and is_valid_extension(fn=f, extensions=SharedResources.getInstance().valid_file_extensions):
+                            ground_truth_filename = os.path.join(os.path.dirname(ground_truth_base), f)
+                    break
 
             # Specific actions for remapping BraTS results to match the whole tumor and tumor core categories
             if SharedResources.getInstance().validation_use_brats_data and (classes[c] == 'whole' or classes[c] == 'core'):

@@ -35,6 +35,7 @@ class SharedResources:
         self.home_path = ''
 
         self.upper_default_metrics_index = 23 # Single place for holding this attribute, "safer" approach, column index after # GT and # Det
+        self.valid_file_extensions = [".nii", ".nii.gz", ".mhd", ".mha", ".nrrd", ".nhdr", ".png", ".tif"]
 
         self.data_root = ""
         self.task = None
@@ -53,7 +54,7 @@ class SharedResources:
         self.validation_output_folder = ''
         self.validation_gt_files_suffix = []
         self.validation_prediction_files_suffix = []
-        self.validation_use_index_naming_convention = True
+        self.validation_use_index_naming_convention = False
         self.validation_nb_folds = 5
         self.validation_split_way = 'two-way'
         self.validation_metric_spaces = []

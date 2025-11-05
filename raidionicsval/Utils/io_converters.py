@@ -89,14 +89,12 @@ def open_image_file(input_filename: str) -> Tuple[np.ndarray, str, List]:
     elif ext in [".nrrd", ".nhdr", ".mhd", ".mha"]:
         image_sitk = sitk.ReadImage(input_filename)
         input_array = sitk.GetArrayFromImage(image_sitk)
-        tmp_affine = np.asarray(image_sitk.GetDirection()).reshape(3,3)
-        affine = np.eye(4).astype('float32')
-        affine[:3, :3] = tmp_affine
+        affine = image_sitk.GetDirection()
         spacings = image_sitk.GetSpacing()
         input_specifics = [affine, spacings]
     elif ext in [".tif", ".tiff", ".png"]:
         input_array = Image.open(input_filename)
-        input_specifics = [np.eye(4, dtype=int), [1., 1.]]
+        input_specifics = [np.eye(3, dtype=int), [1., 1.]]
     else:
         logging.error("Working with an unknown file type: {}. Skipping...".format(ext))
 
@@ -130,3 +128,10 @@ def save_image_file(output_array: np.ndarray, output_filename: str, specifics: L
         Image.fromarray(output_array).save(output_filename)
     else:
         logging.error("Working with an unknown file type: {}. Skipping...".format(ext))
+
+def is_valid_extension(fn, extensions):
+    curr_ext = '.' + '.'.join(fn.split('.')[1:])
+    if curr_ext in extensions:
+        return True
+    else:
+        return False
