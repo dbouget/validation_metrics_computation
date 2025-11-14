@@ -65,6 +65,10 @@ class SharedResources:
         self.validation_true_positive_volume_thresholds = []
         self.validation_use_brats_data = []
 
+        self.validation_generative_prediction_file_suffix = None
+        self.validation_generative_metrics = []
+        self.validation_generative_temporal_metrics = []
+
         self.standalone_gt_filename = None
         self.standalone_detection_filename = None
         self.standalone_class_names = []
@@ -113,8 +117,8 @@ class SharedResources:
         if self.config.has_option('Default', 'objective'):
             if self.config['Default']['objective'].split('#')[0].strip() != '':
                 self.overall_objective = self.config['Default']['objective'].split('#')[0].strip()
-        if self.overall_objective not in ["segmentation", "classification"]:
-            raise ValueError("Provided ['Default']['objective'] should be inside [segmentation, classification]."
+        if self.overall_objective not in ["segmentation", "classification", "generative"]:
+            raise ValueError("Provided ['Default']['objective'] should be inside [segmentation, classification, generative]."
                              "\n Please provide a correct value!")
 
     def __parse_studies_parameters(self):
@@ -186,14 +190,6 @@ class SharedResources:
             if self.config['Validation']['output_folder'].split('#')[0].strip() != '':
                 self.validation_output_folder = self.config['Validation']['output_folder'].split('#')[0].strip()
 
-        if self.config.has_option('Validation', 'gt_files_suffix'):
-            if self.config['Validation']['gt_files_suffix'].split('#')[0].strip() != '':
-                self.validation_gt_files_suffix = [x.strip() for x in self.config['Validation']['gt_files_suffix'].split('#')[0].strip().split(',')]
-
-        if self.config.has_option('Validation', 'prediction_files_suffix'):
-            if self.config['Validation']['prediction_files_suffix'].split('#')[0].strip() != '':
-                self.validation_prediction_files_suffix = [x.strip() for x in self.config['Validation']['prediction_files_suffix'].split('#')[0].strip().split(',')]
-
         if self.config.has_option('Validation', 'use_index_naming_convention'):
             if self.config['Validation']['use_index_naming_convention'].split('#')[0].strip() != '':
                 self.validation_use_index_naming_convention = True \
@@ -216,12 +212,6 @@ class SharedResources:
             if self.config['Validation']['extra_metrics'].split('#')[0].strip() != '':
                 self.validation_metric_names = [x.strip() for x in self.config['Validation']['extra_metrics'].split('#')[0].strip().split(',')]
 
-        if self.config.has_option('Validation', 'detection_overlap_thresholds'):
-            if self.config['Validation']['detection_overlap_thresholds'].split('#')[0].strip() != '':
-                self.validation_detection_overlap_thresholds = [float(x) for x in self.config['Validation']['detection_overlap_thresholds'].split('#')[0].strip().split(',')]
-        if len(self.validation_detection_overlap_thresholds) == 0:
-            self.validation_detection_overlap_thresholds = [0.]
-
         if self.config.has_option('Validation', 'class_names'):
             if self.config['Validation']['class_names'].split('#')[0].strip() != '':
                 self.validation_class_names = [x.strip() for x in self.config['Validation']['class_names'].split('#')[0].strip().split(',')]
@@ -237,6 +227,36 @@ class SharedResources:
         if self.config.has_option('Validation', 'use_brats_data'):
             if self.config['Validation']['use_brats_data'].split('#')[0].strip() != '':
                 self.validation_use_brats_data = True if self.config['Validation']['use_brats_data'].split('#')[0].strip().lower() == 'true' else False
+
+        ######################################### Segmentation part ######################################
+        key = "Validation.Segmentation"
+        if self.config.has_option(key, 'gt_files_suffix'):
+            if self.config[key]['gt_files_suffix'].split('#')[0].strip() != '':
+                self.validation_gt_files_suffix = [x.strip() for x in self.config[key]['gt_files_suffix'].split('#')[0].strip().split(',')]
+
+        if self.config.has_option(key, 'prediction_files_suffix'):
+            if self.config[key]['prediction_files_suffix'].split('#')[0].strip() != '':
+                self.validation_prediction_files_suffix = [x.strip() for x in self.config[key]['prediction_files_suffix'].split('#')[0].strip().split(',')]
+
+        if self.config.has_option(key, 'detection_overlap_thresholds'):
+            if self.config[key]['detection_overlap_thresholds'].split('#')[0].strip() != '':
+                self.validation_detection_overlap_thresholds = [float(x) for x in self.config[key]['detection_overlap_thresholds'].split('#')[0].strip().split(',')]
+        if len(self.validation_detection_overlap_thresholds) == 0:
+            self.validation_detection_overlap_thresholds = [0.]
+
+        ######################################### Generative part ######################################
+        key = "Validation.Generative"
+        if self.config.has_option(key, 'generated_file_suffix'):
+            if self.config[key]['generated_file_suffix'].split('#')[0].strip() != '':
+                self.validation_generative_prediction_file_suffix = self.config[key]['generated_file_suffix'].split('#')[0].strip()
+
+        if self.config.has_option(key, 'metrics'):
+            if self.config[key]['metrics'].split('#')[0].strip() != '':
+                self.validation_generative_metrics = [x.strip().lower() for x in self.config[key]['metrics'].split('#')[0].strip().split(',')]
+
+        if self.config.has_option(key, 'temporal_metrics'):
+            if self.config[key]['temporal_metrics'].split('#')[0].strip() != '':
+                self.validation_generative_temporal_metrics = [x.strip().lower() for x in self.config[key]['temporal_metrics'].split('#')[0].strip().split(',')]
 
     def __parse_standalone_parameters(self):
         """

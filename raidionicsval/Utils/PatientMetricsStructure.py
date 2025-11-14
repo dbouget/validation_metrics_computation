@@ -16,6 +16,7 @@ class PatientMetrics:
     _prediction_filepaths = None
     _patientwise_metrics = None
     _pixelwise_metrics = None
+    _slicewise_metrics = None
     _objectwise_metrics = None
     _classification_metrics = None
     _extra_metrics = None
@@ -30,6 +31,9 @@ class PatientMetrics:
         self.__reset()
         self._unique_id = id
         self._objective = objective
+        if objective not in ["segmentation", "classification", "generative"]:
+            raise ValueError(f"The objective for computing the metrics with value {objective} is not handled."
+                             f"Please select from [segmentation, classification, generative]")
         self._patient_id = patient_id
         self._fold_number = fold_number
         self._class_names = class_names
@@ -50,6 +54,7 @@ class PatientMetrics:
         self._ground_truth_filepaths = None
         self._patientwise_metrics = None
         self._pixelwise_metrics = None
+        self._slicewise_metrics = None
         self._objectwise_metrics = None
         self._classification_metrics = None
         self._extra_metrics = None
@@ -103,8 +108,10 @@ class PatientMetrics:
     def init_from_file(self, study_folder: str):
         if self.objective == "segmentation":
             self.__init_from_file_segmentation(study_folder=study_folder)
-        else:
+        elif self.objective == "classification":
             self.__init_from_file_classification(study_folder=study_folder)
+        elif self.objective == "generative":
+            self.__init_from_file_generative(study_folder=study_folder)
 
     def __init_from_file_segmentation(self, study_folder: str):
         all_scores_filename = os.path.join(study_folder, 'all_dice_scores.csv')
@@ -162,6 +169,20 @@ class PatientMetrics:
         classification_values = list(patient_scores[2:7])
         self._classification_metrics.append(classification_values)
 
+    def __init_from_file_generative(self, study_folder: str):
+        all_scores_filename = os.path.join(study_folder, 'all_dice_scores.csv')
+
+        if not os.path.exists(all_scores_filename):
+            return
+        scores_df = pd.read_csv(all_scores_filename)
+        scores_df['Patient'] = scores_df.Patient.astype(str)
+        if len(scores_df.loc[
+                   (scores_df["Patient"] == self._patient_id) & (scores_df["Fold"] == self._fold_number)]) == 0:
+            return
+        # @TODO. To check here
+        if len(self._extra_metrics) == 0:
+            self._extra_metrics = None
+
     def is_complete(self):
         """
         @TODO. Will require much deeper checks to see if any value is missing and a recompute triggered
@@ -180,8 +201,10 @@ class PatientMetrics:
 
             for c in list(self._class_metrics.keys()):
                 status = status & self._class_metrics[c].is_complete()
-        else:
+        elif self.objective == "classification":
             status = self._classification_metrics is not None
+        elif self.objective == "generative":
+            status = False
         return status
 
     def set_patient_filenames(self, filenames: dict) -> None:
@@ -192,9 +215,12 @@ class PatientMetrics:
             for c in list(filenames.keys()):
                 self._ground_truth_filepaths.append(filenames[c][0])
                 self._prediction_filepaths.append(filenames[c][1])
-        else:
+        elif self.objective == "classification":
             self._ground_truth_filepaths.append(filenames[0])
             self._prediction_filepaths.append(filenames[1])
+        elif self.objective == "generative":
+            self._ground_truth_filepaths = filenames[0]
+            self._prediction_filepaths = filenames[1]
 
     def get_class_filenames(self, class_index: int) -> List[str]:
         return [self._ground_truth_filepaths[class_index], self.prediction_filepaths[class_index]]
