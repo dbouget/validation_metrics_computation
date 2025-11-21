@@ -3,6 +3,7 @@ import traceback
 import sys
 import logging
 import os
+import faulthandler
 from raidionicsval.compute import compute
 
 
@@ -36,6 +37,7 @@ def main(argv):
         sys.exit()
 
     try:
+        faulthandler.enable()
         compute(config_filename=config_filename)
     except Exception as e:
         logging.error('{}'.format(traceback.format_exc()))

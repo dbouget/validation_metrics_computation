@@ -1,5 +1,5 @@
 import os
-
+import math
 import numpy as np
 from typing import List
 import pandas as pd
@@ -24,7 +24,7 @@ class PatientMetrics:
     _class_metrics = None
 
     def __init__(self, id: str, patient_id: str, fold_number: int, class_names: List[str],
-                 objective: str = "segmentation") -> None:
+                 objective: str = "segmentation", missing_metrics: List[str] = []) -> None:
         """
 
         """
@@ -36,6 +36,7 @@ class PatientMetrics:
                              f"Please select from [segmentation, classification, generative]")
         self._patient_id = patient_id
         self._fold_number = fold_number
+        self._missing_metrics = missing_metrics
         self._class_names = class_names
         self._class_metrics = {}
         for c in class_names:
@@ -170,18 +171,37 @@ class PatientMetrics:
         self._classification_metrics.append(classification_values)
 
     def __init_from_file_generative(self, study_folder: str):
-        all_scores_filename = os.path.join(study_folder, 'all_dice_scores.csv')
+        all_scores_filename = os.path.join(study_folder, 'all_scores.csv')
 
         if not os.path.exists(all_scores_filename):
             return
         scores_df = pd.read_csv(all_scores_filename)
         scores_df['Patient'] = scores_df.Patient.astype(str)
-        if len(scores_df.loc[
-                   (scores_df["Patient"] == self._patient_id) & (scores_df["Fold"] == self._fold_number)]) == 0:
+        patient_df =scores_df.loc[
+                   (scores_df["Patient"] == self._patient_id) & (scores_df["Fold"] == self._fold_number)]
+        if len(patient_df) == 0:
             return
-        # @TODO. To check here
-        if len(self._extra_metrics) == 0:
-            self._extra_metrics = None
+        self._patientwise_metrics = []
+        self._slicewise_metrics = []
+        self._extra_metrics = None
+
+        for s in patient_df["Slice"].values:
+            pat_pw = []
+            pat_sw = [s]
+            for c, col in enumerate(patient_df.columns):
+                slice_df = patient_df.loc[patient_df["Slice"] == s]
+                if "SW" in col:
+                    pat_sw.append(list(slice_df[col])[0])
+                elif "PW" in col:
+                    pat_pw.append(list(slice_df[col])[0])
+            for m in self._missing_metrics:
+                if "SW" in m:
+                    pat_sw.append(None)
+                elif "PW" in m:
+                    pat_pw.append(None)
+            self._patientwise_metrics.append(pat_pw)
+            self._slicewise_metrics.append(pat_sw)
+
 
     def is_complete(self):
         """
@@ -204,7 +224,13 @@ class PatientMetrics:
         elif self.objective == "classification":
             status = self._classification_metrics is not None
         elif self.objective == "generative":
+            complete_patientwise_metrics = not any(item is None for item in self._patientwise_metrics[-1]) #not any(item is None or (isinstance(item, float) and math.isnan(item)) for item in self._patientwise_metrics[-1])
+            complete_slicewise_metrics = not any(item is None for item in [element for sublist in self._slicewise_metrics[:-1] for element in sublist]) #not any(item is None or (isinstance(item, float) and math.isnan(item)) for item in [element for sublist in self._slicewise_metrics[:-1] for element in sublist])
             status = False
+            if "patientwise" not in SharedResources.getInstance().validation_metric_spaces:
+                status = complete_slicewise_metrics
+            else:
+                status = complete_slicewise_metrics & complete_patientwise_metrics
         return status
 
     def set_patient_filenames(self, filenames: dict) -> None:

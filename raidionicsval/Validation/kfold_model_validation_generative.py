@@ -37,6 +37,7 @@ class GenerativeModelValidation:
         self.metric_names.extend(SharedResources.getInstance().validation_metric_names)
         self.prediction_files_suffix = SharedResources.getInstance().validation_generative_prediction_file_suffix
         self.patients_metrics = {}
+        self.missing_metrics = []
 
     def run(self):
         self.__compute_metrics()
@@ -59,27 +60,32 @@ class GenerativeModelValidation:
             if len(SharedResources.getInstance().validation_generative_temporal_metrics) != 0:
                 # @TODO. Better way to make it generic?
                 if "consistency" in SharedResources.getInstance().validation_generative_temporal_metrics:
-                    self.results_df_base_columns.extend(["PW Consistency (Orig) - NCC", "PW Consistency (Gen) - NCC",
-                                                         "PW Consistency (Orig) - SSIM", "PW Consistency (Gen) - SSIM",
-                                                         "PW Consistency (Orig) - GradientCorr", "PW Consistency (Gen) - GradientCorr"])
+                    self.results_df_base_columns.extend(["PW Consistency - NCC (Orig)", "PW Consistency - NCC (Gen)",
+                                                         "PW Consistency - SSIM (Orig)", "PW Consistency - SSIM (Gen)",
+                                                         "PW Consistency - GradientCorr (Orig)", "PW Consistency - GradientCorr (Gen)",
+                                                         "SW Consistency - NCC (Orig)", "SW Consistency - NCC (Gen)",
+                                                         "SW Consistency - SSIM (Orig)", "SW Consistency - SSIM (Gen)",
+                                                         "SW Consistency - GradientCorr (Orig)", "SW Consistency - GradientCorr (Gen)"
+                                                         ])
                 if "flicker" in SharedResources.getInstance().validation_generative_temporal_metrics:
-                    self.results_df_base_columns.extend(["PW Flicker (Orig) - SDE", "PW Flicker (Gen) - SDE",
-                                                         "PW Flicker (Orig) - L2", "PW Flicker (Gen) - L2",
-                                                         "PW Flicker (Orig) - HFER", "PW Flicker (Gen) - HFER",
-                                                         "PW Flicker (Orig) - TSTD", "PW Flicker (Gen) - TSTD",
-                                                         "PW Flicker (Orig) - CS", "PW Flicker (Gen) - CS",
-                                                         "SW Flicker (Orig) - L2", "SW Flicker (Gen) - L2",
-                                                         "SW Flicker (Orig) - SDE", "SW Flicker (Gen) - SDE"])
+                    self.results_df_base_columns.extend(["PW Flicker - SDE (Orig)", "PW Flicker - SDE (Gen)",
+                                                         "PW Flicker - L2 (Orig)", "PW Flicker - L2 (Gen)",
+                                                         "PW Flicker - HFER (Orig)", "PW Flicker - HFER (Gen)",
+                                                         "PW Flicker - TSTD (Orig)", "PW Flicker - TSTD (Gen)",
+                                                         "PW Flicker - CS (Orig)", "PW Flicker - CS (Gen)",
+                                                         "SW Flicker - L1 (Orig)", "SW Flicker - L1 (Gen)",
+                                                         "SW Flicker - L2 (Orig)", "SW Flicker - L2 (Gen)",
+                                                         "SW Flicker - SDE (Orig)", "SW Flicker - SDE (Gen)"])
 
         if not os.path.exists(self.all_scores_output_filename):
             self.results_df = pd.DataFrame(columns=self.results_df_base_columns)
         else:
-            self.results_df = pd.read_csv(self.all_scores_output_filename)
+            self.results_df = pd.read_csv(self.all_scores_output_filename, na_values="NaN")
             if self.results_df.columns[0] != 'Fold':
-                self.results_df = pd.read_csv(self.all_scores_output_filename, index_col=0)
+                self.results_df = pd.read_csv(self.all_scores_output_filename, na_values="NaN", index_col=0)
 
-            missing_metrics = [x for x in self.results_df_base_columns if not x in list(self.results_df.columns)[1:]]
-            for m in missing_metrics:
+            self.missing_metrics = [x for x in self.results_df_base_columns if not x in list(self.results_df.columns)]
+            for m in self.missing_metrics:
                 self.results_df[m] = None
 
             # if "slicewise" in SharedResources.getInstance().validation_metric_spaces:
@@ -126,7 +132,8 @@ class GenerativeModelValidation:
                 uid = str(fold_number) + '_' + pid
                 # Placeholder for holding all metrics for the current patient
                 patient_metrics = PatientMetrics(id=uid, patient_id=pid, fold_number=fold_number,
-                                                 class_names=[], objective="generative")
+                                                 class_names=[], objective="generative",
+                                                 missing_metrics=self.missing_metrics)
                 patient_metrics.init_from_file(self.output_folder)
 
                 success = self.__identify_patient_files(patient_metrics, sub_folder_index, fold_number)
@@ -224,7 +231,9 @@ class GenerativeModelValidation:
         if "slicewise" in SharedResources.getInstance().validation_metric_spaces:
             # @TODO. Should retrieve this from the patient params, based off the config file.
             slicewise_metrics_results = []
-            metrics_values = [None] * len(SharedResources.getInstance().validation_generative_metrics)
+            metrics_values = itertools.repeat([None] * len(SharedResources.getInstance().validation_generative_metrics))
+            if patient_metrics._slicewise_metrics is not None:
+                metrics_values = patient_metrics._slicewise_metrics
             sw_metrics = SharedResources.getInstance().validation_generative_metrics
             if SharedResources.getInstance().number_processes > 1:
                 try:
@@ -233,7 +242,7 @@ class GenerativeModelValidation:
                     pool = multiprocessing.Pool(processes=SharedResources.getInstance().number_processes)
                     slicewise_metrics_results = pool.map(parallel_metric_computation, zip(gt_slices, gen_slices,
                                                                                       itertools.repeat(sw_metrics),
-                                                                                      itertools.repeat(metrics_values)))
+                                                                                      metrics_values))
                     pool.close()
                     pool.join()
                     for sli, slim in enumerate(slicewise_metrics_results):
@@ -246,10 +255,15 @@ class GenerativeModelValidation:
                     print(traceback.format_exc())
             else:
                 for z in range(generative.shape[2]):
-                    for metric in sw_metrics:
+                    slicewise_metrics_results = []
+                    existing_metrics = metrics_values[z][1:]
+                    for swm, metric in enumerate(sw_metrics):
                         try:
-                            metric_value = compute_specific_metric_value(metric=metric, gt=gt_norm[:, :, z],
-                                                                         generative=generative[:, :, z])
+                            if existing_metrics[swm] != existing_metrics[swm] or existing_metrics[swm] is None:
+                                metric_value = compute_specific_metric_value(metric=metric, gt=gt_norm[:, :, z],
+                                                                             generative=generative[:, :, z])
+                            else:
+                                metric_value = existing_metrics[swm]
                             slicewise_metrics_results.append([metric, metric_value])
                         except Exception as e:
                             print(f'Issue computing metric {metric} for patient {uid}')
@@ -259,6 +273,8 @@ class GenerativeModelValidation:
         if "patientwise" in SharedResources.getInstance().validation_metric_spaces:
             patientwise_metrics_results = []
             metrics_values = [None] * len(SharedResources.getInstance().validation_generative_metrics)
+            if patient_metrics._patientwise_metrics is not None:
+                metrics_values = patient_metrics._patientwise_metrics[-1]
             sw_metrics = SharedResources.getInstance().validation_generative_metrics
             if SharedResources.getInstance().number_processes > 1:
                 try:
@@ -277,9 +293,12 @@ class GenerativeModelValidation:
                     print(f'Issue computing metrics for patient {uid}: {e}')
                     print(traceback.format_exc())
             else:
-                for metric in sw_metrics:
+                for pwm, metric in enumerate(sw_metrics):
                     try:
-                        metric_value = compute_specific_metric_value(metric=metric, gt=gt_norm, generative=generative)
+                        if metrics_values[pwm] != metrics_values[pwm] or metrics_values[pwm] is None:
+                            metric_value = compute_specific_metric_value(metric=metric, gt=gt_norm, generative=generative)
+                        else:
+                            metric_value = metrics_values[pwm]
                         patientwise_metrics_results.append([metric, metric_value])
                     except Exception as e:
                         print(f'Issue computing metric {metric} for patient {uid}')
@@ -290,11 +309,22 @@ class GenerativeModelValidation:
             for tm in tm_metrics:
                 try:
                     metric_value = compute_specific_metric_value(metric=tm, gt=gt_norm, generative=generative)
-                    patientwise_metrics_results.append([tm, metric_value])
+                    orig_metric_values, generated_metric_values = metric_value[0], metric_value[1]
+                    for mk in list(orig_metric_values.keys()):
+                        if "SW" in mk:
+                            for indmk in range(len(orig_metric_values[mk])):
+                                extra_metrics_results[indmk].extend([[f"{mk} (Orig)", orig_metric_values[mk][indmk]]])
+                        else:
+                            extra_metrics_results[-1].extend([[f"{mk} (Orig)", orig_metric_values[mk]]])
+                    for mk in list(generated_metric_values.keys()):
+                        if "SW" in mk:
+                            for indmk in range(len(generated_metric_values[mk])):
+                                extra_metrics_results[indmk].extend([[f"{mk} (Gen)", generated_metric_values[mk][indmk]]])
+                        else:
+                            extra_metrics_results[-1].extend([[f"{mk} (Gen)", generated_metric_values[mk]]])
                 except Exception as e:
                     print(f'Issue computing metric {tm} for patient {uid}')
                     print(traceback.format_exc())
-            extra_metrics_results.append([["Slice", -1]] + [[f'PW {x[0]}', x[1]] for x in patientwise_metrics_results])
 
 
         # Filling in the overall dataframe and dumping results to csv after each patient
@@ -319,7 +349,7 @@ class GenerativeModelValidation:
                             self.results_df['Fold'] == fold_number) & (
                                 self.results_df['Slice'] == res[0][1])].index.values[
                     0], metric_name] = metric_value
-        self.results_df.to_csv(self.all_scores_output_filename, index=False)
+        self.results_df.to_csv(self.all_scores_output_filename, index=False, na_rep="NaN")
 
     def __compute_extra_metrics(self, class_optimal: dict = {}):
         """

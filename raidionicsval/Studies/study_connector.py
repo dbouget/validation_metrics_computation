@@ -1,6 +1,7 @@
 from ..Utils.resources import SharedResources
 from ..Studies.SegmentationStudy import SegmentationStudy
 from ..Studies.ClassificationStudy import ClassificationStudy
+from ..Studies.GenerativeStudy import GenerativeStudy
 
 
 class StudyConnector:
@@ -16,4 +17,7 @@ class StudyConnector:
             processor.run()
         elif self.perform_study == 'classification':
             processor = ClassificationStudy()
+            processor.run()
+        elif self.perform_study == 'generative':
+            processor = GenerativeStudy()
             processor.run()

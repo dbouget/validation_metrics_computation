@@ -1,3 +1,5 @@
+import math
+import traceback
 import numpy as np
 from scipy.fft import fft, fftfreq
 from scipy.ndimage import sobel
@@ -10,14 +12,12 @@ def parallel_metric_computation(args):
     :param args: list of arguments split from the lists given to the multiprocessing.Pool call.
     :return: list with metric name and computed metric value.
     """
-    gt = args[0]
-    generative = args[1]
-    metrics = args[2]
-    metrics_values = args[3]
-
-
     try:
+        gt = args[0]
+        generative = args[1]
+        metrics = args[2]
         if isinstance(metrics, list):
+            metrics_values = args[3][1:]  # The first metric value is actually the slide number
             for i, metric in enumerate(metrics):
                 if metrics_values[i] == metrics_values[i] and metrics_values[i] is not None:
                     continue
@@ -25,6 +25,7 @@ def parallel_metric_computation(args):
                 metrics_values[i] = metric_value
             return list(zip(metrics, metrics_values))
         else:
+            metrics_values = args[3]  # Only one direct metric value in this case
             if metrics_values != metrics_values or metrics_values is None:
                 metric_value = compute_specific_metric_value(metric=metrics, gt=gt, generative=generative)
                 metrics_values = metric_value
@@ -60,6 +61,8 @@ def compute_specific_metric_value(metric, gt, generative):
         metric_value = structural_similarity(gt, generative, data_range=1.)
     elif metric == "nmi":
         metric_value = normalized_mutual_information(gt, generative)
+        if math.isnan(metric_value):
+            metric_value = -999.
     elif metric == "ncc":
         g_mean = gt.mean()
         p_mean = generative.mean()
@@ -114,10 +117,14 @@ def slice_consistency(volume):
         ssim_vals.append(structural_similarity(a, b, data_range=1.))
         grad_vals.append(gradient_correlation(a, b))
 
+    mean_gc = np.array(grad_vals)[~np.isnan(np.array(grad_vals))].mean()
     return {
-        "NCC": np.array(ncc_vals),
-        "SSIM": np.array(ssim_vals),
-        "GradientCorr": np.array(grad_vals)
+        "SW Consistency - NCC": np.array(ncc_vals),
+        "SW Consistency - SSIM": np.array(ssim_vals),
+        "SW Consistency - GradientCorr": np.array(grad_vals),
+        "PW Consistency - NCC": np.array(ncc_vals).mean(),
+        "PW Consistency - SSIM": np.array(ssim_vals).mean(),
+        "PW Consistency - GradientCorr": mean_gc
     }
 
 def slice_pair_metrics(vol, data_range=1.0):
@@ -267,11 +274,13 @@ def flicker_score(volume, mask=None, hf_frac=0.25, weights=None):
     combined = (weights["sec"] * c_sec) + (weights["l2"] * c_l2) + (weights["hf"] * c_hf) + (weights["tstd"] * c_tstd)
     # return all parts and the combined scalar
     return {
-        "sec_mean": float(c_sec),
-        "l2_mean": float(c_l2),
-        "hf_mean": float(c_hf),
-        "tstd_mean": float(c_tstd),
-        "combined_score": float(combined),
-        "pair_metrics": pair,
-        "sec_per_slice": sec
+        "PW Flicker - SDE": float(c_sec),
+        "PW Flicker - L2": float(c_l2),
+        "PW Flicker - HFER": float(c_hf),
+        "PW Flicker - TSTD": float(c_tstd),
+        "PW Flicker - CS": float(combined),
+        "SW Flicker - L1": pair["L1"],
+        "SW Flicker - L2": pair["L2"],
+        # "SW Flicker - SSIM": pair["SSIM"],
+        "SW Flicker - SDE": sec
     }
