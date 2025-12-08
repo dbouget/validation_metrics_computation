@@ -465,6 +465,7 @@ class AbstractStudy(ABC):
             else:
                 total_optimal_results = optimal_results_per_patient
 
+            total_optimal_results[metric2] = total_optimal_results[metric2].astype(str) # If categorical, has to be str
             if not metric1 in list(total_optimal_results.columns) or not metric2 in list(total_optimal_results.columns):
                 print('The required metric is missing from the DataFrame with either {} or {}. Skipping.\n'.format(metric1, metric2))
                 return
@@ -702,6 +703,10 @@ class AbstractStudy(ABC):
                 metric2_cutoffs = None
 
             total_optimal_results = total_optimal_results.dropna(subset=[metric2])
+            # Fix in case the categorical value can be interpreted as dense (e.g., MR field strength is a float value)
+            total_optimal_results[metric1] = total_optimal_results[metric1].astype(str)
+            total_optimal_results[metric2] = total_optimal_results[metric2].astype(str)
+
             if metric2_cutoffs is None or len(metric2_cutoffs) == 0:
                 metric2_cutoffs = list(np.unique(total_optimal_results[metric2].values))
 
