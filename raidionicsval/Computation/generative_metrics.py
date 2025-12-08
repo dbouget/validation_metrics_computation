@@ -1,8 +1,8 @@
 import math
 import traceback
 import numpy as np
-from scipy.fft import fft, fftfreq
-from scipy.ndimage import sobel
+from scipy.fft import fft, fftfreq, fftn
+from scipy.ndimage import sobel, laplace
 from skimage.metrics import mean_squared_error, structural_similarity, normalized_mutual_information, peak_signal_noise_ratio
 
 
@@ -77,6 +77,16 @@ def compute_specific_metric_value(metric, gt, generative):
         gt_con = slice_consistency(gt)
         generative_con = slice_consistency(generative)
         metric_value = [gt_con, generative_con]
+    elif metric == "power_spectrum":
+        metric_value = power_spectrum_distance(gt, generative, norm='l2')
+    elif metric == "laplacian_energy":
+        le_gt = laplacian_energy(gt)
+        le_gen = laplacian_energy(generative)
+        metric_value = [le_gt, le_gen]
+    elif metric == "tgs":
+        tgs_gt = temporal_gradient_smoothness(gt)
+        tgs_gen = temporal_gradient_smoothness(generative)
+        metric_value = [tgs_gt, tgs_gen]
     return metric_value
 
 
@@ -284,3 +294,150 @@ def flicker_score(volume, mask=None, hf_frac=0.25, weights=None):
         # "SW Flicker - SSIM": pair["SSIM"],
         "SW Flicker - SDE": sec
     }
+
+
+def power_spectrum_distance(vol1, vol2, norm='l2'):
+    """
+    Compute Power Spectrum Distance between two 3D volumes.
+
+    Parameters:
+        vol1, vol2: np.ndarray
+            3D arrays representing the volumes.
+        norm: str
+            Distance metric ('l2' or 'l1').
+
+    Returns:
+        float: Power spectrum distance.
+    """
+    # Compute FFT for both volumes
+    fft1 = fftn(vol1)
+    fft2 = fftn(vol2)
+
+    # Compute power spectra (magnitude squared)
+    ps1 = np.abs(fft1) ** 2
+    ps2 = np.abs(fft2) ** 2
+
+    # Normalize spectra to avoid scale bias
+    ps1 /= ps1.sum()
+    ps2 /= ps2.sum()
+
+    # Compute distance
+    if norm == 'l2':
+        dist = np.sqrt(np.sum((ps1 - ps2) ** 2))
+    elif norm == 'l1':
+        dist = np.sum(np.abs(ps1 - ps2))
+    else:
+        raise ValueError("Unsupported norm. Use 'l2' or 'l1'.")
+
+    return dist
+
+
+def radial_power_spectrum(volume, num_bins=100):
+    """
+    Compute radial-averaged power spectrum for a 3D volume.
+
+    Parameters:
+        volume: np.ndarray (HxWxD)
+        num_bins: int, number of radial bins
+
+    Returns:
+        radii: np.ndarray, bin centers
+        radial_profile: np.ndarray, averaged power spectrum per bin
+    """
+    # Compute FFT and power spectrum
+    fft_vol = fftn(volume)
+    power_spectrum = np.abs(fft_vol) ** 2
+
+    # Get frequency coordinates
+    shape = volume.shape
+    freq_x = fftfreq(shape[0])
+    freq_y = fftfreq(shape[1])
+    freq_z = fftfreq(shape[2])
+    fx, fy, fz = np.meshgrid(freq_x, freq_y, freq_z, indexing='ij')
+
+    # Compute radial distance in frequency space
+    radius = np.sqrt(fx ** 2 + fy ** 2 + fz ** 2)
+
+    # Bin the power spectrum by radius
+    max_r = radius.max()
+    bins = np.linspace(0, max_r, num_bins + 1)
+    radial_profile = np.zeros(num_bins)
+    counts = np.zeros(num_bins)
+
+    # Assign each voxel to a bin
+    bin_indices = np.digitize(radius.flatten(), bins) - 1
+    for i in range(num_bins):
+        mask = bin_indices == i
+        if np.any(mask):
+            radial_profile[i] = power_spectrum.flatten()[mask].mean()
+            counts[i] = mask.sum()
+
+    # Normalize profile
+    radial_profile /= radial_profile.sum()
+
+    # Compute bin centers
+    radii = 0.5 * (bins[:-1] + bins[1:])
+    return radii, radial_profile
+
+
+def radial_psd_distance(vol1, vol2, num_bins=100, norm='l2'):
+    """
+    Compute Radial-Averaged Power Spectrum Distance between two volumes.
+
+    Parameters:
+        vol1, vol2: np.ndarray (HxWxD)
+        num_bins: int
+        norm: str ('l2' or 'l1')
+
+    Returns:
+        float: distance
+    """
+    _, profile1 = radial_power_spectrum(vol1, num_bins)
+    _, profile2 = radial_power_spectrum(vol2, num_bins)
+
+    if norm == 'l2':
+        dist = np.sqrt(np.sum((profile1 - profile2) ** 2))
+    elif norm == 'l1':
+        dist = np.sum(np.abs(profile1 - profile2))
+    else:
+        raise ValueError("Unsupported norm. Use 'l2' or 'l1'.")
+
+    return dist
+
+
+def temporal_gradient_smoothness(volume):
+    """
+    Compute Temporal Gradient Smoothness (TGS) for a 3D volume.
+    Penalizes abrupt changes along the z-axis.
+
+    Parameters:
+        volume: np.ndarray (HxWxD)
+
+    Returns:
+        float: TGS value (lower is smoother)
+    """
+    # Compute gradient along z-axis
+    grad_z = np.diff(volume, axis=2)
+
+    # Compute squared gradient and mean
+    tgs = np.nanmean(grad_z ** 2)
+    return tgs
+
+
+def laplacian_energy(volume):
+    """
+    Compute 3D Laplacian Energy for global smoothness.
+
+    Parameters:
+        volume: np.ndarray (HxWxD)
+
+    Returns:
+        float: Laplacian energy (lower is smoother)
+    """
+    # Compute Laplacian
+    lap = laplace(volume)
+
+    # Compute squared Laplacian and mean
+    le = np.nanmean(lap ** 2)
+    return le
+
