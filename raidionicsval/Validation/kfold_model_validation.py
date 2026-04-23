@@ -137,6 +137,8 @@ class ModelValidation:
         # so they are fully recomputed rather than partially updated in-place
         classes = SharedResources.getInstance().validation_class_names
 
+        # Check for inconsistensies that can occur if the computation is stopped, if metrics are saved for one patient
+        # and one class but not all for example
         def patient_fold_keys(key_dict):
             return {(k[0], k[1]) for k in key_dict}
 
@@ -199,8 +201,11 @@ class ModelValidation:
                 # Placeholder for holding all metrics for the current patient
                 patient_metrics = PatientMetrics(id=uid, patient_id=pid, fold_number=fold_number,
                                                  class_names=SharedResources.getInstance().validation_class_names)
+
+                # init_from_dataframes only works for segmentation so far
                 # patient_metrics.init_from_file(self.output_folder)
                 patient_metrics.init_from_dataframes(self.results_df, self.class_results_df)
+
                 self.patients_metrics[uid] = patient_metrics
 
                 success = self.__identify_patient_files(patient_metrics, sub_folder_index, fold_number)
