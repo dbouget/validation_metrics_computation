@@ -102,20 +102,34 @@ class PatientMetrics:
 
     def init_from_file(self, study_folder: str):
         if self.objective == "segmentation":
-            self.__init_from_file_segmentation(study_folder=study_folder)
+            self.__init_from_file_or_df_segmentation(study_folder=study_folder)
         else:
             self.__init_from_file_classification(study_folder=study_folder)
 
-    def __init_from_file_segmentation(self, study_folder: str):
-        all_scores_filename = os.path.join(study_folder, 'all_dice_scores.csv')
+    def init_from_dataframes(self, all_scores_df: pd.DataFrame, class_scores_dfs: dict):
+        if self.objective == "segmentation":
+            self.__init_from_file_or_df_segmentation(all_scores_df=all_scores_df, class_scores_dfs=class_scores_dfs)
 
+    def __init_from_file_or_df_segmentation(self, study_folder: str = None, all_scores_df: pd.DataFrame = None,
+                                            class_scores_dfs: dict = None):
+        
         for c in list(self._class_metrics.keys()):
-            class_scores_filename = os.path.join(study_folder, c + '_dice_scores.csv')
-            self._class_metrics[c].init_from_file(class_scores_filename)
+            if class_scores_dfs is not None:
+                self._class_metrics[c].init_from_file_or_df(df = class_scores_dfs[c])
+            else:
+                class_scores_filename = os.path.join(study_folder, c + '_dice_scores.csv')
+                self._class_metrics[c].init_from_file_or_df(scores_filename=class_scores_filename)
 
-        if not os.path.exists(all_scores_filename):
+        if all_scores_df is not None:
+            scores_df = all_scores_df
+        elif study_folder is not None:
+            all_scores_filename = os.path.join(study_folder, 'all_dice_scores.csv')
+            if not os.path.exists(all_scores_filename):
+                return
+            scores_df = pd.read_csv(all_scores_filename)
+        else:
             return
-        scores_df = pd.read_csv(all_scores_filename)
+        
         scores_df['Patient'] = scores_df.Patient.astype(str)
         if len(scores_df.loc[(scores_df["Patient"] == self._patient_id) & (scores_df["Fold"] == self._fold_number)]) == 0:
             return
@@ -311,6 +325,7 @@ class ClassMetrics:
         self._patientwise_metrics = []
         self._pixelwise_metrics = []
         self._objectwise_metrics = []
+        self._extra_metrics = None
         for index in range(len(results)):
             thr_results = results[index][0]
             thr_val = thr_results[2]
@@ -322,16 +337,23 @@ class ClassMetrics:
             self._patientwise_metrics.append([thr_val] + patientwise_values)
             self._objectwise_metrics.append([thr_val] + objectwise_values)
 
-    def init_from_file(self, scores_filename: str) -> None:
-        if not os.path.exists(scores_filename):
+    def init_from_file_or_df(self, scores_filename: str = None, df: pd.DataFrame = None) -> None:
+        if df is not None:
+            scores_df = df
+        elif scores_filename is not None:
+            if not os.path.exists(scores_filename):
+                return
+            scores_df = pd.read_csv(scores_filename)
+        else:
             return
 
-        scores_df = pd.read_csv(scores_filename)
         scores_df['Patient'] = scores_df.Patient.astype(str)
-        if len(scores_df.loc[(scores_df["Patient"] == self._patient_id) & (scores_df["Fold"] == self._fold_number)]) == 0:
+        patient_class_scores = scores_df.loc[
+            (scores_df["Patient"] == self._patient_id) & (scores_df["Fold"] == self._fold_number)]
+
+        if len(patient_class_scores) == 0:
             return
 
-        patient_class_scores = scores_df.loc[(scores_df["Patient"] == self._patient_id) & (scores_df["Fold"] == self._fold_number)]
         self._patientwise_metrics = []
         self._pixelwise_metrics = []
         self._objectwise_metrics = []
