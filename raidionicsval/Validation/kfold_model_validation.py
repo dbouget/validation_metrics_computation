@@ -98,8 +98,9 @@ class ModelValidation:
             self.results_df = pd.read_csv(self.dice_output_filename)
             if self.results_df.columns[0] != 'Fold':
                 self.results_df = pd.read_csv(self.dice_output_filename, index_col=0)
-            missing_metrics = [x for x in SharedResources.getInstance().validation_metric_names if
-                               not x in list(self.results_df.columns)[1:]]
+            # missing_metrics = [x for x in SharedResources.getInstance().validation_metric_names if
+            #                    not x in list(self.results_df.columns)[1:]]
+            missing_metrics = [x for x in self.metric_names if not x in list(self.results_df.columns)[1:]]
             for m in missing_metrics:
                 self.results_df[m] = None
 
@@ -118,6 +119,55 @@ class ModelValidation:
         self.results_df['Patient'] = self.results_df.Patient.astype(str)
         for c in SharedResources.getInstance().validation_class_names:
             self.class_results_df[c]['Patient'] = self.class_results_df[c].Patient.astype(str)
+
+        # Create idx lookup table to save .loc scans in the resume check
+        self._key_to_idx = {}
+        for c in SharedResources.getInstance().validation_class_names:
+            self._key_to_idx[c] = {
+                (row['Patient'], row['Fold'], row['Threshold']): i for i, row in self.class_results_df[c].iterrows()}
+        
+        self._key_to_idx_overall ={
+            (row['Patient'], row['Fold'], row['Threshold']): i for i, row in self.results_df.iterrows()}
+
+        # Pending row accumulators — avoids per-patient pd.concat
+        self._pending_class_rows = {c: [] for c in SharedResources.getInstance().validation_class_names}
+        self._pending_overall_rows = []
+
+        # Remove patients that are inconsistent across CSVs (present in some but not all)
+        # so they are fully recomputed rather than partially updated in-place
+        classes = SharedResources.getInstance().validation_class_names
+
+        # Check for inconsistensies that can occur if the computation is stopped, if metrics are saved for one patient
+        # and one class but not all for example
+        def patient_fold_keys(key_dict):
+            return {(k[0], k[1]) for k in key_dict}
+
+        overall_pf = patient_fold_keys(self._key_to_idx_overall)
+        class_pf = {c: patient_fold_keys(self._key_to_idx[c]) for c in classes}
+        all_pf = overall_pf.intersection(*class_pf.values())
+        inconsistent_pf = overall_pf.union(*class_pf.values()) - all_pf
+
+        if inconsistent_pf:
+            logging.warning(
+                f"{len(inconsistent_pf)} patient-fold combinations are inconsistent across CSVs and will be fully recomputed.")
+
+            def drop_pf(df):
+                mask = pd.Series(list(zip(df['Patient'].astype(str), df['Fold']))).isin(inconsistent_pf).values
+                return df[~mask].reset_index(drop=True)
+
+            self.results_df = drop_pf(self.results_df)
+            for c in classes:
+                self.class_results_df[c] = drop_pf(self.class_results_df[c])
+
+            self._key_to_idx_overall = {
+                (row['Patient'], row['Fold'], row['Threshold']): i
+                for i, row in self.results_df.iterrows()
+            }
+            for c in classes:
+                self._key_to_idx[c] = {
+                    (row['Patient'], row['Fold'], row['Threshold']): i
+                    for i, row in self.class_results_df[c].iterrows()
+                }
 
         results_per_folds = []
         for fold in range(0, self.fold_number):
@@ -151,14 +201,19 @@ class ModelValidation:
                 # Placeholder for holding all metrics for the current patient
                 patient_metrics = PatientMetrics(id=uid, patient_id=pid, fold_number=fold_number,
                                                  class_names=SharedResources.getInstance().validation_class_names)
-                patient_metrics.init_from_file(self.output_folder)
+
+                # init_from_dataframes only works for segmentation so far
+                # patient_metrics.init_from_file(self.output_folder)
+                patient_metrics.init_from_dataframes(self.results_df, self.class_results_df)
+
+                self.patients_metrics[uid] = patient_metrics
 
                 success = self.__identify_patient_files(patient_metrics, sub_folder_index, fold_number)
-                self.patients_metrics[uid] = patient_metrics
 
                 # Checking if values have already been computed for the current patient to skip it if so.
                 if patient_metrics.is_complete():
                     continue
+
                 if not success:
                     print('Input files not found for patient {}\n'.format(uid))
                     continue
@@ -168,6 +223,18 @@ class ModelValidation:
                 print('Issue processing patient {}\n'.format(uid))
                 print(traceback.format_exc())
                 continue
+
+        if SharedResources.getInstance().validation_results_save_frequency == 'fold':
+            if self._pending_overall_rows:
+                self.results_df = pd.concat([self.results_df] + self._pending_overall_rows, ignore_index=True)
+                self._pending_overall_rows = []
+            self.results_df.to_csv(self.dice_output_filename, index=False)
+            for c in SharedResources.getInstance().validation_class_names:
+                if self._pending_class_rows[c]:
+                    self.class_results_df[c] = pd.concat(
+                        [self.class_results_df[c]] + self._pending_class_rows[c], ignore_index = True)
+                    self._pending_class_rows[c] = []
+                self.class_results_df[c].to_csv(self.class_dice_output_filenames[c], index=False)
         return 0
 
     def __identify_patient_files(self, patient_metrics: PatientMetrics, folder_index: int, fold_number: int) -> bool:
@@ -359,27 +426,35 @@ class ModelValidation:
             patient_metrics.set_class_regular_metrics(classes[c], pat_results)
             # Filling in the csv files on disk for faster resume
             class_results_filename = self.class_dice_output_filenames[classes[c]]
+            new_class_rows = []
             for ind, th in enumerate(thr_range):
                 th = np.round(th, 2)
-                sub_df = self.class_results_df[classes[c]].loc[
-                    (self.class_results_df[classes[c]]['Patient'] == uid) & (self.class_results_df[classes[c]]['Fold'] == fold_number) & (
-                            self.class_results_df[classes[c]]['Threshold'] == th)]
-                # ind_values = np.asarray(pat_results[ind])
-                # buff_df = pd.DataFrame(ind_values.reshape(1, len(self.results_df_base_columns)),
-                #                        columns=list(self.results_df_base_columns))
-                if len(sub_df) == 0:
+                # sub_df = self.class_results_df[classes[c]].loc[
+                #     (self.class_results_df[classes[c]]['Patient'] == uid) & (self.class_results_df[classes[c]]['Fold'] == fold_number) & (
+                #             self.class_results_df[classes[c]]['Threshold'] == th)]
+                key = (uid, fold_number, th)
+                if key not in self._key_to_idx[classes[c]]:
                     extra_metrics = [None] * 2 * len(SharedResources.getInstance().validation_metric_names)
                     ind_values = np.asarray(pat_results[ind][0] + extra_metrics)
                     buff_df = pd.DataFrame(ind_values.reshape(1, len(self.results_df_base_columns)),
                                            columns=list(self.results_df_base_columns))
-                    # self.class_results_df[classes[c]] = self.class_results_df[classes[c]].append(buff_df,
-                    #                                                                              ignore_index=True)
-                    self.class_results_df[classes[c]] = pd.concat([self.class_results_df[classes[c]], buff_df],
-                                                                  ignore_index=True)
+                    new_class_rows.append(buff_df)
                 else:
-                    ind_values = pat_results[ind][0] + list(self.class_results_df[classes[c]].loc[sub_df.index.values[0], :].values[len(pat_results[ind][0]):])
-                    self.class_results_df[classes[c]].loc[sub_df.index.values[0], :] = ind_values
-            self.class_results_df[classes[c]].to_csv(class_results_filename, index=False)
+                    row_idx = self._key_to_idx[classes[c]][key]
+                    ind_values = pat_results[ind][0] + list(
+                        self.class_results_df[classes[c]].loc[row_idx, :].values[len(pat_results[ind][0]):])
+                    self.class_results_df[classes[c]].loc[row_idx, :] = ind_values
+            self._pending_class_rows[classes[c]].extend(new_class_rows)
+            # if new_class_rows:
+            #     self.class_results_df[classes[c]] = pd.concat([self.class_results_df[classes[c]]] + new_class_rows,
+            #                                                   ignore_index=True)
+
+            # self.class_results_df[classes[c]].to_csv(class_results_filename, index=False)
+            if SharedResources.getInstance().validation_results_save_frequency == 'patient':
+                self.class_results_df[classes[c]] = pd.concat(
+                    [self.class_results_df[classes[c]]] + self._pending_class_rows[classes[c]], ignore_index=True)
+                self._pending_class_rows[classes[c]] = []
+                self.class_results_df[classes[c]].to_csv(class_results_filename, index=False)
 
         # Should compute the class macro-average results if multiple classes
         class_averaged_results = None
@@ -394,24 +469,31 @@ class ModelValidation:
         class_averaged_results = np.average(np.asarray(class_results).astype('float32')[:, :, 1:], axis=0)
 
         # Filling in the csv files on disk for faster resume
+        new_overall_rows = []
         for ind, th in enumerate(thr_range):
             th = np.round(th, 2)
-            sub_df = self.results_df.loc[
-                (self.results_df['Patient'] == uid) & (self.results_df['Fold'] == fold_number) & (
-                            self.results_df['Threshold'] == th)]
-            # ind_values = np.asarray([fold_number, uid, np.round(th, 2)] + list(class_averaged_results[ind]))
-            # buff_df = pd.DataFrame(ind_values.reshape(1, len(self.results_df_base_columns)),
-            #                        columns=list(self.results_df_base_columns))
-            if len(sub_df) == 0:
+            key = (uid, fold_number, th)
+            # sub_df = self.results_df.loc[
+            #     (self.results_df['Patient'] == uid) & (self.results_df['Fold'] == fold_number) & (
+            #                 self.results_df['Threshold'] == th)]
+            if key not in self._key_to_idx_overall:
                 ind_values = np.asarray([fold_number, uid, np.round(th, 2)] + list(class_averaged_results[ind]))
                 buff_df = pd.DataFrame(ind_values.reshape(1, len(self.results_df_base_columns)),
                                        columns=list(self.results_df_base_columns))
-                # self.results_df = self.results_df.append(buff_df, ignore_index=True)
-                self.results_df = pd.concat([self.results_df, buff_df], ignore_index=True)
+                new_overall_rows.append(buff_df)
             else:
-                ind_values = [fold_number, uid, np.round(th, 2)] + list(class_averaged_results[ind])
-                self.results_df.loc[sub_df.index.values[0], :] = ind_values
-        self.results_df.to_csv(self.dice_output_filename, index=False)
+                row_idx = self._key_to_idx_overall[key]
+                # ind_values = [fold_number, uid, np.round(th, 2)] + list(class_averaged_results[ind])
+                # self.results_df.loc[row_idx, :] = ind_values
+                base_values = [fold_number, uid, np.round(th, 2)] + list(class_averaged_results[ind])
+                existing_trailing = list(self.results_df.loc[row_idx, :].values[len(base_values):])
+                self.results_df.loc[row_idx, :] = base_values + existing_trailing
+
+        self._pending_overall_rows.extend(new_overall_rows)
+        if SharedResources.getInstance().validation_results_save_frequency == 'patient':
+            self.results_df = pd.concat([self.results_df] + self._pending_overall_rows, ignore_index=True)
+            self._pending_overall_rows = []
+            self.results_df.to_csv(self.dice_output_filename, index=False)
 
     def __compute_extra_metrics(self, class_optimal: dict = {}):
         """
@@ -420,6 +502,10 @@ class ModelValidation:
         classes = SharedResources.getInstance().validation_class_names
         for c in classes:
             optimal_values = class_optimal[c]['All']
+            idx_lookup = {
+                (row['Patient'], row['Threshold']): i
+                for i, row in self.class_results_df[c].iterrows()
+            }
             for p in tqdm(self.patients_metrics):
                 try:
                     # Initializing/completing the list which will hold the extra metrics
@@ -432,8 +518,14 @@ class ModelValidation:
                     for pm in pat_metrics:
                         metric_name = pm[0]
                         metric_value = pm[1]
-                        self.class_results_df[c].at[self.class_results_df[c].loc[(self.class_results_df[c]['Patient'] == self.patients_metrics[p].patient_id) & (self.class_results_df[c]['Threshold'] == optimal_values[1])].index.values[0], metric_name] = metric_value
-                    self.class_results_df[c].to_csv(self.class_dice_output_filenames[c], index=False)
+                        row_idx = idx_lookup[(self.patients_metrics[p].patient_id, optimal_values[1])]
+                        self.class_results_df[c].at[row_idx, metric_name] = metric_value
+                        # self.class_results_df[c].at[self.class_results_df[c].loc[(self.class_results_df[c]['Patient'] == self.patients_metrics[p].patient_id) & (self.class_results_df[c]['Threshold'] == optimal_values[1])].index.values[0], metric_name] = metric_value
+                    if SharedResources.getInstance().validation_results_save_frequency == 'patient':
+                        self.class_results_df[c].to_csv(self.class_dice_output_filenames[c], index=False)
                 except Exception as e:
                     logging.error(f"Computing extra metrics for patient {self.patients_metrics[p].patient_id} failed with: {e}.\n{traceback.format_exc()}")
                     continue
+
+            if SharedResources.getInstance().validation_results_save_frequency == 'fold':
+                self.class_results_df[c].to_csv(self.class_dice_output_filenames[c], index=False)

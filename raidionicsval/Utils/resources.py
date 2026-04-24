@@ -64,6 +64,7 @@ class SharedResources:
         self.validation_class_names = []
         self.validation_true_positive_volume_thresholds = []
         self.validation_use_brats_data = []
+        self.validation_results_save_frequency = 'patient'
 
         self.standalone_gt_filename = None
         self.standalone_detection_filename = None
@@ -237,6 +238,13 @@ class SharedResources:
         if self.config.has_option('Validation', 'use_brats_data'):
             if self.config['Validation']['use_brats_data'].split('#')[0].strip() != '':
                 self.validation_use_brats_data = True if self.config['Validation']['use_brats_data'].split('#')[0].strip().lower() == 'true' else False
+
+        if self.config.has_option('Validation', 'results_save_frequency'):
+            if self.config['Validation']['results_save_frequency'].split('#')[0].strip() != '':
+                val = self.config['Validation']['results_save_frequency'].split('#')[0].strip()
+                if val not in ['patient', 'fold']:
+                    raise ValueError("results_save_frequency must be 'patient' or 'fold'")
+                self.validation_results_save_frequency = val
 
     def __parse_standalone_parameters(self):
         """
