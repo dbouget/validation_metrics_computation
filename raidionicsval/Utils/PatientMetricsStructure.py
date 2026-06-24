@@ -106,6 +106,80 @@ class PatientMetrics:
         else:
             self.__init_from_file_classification(study_folder=study_folder)
 
+    def init_from_db(self, conn):
+        if self.objective == "segmentation":
+            self.__init_from_db_segmentation(conn)
+        else:
+            # @TODO. Add database-backed loading for classification objective
+            pass
+
+    def __init_from_db_segmentation(self, conn):
+        """
+        Loads segmentation metrics for this patient from SQLite.
+        Fetches per-class results first, then the macro-averaged total_results rows.
+        Returns early if no data exists yet (i.e. first run).
+        """
+        # Load per-class metrics using ClassMetrics.init_from_df
+        for c in list(self._class_metrics.keys()):
+            table_name = f"class_{c}"
+            try:
+                rows_df = pd.read_sql_query(
+                    f"SELECT * FROM [{table_name}] WHERE [Patient] = ? AND [Fold] = ?",
+                    conn,
+                    params=(str(self._patient_id), self._fold_number)
+                )
+                self._class_metrics[c].init_from_df(rows_df)
+            except Exception:
+                return # Table does not exist yet on first run
+
+        # Load macro-averaged results from total_results
+        rows_df = pd.read_sql_query(
+            "SELECT * FROM [total_results] WHERE [Patient] = ? AND [Fold] = ?",
+            conn,
+            params=(str(self._patient_id), self._fold_number)
+        )
+
+        if len(rows_df) == 0:
+            return
+
+        self._patientwise_metrics = []
+        self._pixelwise_metrics = []
+        self._objectwise_metrics = []
+        self._extra_metrics = []
+
+        upper_idx = SharedResources.getInstance().upper_default_metrics_index
+        extra_metric_names = []
+        for m in SharedResources.getInstance().validation_metric_names:
+            extra_metric_names.extend([f'PiW {m}', f'OW {m}'])
+
+        for thr in rows_df["Threshold"].values:
+            thr_results = rows_df.loc[rows_df["Threshold"] == thr].values[0]
+            thr_val = thr_results[2]
+            pixelwise_values = list(thr_results[3:7])
+            patientwise_values = list(thr_results[7:10])
+            objectwise_values = list(thr_results[10:upper_idx])
+            extra_values = list(thr_results[upper_idx:])
+
+            # Pad missing extra metrics with None to match expected length
+            while len(extra_values) < 2 * len(SharedResources.getInstance().validation_metric_names):
+                extra_values.append(None)
+
+            extra_values_description = list(rows_df.columns[upper_idx:])
+            for name in extra_metric_names:
+                if name not in extra_values_description:
+                    extra_values_description.append(name)
+
+            self._pixelwise_metrics.append([thr_val] + pixelwise_values)
+            self._patientwise_metrics.append([thr_val] + patientwise_values)
+            self._objectwise_metrics.append([thr_val] + objectwise_values)
+
+            extra_values_cat = [[x, y] for x, y in zip(extra_values_description, extra_values)]
+            if extra_values_cat:
+                self._extra_metrics.append([thr_val] + extra_values_cat)
+
+        if len(self._extra_metrics) == 0:
+            self._extra_metrics = None
+
     def __init_from_file_segmentation(self, study_folder: str):
         all_scores_filename = os.path.join(study_folder, 'all_dice_scores.csv')
 
@@ -355,6 +429,52 @@ class ClassMetrics:
             extra_values_cat = [[x, y] for x, y in zip(extra_values_description, extra_values)]
             if len(extra_values_cat) != 0:
                 self._extra_metrics.append([thr_val] + extra_values_cat)
+        if len(self._extra_metrics) == 0:
+            self._extra_metrics = None
+
+    def init_from_df(self, rows_df: pd.DataFrame) -> None:
+        """
+        Initializes class-level metrics from a pre-fetched DataFrame of per-threshold rows.
+        """
+        if len(rows_df) == 0:
+            return
+
+        upper_idx = SharedResources.getInstance().upper_default_metrics_index
+
+        self._patientwise_metrics = []
+        self._pixelwise_metrics = []
+        self._objectwise_metrics = []
+        self._extra_metrics = []
+
+        extra_metric_names = []
+        for m in SharedResources.getInstance().validation_metric_names:
+            extra_metric_names.extend([f'PiW {m}', f'OW {m}'])
+
+        for thr in np.unique(rows_df["Threshold"].values):
+            thr_results = rows_df.loc[rows_df["Threshold"] == thr].values[0]
+            thr_val = thr_results[2]
+            pixelwise_values = list(thr_results[3:7])
+            patientwise_values = list(thr_results[7:10])
+            objectwise_values = list(thr_results[10:upper_idx])
+            extra_values = list(thr_results[upper_idx:])
+
+            # Pad missing extra metrics with NaN to match expected length
+            while len(extra_values) < 2 * len(SharedResources.getInstance().validation_metric_names):
+                extra_values.append(float('nan'))
+
+            extra_values_description = list(rows_df.columns[upper_idx:])
+            for name in extra_metric_names:
+                if name not in extra_values_description:
+                    extra_values_description.append(name)
+
+            self._pixelwise_metrics.append([thr_val] + pixelwise_values)
+            self._patientwise_metrics.append([thr_val] + patientwise_values)
+            self._objectwise_metrics.append([thr_val] + objectwise_values)
+
+            extra_values_cat = [[x, y] for x, y in zip(extra_values_description, extra_values)]
+            if extra_values_cat:
+                self._extra_metrics.append([thr_val] + extra_values_cat)
+
         if len(self._extra_metrics) == 0:
             self._extra_metrics = None
 
