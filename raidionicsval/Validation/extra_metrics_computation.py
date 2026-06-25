@@ -23,19 +23,19 @@ def compute_patient_extra_metrics(patient_object, class_index, optimal_threshold
     try:
         existing = patient_object.get_optimal_class_extra_metrics(class_index, optimal_threshold)
         if existing is not None:
-            metric_values = [x[1] for x in existing[1:]]
+            current_metric_names = []
+            for m in SharedResources.getInstance().validation_metric_names:
+                if 'patientwise' in SharedResources.getInstance().validation_metric_spaces:
+                    current_metric_names.append(f'PiW {m}')
+                if 'objectwise' in SharedResources.getInstance().validation_metric_spaces:
+                    current_metric_names.append(f'OW {m}')
             
-            values_to_check = []
-            if 'patientwise' in SharedResources.getInstance().validation_metric_spaces:
-                # PiW values are at even indices (0, 2, 4...)
-                values_to_check.extend(metric_values[0::2])
-            if 'objectwise' in SharedResources.getInstance().validation_metric_spaces:
-                # OW values are at odd indices (1, 3, 5...)
-                values_to_check.extend(metric_values[1::2])
+            existing_dict = {x[0]: x[1] for x in existing[1:]}
+            values_to_check = [existing_dict.get(m) for m in current_metric_names if m in existing_dict]
             
             if values_to_check and all(v is not None and v == v for v in values_to_check):
                 return existing[1:]
-        
+            
         metric_values = [None] * len(metrics)
 
         # ground_truth_ni = nib.load(patient_object._ground_truth_filepaths[class_index])
