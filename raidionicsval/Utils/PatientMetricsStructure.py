@@ -142,6 +142,13 @@ class PatientMetrics:
         if len(rows_df) == 0:
             return
 
+        def to_float(v):
+            # Convert to float since SQLite returns numeric values as strings
+            try:
+                return float(v) if v is not None else None
+            except (ValueError, TypeError):
+                return None
+
         self._patientwise_metrics = []
         self._pixelwise_metrics = []
         self._objectwise_metrics = []
@@ -154,11 +161,11 @@ class PatientMetrics:
 
         for thr in rows_df["Threshold"].values:
             thr_results = rows_df.loc[rows_df["Threshold"] == thr].values[0]
-            thr_val = thr_results[2]
-            pixelwise_values = list(thr_results[3:7])
-            patientwise_values = list(thr_results[7:10])
-            objectwise_values = list(thr_results[10:upper_idx])
-            extra_values = list(thr_results[upper_idx:])
+            thr_val = float(thr_results[2])
+            pixelwise_values = [to_float(x) for x in thr_results[3:7]]
+            patientwise_values = [to_float(x) for x in thr_results[7:10]]
+            objectwise_values = [to_float(x) for x in thr_results[10:upper_idx]]
+            extra_values = [to_float(x) for x in thr_results[upper_idx:]]
 
             # Pad missing extra metrics with None to match expected length
             while len(extra_values) < 2 * len(SharedResources.getInstance().validation_metric_names):
@@ -441,6 +448,13 @@ class ClassMetrics:
 
         upper_idx = SharedResources.getInstance().upper_default_metrics_index
 
+        def to_float(v):
+            # Convert to float since SQLite returns numeric values as strings
+            try:
+                return float(v) if v is not None else None
+            except (ValueError, TypeError):
+                return None
+
         self._patientwise_metrics = []
         self._pixelwise_metrics = []
         self._objectwise_metrics = []
@@ -452,11 +466,11 @@ class ClassMetrics:
 
         for thr in np.unique(rows_df["Threshold"].values):
             thr_results = rows_df.loc[rows_df["Threshold"] == thr].values[0]
-            thr_val = thr_results[2]
-            pixelwise_values = list(thr_results[3:7])
-            patientwise_values = list(thr_results[7:10])
-            objectwise_values = list(thr_results[10:upper_idx])
-            extra_values = list(thr_results[upper_idx:])
+            thr_val = float(thr_results[2])
+            pixelwise_values = [to_float(x) for x in thr_results[3:7]]
+            patientwise_values = [to_float(x) for x in thr_results[7:10]]
+            objectwise_values = [to_float(x) for x in thr_results[10:upper_idx]]
+            extra_values = [to_float(x) for x in thr_results[upper_idx:]]
 
             # Pad missing extra metrics with NaN to match expected length
             while len(extra_values) < 2 * len(SharedResources.getInstance().validation_metric_names):
