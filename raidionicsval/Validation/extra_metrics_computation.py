@@ -21,23 +21,22 @@ from ..Validation.instance_segmentation_validation import *
 def compute_patient_extra_metrics(patient_object, class_index, optimal_threshold, metrics: List[str] = []):
     extra_metrics_results = []
     try:
-        if (patient_object.get_optimal_class_extra_metrics(class_index, optimal_threshold) is not None and
-                patient_object.get_optimal_class_extra_metrics(class_index, optimal_threshold)[1:] is not None):
-            metric_values = [x[1] for x in patient_object.get_optimal_class_extra_metrics(class_index, optimal_threshold)[1:]]
-            if 'objectwise' in SharedResources.getInstance().validation_metric_spaces and 'patientwise' in SharedResources.getInstance().validation_metric_spaces:
-                if False not in [x == x for x in metric_values]:
-                    # If all metric values have been computed, i.e., no nan or None etc...
-                    return patient_object.get_optimal_class_extra_metrics(class_index, optimal_threshold)[1:]
-            elif 'patientwise' not in SharedResources.getInstance().validation_metric_spaces:
-                if False not in [x == x for x in metric_values[1::2]]:
-                    # If all metric values have been computed, i.e., no nan or None etc...
-                    return patient_object.get_optimal_class_extra_metrics(class_index, optimal_threshold)[1:]
-            elif 'objectwise' not in SharedResources.getInstance().validation_metric_spaces:
-                if False not in [x == x for x in metric_values[0::2]]:
-                    # If all metric values have been computed, i.e., no nan or None etc...
-                    return patient_object.get_optimal_class_extra_metrics(class_index, optimal_threshold)[1:]
-        else:
-            metric_values = [None] * len(metrics)
+        existing = patient_object.get_optimal_class_extra_metrics(class_index, optimal_threshold)
+        if existing is not None:
+            metric_values = [x[1] for x in existing[1:]]
+            
+            values_to_check = []
+            if 'patientwise' in SharedResources.getInstance().validation_metric_spaces:
+                # PiW values are at even indices (0, 2, 4...)
+                values_to_check.extend(metric_values[0::2])
+            if 'objectwise' in SharedResources.getInstance().validation_metric_spaces:
+                # OW values are at odd indices (1, 3, 5...)
+                values_to_check.extend(metric_values[1::2])
+            
+            if values_to_check and all(v is not None and v == v for v in values_to_check):
+                return existing[1:]
+        
+        metric_values = [None] * len(metrics)
 
         # ground_truth_ni = nib.load(patient_object._ground_truth_filepaths[class_index])
         # detection_ni = nib.load(patient_object._prediction_filepaths[class_index])
