@@ -62,7 +62,7 @@ class ModelValidation:
                 
         # Read all extra metric columns actually present in the CSV, not just the ones from the current config.        
         tmp = pd.read_csv(self.dice_output_filename)
-        all_extra_metric_names = [col for col in tmp.columns if col not in self.results_df_base_columns]
+        all_extra_metric_names = [col for col in tmp.columns if col not in self.results_df_fixed_columns]
             
         logging.info("Computing average metrics for the cohort.")
         # All
@@ -87,14 +87,14 @@ class ModelValidation:
             self.class_dice_output_filenames[c] = os.path.join(self.output_folder, c + '_dice_scores.csv')
 
         # Define the column schema shared by all result tables
-        self.results_df_base_columns = ['Fold', 'Patient', 'Threshold']
-        self.results_df_base_columns.extend(["PiW Dice", "PiW Recall", "PiW Precision", "PiW F1"])
+        self.results_df_fixed_columns = ['Fold', 'Patient', 'Threshold']
+        self.results_df_fixed_columns.extend(["PiW Dice", "PiW Recall", "PiW Precision", "PiW F1"])
         # self.results_df_base_columns.extend(["PaW Dice", "PaW Recall", "PaW Precision", "PaW F1"])
-        self.results_df_base_columns.extend(["GT volume (ml)", "True Positive", "Detection volume (ml)"])
-        self.results_df_base_columns.extend(["OW Global Recall", "OW Global Precision", "OW Global F1", "OW Dice",
+        self.results_df_fixed_columns.extend(["GT volume (ml)", "True Positive", "Detection volume (ml)"])
+        self.results_df_fixed_columns.extend(["OW Global Recall", "OW Global Precision", "OW Global F1", "OW Dice",
                                              "OW Dice (std)", "OW Recall", "OW Recall (std)", "OW Precision",
                                              "OW Precision (std)", "OW F1", "OW F1 (std)", '#GT', '#Det'])
-        self.results_df_base_columns.extend(self.metric_names)
+        self.results_df_base_columns = self.results_df_fixed_columns + self.metric_names
 
         # Connect to SQLite database
         # WAL mode ensures crash-safe writes
