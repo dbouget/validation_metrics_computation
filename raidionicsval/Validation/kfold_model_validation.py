@@ -72,6 +72,8 @@ class ModelValidation:
         # True positive, based on given detection_overlap_thresholds
         compute_fold_average(self.output_folder, class_optimal=class_optimal, metrics=all_extra_metric_names, condition='TP')
 
+        self.conn.close()
+
     def __compute_metrics(self):
         """
         Generate the Dice scores (and default instance detection metrics) for all the patients and 10 probability
@@ -111,7 +113,7 @@ class ModelValidation:
                 results_df = pd.read_csv(self.dice_output_filename)
                 if results_df.columns[0] != 'Fold':
                     results_df = pd.read_csv(self.dice_output_filename, index_col=0)
-                missing_metrics = [x for x in SharedResources.getInstance().validation_metric_names if
+                missing_metrics = [x for x in self.metric_names if
                                 not x in list(results_df.columns)[1:]]
                 for m in missing_metrics:
                     results_df[m] = None
@@ -370,6 +372,7 @@ class ModelValidation:
         classes = SharedResources.getInstance().validation_class_names
         nb_classes = len(classes)
         thr_range = np.arange(0.1, 1.1, 0.1)
+        cursor = self.conn.cursor()
 
         # Iterating over all classes, where independent files are expected
         for c in range(nb_classes):
@@ -411,7 +414,6 @@ class ModelValidation:
             for ind, th in enumerate(thr_range):
                 th = np.round(th, 2)
 
-                cursor = self.conn.cursor()
                 query = f"SELECT * from [{table_name}] where [Patient] = ? AND [Fold] = ? AND [Threshold] = ?"
                 cursor.execute(query, (str(uid), fold_number, th))
                 row = cursor.fetchone()
@@ -450,8 +452,6 @@ class ModelValidation:
 
         for ind, th in enumerate(thr_range):
             th = np.round(th, 2)
-
-            cursor = self.conn.cursor()
 
             query = f"SELECT * from {'total_results'} where [Patient] = ? AND [Fold] = ? AND [Threshold] = ?"
             cursor.execute(query, (str(uid), fold_number, th))
@@ -501,8 +501,6 @@ class ModelValidation:
                 try:
                     # Initializing/completing the list which will hold the extra metrics
                     self.patients_metrics[p].setup_extra_metrics(self.metric_names)
-                    class_name = classes[0]
-                    cm = self.patients_metrics[p]._class_metrics[class_name]
                     pat_metrics = compute_patient_extra_metrics(self.patients_metrics[p], classes.index(c), optimal_values[1],
                                                                 SharedResources.getInstance().validation_metric_names)
                     self.patients_metrics[p].set_optimal_class_extra_metrics(classes.index(c), optimal_values[1], pat_metrics)
@@ -511,11 +509,13 @@ class ModelValidation:
                         metric_name = pm[0]
                         metric_value = pm[1]
 
+                        thr_to_match = float(np.round(optimal_values[1], 2))
+
                         update_query = f"UPDATE [class_{c}] SET [{metric_name}] = ? WHERE [Patient] = ? AND [Threshold] = ?"
-                        cursor.execute(update_query, (metric_value, str(self.patients_metrics[p].patient_id), optimal_values[1]))
+                        cursor.execute(update_query, (metric_value, str(self.patients_metrics[p].patient_id), thr_to_match))
                     
                         update_query = f"UPDATE total_results SET [{metric_name}] = ? WHERE [Patient] = ? AND [Threshold] = ?"                        
-                        cursor.execute(update_query, (metric_value, str(self.patients_metrics[p].patient_id), optimal_values[1]))
+                        cursor.execute(update_query, (metric_value, str(self.patients_metrics[p].patient_id), thr_to_match))
 
                 except Exception as e:
                     logging.error(f"Computing extra metrics for patient {self.patients_metrics[p].patient_id} failed with: {e}.\n{traceback.format_exc()}")
