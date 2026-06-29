@@ -394,7 +394,7 @@ class ClassMetrics:
         self._objectwise_metrics = []
         for index in range(len(results)):
             thr_results = results[index][0]
-            thr_val = thr_results[2]
+            thr_val = float(thr_results[2])
             pixelwise_values = thr_results[3:7]
             patientwise_values = thr_results[7:10]
             objectwise_values = thr_results[10:SharedResources.getInstance().upper_default_metrics_index]
