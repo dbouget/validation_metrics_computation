@@ -1,15 +1,14 @@
 import multiprocessing
 import itertools
 import os.path
-
 import time
-
+import sqlite3
 import numpy as np
 import pandas as pd
 from math import ceil
-
+import logging
 from tqdm import tqdm
-
+import csv
 from ..Computation.dice_computation_instance import separate_dice_computation
 from ..Validation.instance_segmentation_validation import *
 from ..Utils.resources import SharedResources
@@ -40,15 +39,17 @@ class ClassificationModelValidation:
         self.metric_names = []
         self.metric_names.extend(SharedResources.getInstance().validation_metric_names)
         self.gt_files_suffix = SharedResources.getInstance().validation_gt_files_suffix
-        self.gt_master_file = "/home/dbouget/Data/Studies/SequenceClassifier/seqclassifier_patients_parameters.csv"  # @TODO. Should be in the config file
+        self.gt_master_file = SharedResources.getInstance().studies_extra_parameters_filename  # @TODO. Not ideal to point to a studies parameter for validation
         self.gt_master_file_df = pd.read_csv(self.gt_master_file)
         self.prediction_files_suffix = SharedResources.getInstance().validation_prediction_files_suffix
         self.patients_metrics = {}
 
     def run(self):
         self.__compute_metrics()
-        # if len(SharedResources.getInstance().validation_metric_names) != 0:
-        #     self.__compute_extra_metrics(class_optimal=class_optimal)
+        #if len(SharedResources.getInstance().validation_metric_names) != 0:
+        #    self.__compute_extra_metrics(class_optimal=class_optimal)
+        #    logging.info("Re-exporting results to CSV with extra metrics...")
+        #    self.__sqlite_to_csv("total_results", self.all_scores_output_filename)
         compute_fold_average(self.input_folder, metrics=self.metric_names)
 
     def __compute_metrics(self):
@@ -64,6 +65,37 @@ class ClassificationModelValidation:
         self.results_df_base_columns.extend(["Prediction", "GT"])
         self.results_df_base_columns.extend(SharedResources.getInstance().validation_metric_names)
 
+        # Connect to SQLite database
+        # WAL mode ensures crash-safe writes
+        self.db_path = os.path.join(self.output_folder, "results.db")
+        self.conn = sqlite3.connect(self.db_path)
+        self.conn.execute("PRAGMA journal_mode=WAL;")
+        cursor = self.conn.cursor()
+
+        # Initialize or resume the total_results table
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='total_results'")
+        if cursor.fetchone() is None:
+            # First run: seed from existing CSV if available, otherwise start empty
+            if os.path.exists(self.all_scores_output_filename):
+                results_df = pd.read_csv(self.all_scores_output_filename)
+                if results_df.columns[0] != 'Fold':
+                    results_df = pd.read_csv(self.all_scores_output_filename, index_col=0)
+                missing_metrics = [x for x in self.metric_names if
+                                not x in list(results_df.columns)[1:]]
+                for m in missing_metrics:
+                    results_df[m] = None
+            else:
+                results_df = pd.DataFrame(columns=self.results_df_base_columns)
+                
+            results_df.to_sql("total_results", self.conn, if_exists="replace", index=False)
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_total_search ON total_results ([Patient], [Fold]);")
+            self.conn.commit()
+        else:
+            logging.info("Existing database found, resuming from SQL...")
+            if not os.path.exists(self.all_scores_output_filename):
+                self.__sqlite_to_csv("total_results", self.all_scores_output_filename)
+
+        """
         if not os.path.exists(self.all_scores_output_filename):
             self.results_df = pd.DataFrame(columns=self.results_df_base_columns)
         else:
@@ -75,6 +107,16 @@ class ClassificationModelValidation:
             for m in missing_metrics:
                 self.results_df[m] = None
         self.results_df['Patient'] = self.results_df.Patient.astype(str)
+        """
+
+        # Add any missing extra metric columns to all tables (e.g. when new metrics are added after initial run)
+        for metric_name in self.metric_names:
+            for table in ["total_results"]:
+                try:
+                    cursor.execute(f"ALTER TABLE [{table}] ADD COLUMN [{metric_name}] REAL")
+                    self.conn.commit()
+                except sqlite3.OperationalError:
+                    pass  # Column already exists
 
         results_per_folds = []
         for fold in range(0, self.fold_number):
@@ -85,6 +127,9 @@ class ClassificationModelValidation:
                 val_set, test_set = get_fold_from_file(filename=cross_validation_description_file, fold_number=fold)
             results = self.__compute_metrics_for_fold(data_list=test_set, fold_number=fold)
             results_per_folds.append(results)
+
+        logging.info("Exporting results to CSV...")
+        self.__sqlite_to_csv("total_results", self.all_scores_output_filename)
 
     def __compute_metrics_for_fold(self, data_list, fold_number):
         for i, patient in enumerate(tqdm(data_list)):
@@ -165,10 +210,11 @@ class ClassificationModelValidation:
         # ts = os.path.basename(detection_filename).split('.')[0].split('_')[-3]
         # image_uid = uid + '_' + ts
         # gt_class = masterfile.loc[masterfile["Patient"] == image_uid]["Sequence"].values[0]
-        gt_class = os.path.basename(detection_filename).split('.')[0].split('_')[-4]
-        gt_result = np.zeros(len(classes)).astype('uint8')
-        gt_result[classes.index(gt_class)] = 1
-        np.savetxt(gt_results_filename, gt_result, delimiter=";")
+        if False: #Only for sequence classification
+            gt_class = os.path.basename(detection_filename).split('.')[0].split('_')[-4]
+            gt_result = np.zeros(len(classes)).astype('uint8')
+            gt_result[classes.index(gt_class)] = 1
+            np.savetxt(gt_results_filename, gt_result, delimiter=";")
 
         patient_filenames = [gt_results_filename, detection_filename]
         patient_metrics.set_patient_filenames(patient_filenames)
@@ -179,6 +225,7 @@ class ClassificationModelValidation:
         Compute the basic metrics for all classes of the current patient
         :return:
         """
+        cursor = self.conn.cursor()
         uid = patient_metrics.patient_id
         classes = SharedResources.getInstance().validation_class_names
         nb_classes = len(classes)
@@ -210,6 +257,39 @@ class ClassificationModelValidation:
         #     self.class_results_df[classes[c]].loc[sub_df.index.values[0], :] = ind_values
         # self.results_df.to_csv(self.all_scores_output_filename, index=False)
 
+        current_columns = pd.read_sql_query(f"SELECT * FROM {'total_results'} LIMIT 0", self.conn).columns.tolist()
+        query = f"SELECT * from {'total_results'} where [Patient] = ? AND [Fold] = ?"
+        cursor.execute(query, (str(uid), fold_number))
+
+        row = cursor.fetchone()
+
+        if row is None:
+            ind_values = [fold_number, uid] + list(pat_results)
+            # Pad with None if fewer values than columns (e.g. when extra metrics are missing)
+            if len(ind_values) < len(current_columns):
+                ind_values += [None] * (len(current_columns) - len(ind_values))
+
+            column_names_str = ", ".join([f"[{col}]" for col in current_columns])
+            placeholders = ", ".join(["?"] * len(current_columns))
+            insert_query = f"INSERT INTO {'total_results'} ({column_names_str}) VALUES ({placeholders})"
+            cursor.execute(insert_query, tuple(ind_values))
+        else:
+            row_dict = dict(zip(current_columns, row))
+            new_values = [fold_number, uid] + list(pat_results)
+
+            for i, val in enumerate(new_values):
+                if i < len(current_columns):
+                    row_dict[current_columns[i]] = float(val) if isinstance(val, np.float32) else val
+
+            ind_values = [row_dict.get(col, None) for col in current_columns]
+            set_clause = ", ".join([f"[{col}] = ?" for col in current_columns])
+
+            update_query = f"UPDATE {'total_results'} SET {set_clause} WHERE [Patient] = ? AND [Fold] = ?"
+            cursor.execute(update_query, tuple(ind_values) + (str(uid), fold_number))
+
+        self.conn.commit()
+
+        """
         # Filling in the csv files on disk for faster resume
         sub_df = self.results_df.loc[
             (self.results_df['Patient'] == uid) & (self.results_df['Fold'] == fold_number)]
@@ -222,6 +302,7 @@ class ClassificationModelValidation:
             ind_values = [fold_number, uid] + list(pat_results)
             self.results_df.loc[sub_df.index.values[0], :] = ind_values
         self.results_df.to_csv(self.all_scores_output_filename, index=False)
+        """
 
     def __compute_extra_metrics(self, class_optimal: dict = {}):
         """
@@ -244,3 +325,17 @@ class ClassificationModelValidation:
                     metric_value = pm[1]
                     self.class_results_df[c].at[self.class_results_df[c].loc[(self.class_results_df[c]['Patient'] == self.patients_metrics[p].patient_id) & (self.class_results_df[c]['Threshold'] == optimal_values[1])].index.values[0], metric_name] = metric_value
                 self.class_results_df[c].to_csv(self.class_dice_output_filenames[c], index=False)
+
+    def __sqlite_to_csv(self, table_name, csv_path):
+        """
+        Exports a full SQLite table to a CSV file using a streaming cursor
+        to avoid loading the entire table into memory.
+        """
+        cursor = self.conn.cursor()
+        cursor.execute(f"SELECT * FROM [{table_name}]")
+        headers = [description[0] for description in cursor.description]
+        
+        with open(csv_path, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+            writer.writerow(headers)
+            writer.writerows(cursor)

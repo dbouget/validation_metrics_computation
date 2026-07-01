@@ -5,11 +5,11 @@ import os.path
 import traceback
 import sqlite3
 import csv
-
 import pandas as pd
 from math import ceil
-
+from functools import partial
 from tqdm import tqdm
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 
 from ..Computation.dice_computation_instance import separate_dice_computation
 from ..Validation.instance_segmentation_validation import *
@@ -206,14 +206,14 @@ class ModelValidation:
                 patient_metrics.init_from_db(self.conn)
                 success = self.__identify_patient_files(patient_metrics, sub_folder_index, fold_number)
                 self.patients_metrics[uid] = patient_metrics
-
+                
                 # Checking if values have already been computed for the current patient to skip it if so.
                 if patient_metrics.is_complete():
                     continue
                 if not success:
                     print('Input files not found for patient {}\n'.format(uid))
                     continue
-
+                
                 self.__generate_dice_scores_for_patient(patient_metrics, fold_number)
             except Exception as e:
                 print('Issue processing patient {}\n'.format(uid))
@@ -418,9 +418,10 @@ class ModelValidation:
                 cursor.execute(query, (str(uid), fold_number, th))
                 row = cursor.fetchone()
 
+                pat_res_tmp =[float(x) if isinstance(x, np.float32) else x for x in pat_results[ind][0]]
                 if row is None:
                     extra_metrics = [None] * 2 * len(SharedResources.getInstance().validation_metric_names)
-                    ind_values = np.asarray(pat_results[ind][0] + extra_metrics)
+                    ind_values = np.asarray(pat_res_tmp + extra_metrics)
 
                     column_names_str = ", ".join([f"[{col}]" for col in columns])
                     placeholders = ", ".join(["?"] * len(columns))
@@ -429,7 +430,7 @@ class ModelValidation:
                     cursor.execute(insert_query, tuple(ind_values))
 
                 else:
-                    ind_values = pat_results[ind][0] + list(row[len(pat_results[ind][0]):])
+                    ind_values = pat_res_tmp + list(row[len(pat_results[ind][0]):])
                     set_clause = ", ".join([f"[{col}] = ?" for col in columns])
                     update_query = f"UPDATE {table_name} SET {set_clause} WHERE [Patient] = ? AND [Fold] = ? AND [Threshold] = ?"
                     cursor.execute(update_query, tuple(ind_values) + (uid, fold_number, th))
@@ -447,7 +448,7 @@ class ModelValidation:
             if len(SharedResources.getInstance().validation_metric_names) != 0:
                 final_pat_class_res = [pat_class_results[x] + pat_class_extra_metrics[x] for x in range(len(thr_range))]
             class_results.append(final_pat_class_res)
-        class_averaged_results = np.average(np.asarray(class_results).astype('float32')[:, :, 1:], axis=0)
+        class_averaged_results = np.average(np.asarray(class_results).astype('float32')[:, :, 1:], axis=0).astype(float)
         current_columns = pd.read_sql_query(f"SELECT * FROM {'total_results'} LIMIT 0", self.conn).columns.tolist()
 
         for ind, th in enumerate(thr_range):
@@ -467,16 +468,14 @@ class ModelValidation:
                 column_names_str = ", ".join([f"[{col}]" for col in current_columns])
                 placeholders = ", ".join(["?"] * len(current_columns))
                 insert_query = f"INSERT INTO {'total_results'} ({column_names_str}) VALUES ({placeholders})"
-
                 cursor.execute(insert_query, tuple(ind_values))
-
             else:
                 row_dict = dict(zip(current_columns, row))
                 new_values = [fold_number, uid, th] + list(class_averaged_results[ind])
 
                 for i, val in enumerate(new_values):
                     if i < len(current_columns):
-                        row_dict[current_columns[i]] = val
+                        row_dict[current_columns[i]] = float(val) if isinstance(val, np.float32) else val
 
                 ind_values = [row_dict.get(col, None) for col in current_columns]
                 set_clause = ", ".join([f"[{col}] = ?" for col in current_columns])
@@ -486,43 +485,105 @@ class ModelValidation:
 
         self.conn.commit()
     
-
     def __compute_extra_metrics(self, class_optimal: dict = {}):
         """
         Computes additional metrics at the optimal threshold for each class.
         Results are written to both the per-class table and total_results in SQLite.
+        @TODO. Would need to properly compute metrics average over the different classes to fill in the total_results table (or just skip it).
         """
-        original_processes = SharedResources.getInstance().number_processes
-        SharedResources.getInstance().number_processes = 1
         classes = SharedResources.getInstance().validation_class_names
         for c in classes:
             optimal_values = class_optimal[c]['All']
-            for p in tqdm(self.patients_metrics):
-                try:
-                    # Initializing/completing the list which will hold the extra metrics
-                    self.patients_metrics[p].setup_extra_metrics(self.metric_names)
-                    pat_metrics = compute_patient_extra_metrics(self.patients_metrics[p], classes.index(c), optimal_values[1],
-                                                                SharedResources.getInstance().validation_metric_names)
-                    self.patients_metrics[p].set_optimal_class_extra_metrics(classes.index(c), optimal_values[1], pat_metrics)
-                    cursor = self.conn.cursor()
+            if len(SharedResources.getInstance().validation_metric_names) < 10:
+                batch_results =[] 
+                dump = 0
+                with ThreadPoolExecutor(max_workers=SharedResources.getInstance().number_processes) as executor:
+                    futures = {executor.submit(partial(self.__patient_metrics_computation, c=c, classes=classes, 
+                                                       optimal_values=optimal_values), item): item for item in self.patients_metrics}
+                    for future in tqdm(as_completed(futures), total=len(futures)):
+                        _ = futures[future]
+                        try:
+                            results = future.result()
+                            batch_results.append(results)
+                            dump += 1
+                            if dump % SharedResources.getInstance().number_processes == 0:
+                                self.__update_database(batch_results)
+                                batch_results.clear()
+                        except Exception as e:
+                            continue
+            else:
+                original_processes = SharedResources.getInstance().number_processes
+                SharedResources.getInstance().number_processes = 10
+                for p in tqdm(self.patients_metrics):
+                    recomputation = False
+                    try:
+                        # Initializing/completing the list which will hold the extra metrics
+                        self.patients_metrics[p].setup_extra_metrics(self.metric_names)
+                        pat_metrics, recomputation = compute_patient_extra_metrics(self.patients_metrics[p], classes.index(c), optimal_values[1],
+                                                                    SharedResources.getInstance().validation_metric_names)
+                        if recomputation:
+                            self.patients_metrics[p].set_optimal_class_extra_metrics(classes.index(c), optimal_values[1], pat_metrics)
+                            cursor = self.conn.cursor()
+                            for pm in pat_metrics:
+                                metric_name = pm[0]
+                                metric_value = pm[1]
+
+                                thr_to_match = float(np.round(optimal_values[1], 2))
+
+                                update_query = f"UPDATE [class_{c}] SET [{metric_name}] = ? WHERE [Patient] = ? AND [Threshold] = ?"
+                                cursor.execute(update_query, (metric_value, str(self.patients_metrics[p].patient_id), thr_to_match))
+                            
+                                update_query = f"UPDATE total_results SET [{metric_name}] = ? WHERE [Patient] = ? AND [Threshold] = ?"                        
+                                cursor.execute(update_query, (metric_value, str(self.patients_metrics[p].patient_id), thr_to_match))
+                    except Exception as e:
+                        logging.error(f"Computing extra metrics for patient {self.patients_metrics[p].patient_id} failed with: {e}.\n{traceback.format_exc()}")
+                        continue
+                    finally:
+                        if recomputation:
+                            self.conn.commit()
+                SharedResources.getInstance().number_processes = original_processes
+
+
+    def __patient_metrics_computation(self, p, c, classes, optimal_values):
+        recomputation = False
+        result = None
+        try:
+            # Initializing/completing the list which will hold the extra metrics
+            thr_to_match = float(np.round(optimal_values[1], 2))
+            self.patients_metrics[p].setup_extra_metrics(self.metric_names)
+            pat_metrics, recomputation = compute_patient_extra_metrics(self.patients_metrics[p], classes.index(c), optimal_values[1],
+                                                        SharedResources.getInstance().validation_metric_names)
+            if recomputation:
+                self.patients_metrics[p].set_optimal_class_extra_metrics(classes.index(c), optimal_values[1], pat_metrics)
+
+            result = [p, c, thr_to_match, pat_metrics, recomputation] 
+        except Exception as e:
+            logging.error(f"Computing extra metrics for patient {self.patients_metrics[p].patient_id} failed with: {e}.\n{traceback.format_exc()}")
+        finally:
+            return result
+
+    def __update_database(self, batch_results):
+        try:
+            cursor = self.conn.cursor()
+            for results in batch_results:
+                p = results[0]
+                c = results[1]
+                thr_to_match  = results[2]
+                pat_metrics = results[3]
+                recompute = results[4]
+                if recompute:
                     for pm in pat_metrics:
                         metric_name = pm[0]
                         metric_value = pm[1]
-
-                        thr_to_match = float(np.round(optimal_values[1], 2))
 
                         update_query = f"UPDATE [class_{c}] SET [{metric_name}] = ? WHERE [Patient] = ? AND [Threshold] = ?"
                         cursor.execute(update_query, (metric_value, str(self.patients_metrics[p].patient_id), thr_to_match))
                     
                         update_query = f"UPDATE total_results SET [{metric_name}] = ? WHERE [Patient] = ? AND [Threshold] = ?"                        
                         cursor.execute(update_query, (metric_value, str(self.patients_metrics[p].patient_id), thr_to_match))
-
-                except Exception as e:
-                    logging.error(f"Computing extra metrics for patient {self.patients_metrics[p].patient_id} failed with: {e}.\n{traceback.format_exc()}")
-                    continue
-            self.conn.commit()
-
-        SharedResources.getInstance().number_processes = original_processes
+                self.conn.commit()
+        except Exception as e:
+            logging.error(f"Commiting to the database after parallel metrics computation failed with {e}")
 
     def __sqlite_to_csv(self, table_name, csv_path):
         """

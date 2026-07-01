@@ -8,7 +8,7 @@ from copy import deepcopy
 import pandas as pd
 import nibabel as nib
 import numpy as np
-from typing import List
+from typing import List, Tuple
 # from medpy.metric.binary import hd95, volume_correlation, assd, ravd, obj_assd
 from sklearn.metrics import jaccard_score, normalized_mutual_info_score, roc_auc_score, cohen_kappa_score
 from ..Utils.resources import SharedResources
@@ -18,7 +18,16 @@ from ..Computation.medpy_metrics import (compute_hd95, compute_assd, compute_rav
 from ..Validation.instance_segmentation_validation import *
 
 
-def compute_patient_extra_metrics(patient_object, class_index, optimal_threshold, metrics: List[str] = []):
+def compute_patient_extra_metrics(patient_object, class_index, optimal_threshold, metrics: List[str] = []) -> Tuple[List, bool]:
+    """
+    
+    Parameters
+    ----------
+
+    Returns
+    -------
+    The first element is the list with metric values, the second element is a boolean indicating if (re)computation was performed.
+    """
     extra_metrics_results = []
     try:
         existing = patient_object.get_optimal_class_extra_metrics(class_index, optimal_threshold)
@@ -34,7 +43,7 @@ def compute_patient_extra_metrics(patient_object, class_index, optimal_threshold
             values_to_check = [existing_dict.get(m) for m in current_metric_names if m in existing_dict]
             
             if values_to_check and all(v is not None and v == v for v in values_to_check):
-                return existing[1:]
+                return existing[1:], False
             
         metric_values = [None] * len(metrics)
 
@@ -198,7 +207,7 @@ def compute_patient_extra_metrics(patient_object, class_index, optimal_threshold
         print('Global issue computing metrics for patient {}'.format(patient_object.unique_id))
         print(traceback.format_exc())
 
-    return extra_metrics_results
+    return extra_metrics_results, True
 
 
 def parallel_metric_computation(args):
@@ -228,7 +237,7 @@ def parallel_metric_computation(args):
                                                      gt_spacing=gt_extra[1],
                                                      det_spacing=det_extra[1])
     except Exception as e:
-        print('Computing {} gave an exception'.format(metric))
+        logging.warning(f'Computing {metric} failed with {e}')
         pass
 
     return [metric, metric_value]
@@ -324,7 +333,9 @@ def compute_specific_metric_value(metric, gt, detection, tp, tn, fp, fn, gt_spac
         if (tp + fp) != 0:
             metric_value = tp / (tp + fp)
     elif metric == 'AUC':
-        metric_value = roc_auc_score(gt.flatten(), detection.flatten())
+        metric_value = math.inf
+        if len(np.unique(gt)) > 1:  # ROC AUC score is not defined if only class is present in y_true
+            metric_value = roc_auc_score(gt.flatten(), detection.flatten())
     elif metric == 'MCC':
         metric_value = math.inf
         num = (tp * tn) - (fp * fn)
