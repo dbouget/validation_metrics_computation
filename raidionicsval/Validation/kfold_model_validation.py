@@ -496,24 +496,19 @@ class ModelValidation:
             optimal_values = class_optimal[c]['All']
             if len(SharedResources.getInstance().validation_metric_names) < 10:
                 batch_results =[] 
-                dump = 0
-                with ThreadPoolExecutor(max_workers=SharedResources.getInstance().number_processes) as executor:
-                    futures = {executor.submit(partial(self.__patient_metrics_computation, c=c, classes=classes, 
-                                                       optimal_values=optimal_values), item): item for item in self.patients_metrics}
-                    for future in tqdm(as_completed(futures), total=len(futures)):
-                        _ = futures[future]
-                        try:
-                            results = future.result()
-                            batch_results.append(results)
-                            dump += 1
-                            if dump % SharedResources.getInstance().number_processes == 0:
+                args_list = [(p, self.patients_metrics[p], c, classes, optimal_values, SharedResources.getInstance().validation_metric_names) for p in self.patients_metrics]
+                with ProcessPoolExecutor(max_workers=SharedResources.getInstance().number_processes) as executor:
+                    for result in tqdm(executor.map(patient_metrics_computation_worker, args_list), total=len(args_list)):
+                        if result is not None:
+                            batch_results.append(result)
+                            if len(batch_results) >= SharedResources.getInstance().number_processes:
                                 self.__update_database(batch_results)
                                 batch_results.clear()
-                        except Exception as e:
-                            continue
+
+                if batch_results:  # flush remainder
+                    self.__update_database(batch_results)
+                    batch_results.clear()
             else:
-                original_processes = SharedResources.getInstance().number_processes
-                SharedResources.getInstance().number_processes = 10
                 for p in tqdm(self.patients_metrics):
                     recomputation = False
                     try:
@@ -541,26 +536,6 @@ class ModelValidation:
                     finally:
                         if recomputation:
                             self.conn.commit()
-                SharedResources.getInstance().number_processes = original_processes
-
-
-    def __patient_metrics_computation(self, p, c, classes, optimal_values):
-        recomputation = False
-        result = None
-        try:
-            # Initializing/completing the list which will hold the extra metrics
-            thr_to_match = float(np.round(optimal_values[1], 2))
-            self.patients_metrics[p].setup_extra_metrics(self.metric_names)
-            pat_metrics, recomputation = compute_patient_extra_metrics(self.patients_metrics[p], classes.index(c), optimal_values[1],
-                                                        SharedResources.getInstance().validation_metric_names)
-            if recomputation:
-                self.patients_metrics[p].set_optimal_class_extra_metrics(classes.index(c), optimal_values[1], pat_metrics)
-
-            result = [p, c, thr_to_match, pat_metrics, recomputation] 
-        except Exception as e:
-            logging.error(f"Computing extra metrics for patient {self.patients_metrics[p].patient_id} failed with: {e}.\n{traceback.format_exc()}")
-        finally:
-            return result
 
     def __update_database(self, batch_results):
         try:
@@ -598,3 +573,22 @@ class ModelValidation:
             writer = csv.writer(f)
             writer.writerow(headers)
             writer.writerows(cursor)
+
+def patient_metrics_computation_worker(args):
+    p, metrics, c, classes, optimal_values, metric_names = args
+    recomputation = False
+    result = None
+    try:
+        # Initializing/completing the list which will hold the extra metrics
+        thr_to_match = float(np.round(optimal_values[1], 2))
+        metrics.setup_extra_metrics(metric_names)
+        pat_metrics, recomputation = compute_patient_extra_metrics(metrics, classes.index(c), optimal_values[1],
+                                                    SharedResources.getInstance().validation_metric_names)
+        if recomputation:
+            metrics.set_optimal_class_extra_metrics(classes.index(c), optimal_values[1], pat_metrics)
+
+        result = [p, c, thr_to_match, pat_metrics, recomputation] 
+    except Exception as e:
+        logging.error(f"Computing extra metrics for patient {metrics.patient_id} failed with: {e}.\n{traceback.format_exc()}")
+    finally:
+        return result
