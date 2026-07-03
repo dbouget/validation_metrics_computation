@@ -41,5 +41,7 @@ def main():
 
 if __name__ == "__main__":
     logging.info("Internal main call.\n")
+    import matplotlib
+    matplotlib.use("Agg")
     main()
 
