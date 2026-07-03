@@ -158,6 +158,15 @@ jobs:
               pip install pytest pytest-cov pytest-timeout requests
               pytest -vvv --cov=raidionicsval ${{github.workspace}}/tests/generic_tests --cov-report=xml --timeout=1000 --log-cli-level=INFO
 
+        - name: Upload integration test results
+          if: failure()
+          uses: actions/upload-artifact@v7
+          with:
+            name: integration-test-results-${{ matrix.os }}-py${{ matrix.python-version }}
+            path: tests/unit_tests_results_dir/
+            if-no-files-found: ignore
+            retention-days: 1
+
         - name: Upload coverage to Codecov
           if: ${{ matrix.os == 'ubuntu-22.04' && matrix.python-version == '3.11' }}
           uses: codecov/codecov-action@v6

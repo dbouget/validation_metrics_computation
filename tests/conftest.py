@@ -13,6 +13,7 @@ def test_dir():
     if not os.listdir(test_dir):
         download_resources(test_dir=test_dir)
     yield test_dir
-    logging.info(f"Removing the temporary directory for tests.")
-    if os.path.exists(test_dir):
-        shutil.rmtree(test_dir)
+    if os.environ.get("GITHUB_ACTIONS") != "true":  # Allowing to collect the folder content as an artifact if the test failed in the CI
+        logging.info(f"Removing the temporary directory for tests.")
+        if os.path.exists(test_dir):
+            shutil.rmtree(test_dir)
