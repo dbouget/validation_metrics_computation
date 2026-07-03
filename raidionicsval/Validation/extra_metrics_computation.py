@@ -99,8 +99,7 @@ def compute_patient_extra_metrics(patient_object, class_index, optimal_threshold
                 pool.close()
                 pool.join()
             except Exception as e:
-                print("Issue computing metrics for patient {} in the multiprocessing loop.".format(patient_object.unique_id))
-                print(traceback.format_exc())
+                logging.error(f"Issue computing metrics for patient {patient_object.unique_id} in the multiprocessing loop. Collected {e}\n{traceback.format_exc()}")
         else:
             for metric in metrics:
                 try:
@@ -111,8 +110,7 @@ def compute_patient_extra_metrics(patient_object, class_index, optimal_threshold
                                                                  det_spacing=det_input_specs[1])
                     extra_metrics_results.append([metric, metric_value])
                 except Exception as e:
-                    print('Issue computing metric {} for patient {}'.format(metric, patient_object.unique_id))
-                    print(traceback.format_exc())
+                    logging.error(f'Issue computing metric {metric} for patient {patient_object.unique_id}. Collected {e}\n{traceback.format_exc()}')
         extra_metrics_results = [[f'PiW {x[0]}', x[1]] for x in extra_metrics_results]
 
         if "objectwise" in SharedResources.getInstance().validation_metric_spaces:
@@ -179,8 +177,7 @@ def compute_patient_extra_metrics(patient_object, class_index, optimal_threshold
                                                                                  det_spacing=det_input_specs[1])
                                     instance_results.append([metric, metric_value])
                                 except Exception as e:
-                                    print('Issue computing metric {} for patient {}'.format(metric, patient_object.unique_id))
-                                    print(traceback.format_exc())
+                                    logging.error(f'Issue computing metric {metric} for patient {patient_object.unique_id}. Collected {e} \n {traceback.format_exc()}')
                         all_instance_results.append(instance_results)
 
             if len(all_instance_results) != 0:
@@ -245,160 +242,162 @@ def parallel_metric_computation(args):
 
 def compute_specific_metric_value(metric, gt, detection, tp, tn, fp, fn, gt_spacing, det_spacing):
     metric_value = None
-    if metric == 'VS':
-        metric_value = math.inf
-        den = (2 * tp) + fp + fn
-        if den != 0:
-            metric_value = 1 - ((abs(fn - fp)) / ((2 * tp) + fp + fn))
-    elif metric == 'GCE':
-        if (tp + fn) != 0 and (tn + fp) != 0 and (tp + fp) != 0 and (tn + fn) != 0:
-            param11 = (fn * (fn + (2 * tp))) / (tp + fn)
-            param12 = (fp * (fp + (2 * tn))) / (tn + fp)
-            param21 = (fp * (fp + (2 * tp))) / (tp + fp)
-            param22 = (fn * (fn + (2 * tn))) / (tn + fn)
-            # metric_value = (1 / np.prod(gt_ni_header.get_data_shape()[0:3])) * min(param11 + param12, param21 + param22)
-            metric_value = (1 / np.prod(gt.shape)) * min(param11 + param12, param21 + param22)
-        else:
+    try:
+        if metric == 'VS':
             metric_value = math.inf
-    elif metric == 'MI':
-        metric_value = normalized_mutual_info_score(gt.flatten(), detection.flatten())
-    elif metric == 'RI':
-        metric_value = 0.
-        a = 0.5 * ((tp * (tp - 1)) + (fp * (fp - 1)) + (tn * (tn - 1)) + (fn * (fn - 1)))
-        b = 0.5 * ((math.pow(tp + fn, 2) + math.pow(tn + fp, 2)) - (math.pow(tp, 2) + math.pow(tn, 2) + math.pow(fp, 2) + math.pow(fn, 2)))
-        c = 0.5 * ((math.pow(tp + fp, 2) + math.pow(tn + fn, 2)) - (math.pow(tp, 2) + math.pow(tn, 2) + math.pow(fp, 2) + math.pow(fn, 2)))
-        # d = np.prod(gt_ni_header.get_data_shape()[0:3]) * (np.prod(gt_ni_header.get_data_shape()[0:3]) - 1) / 2 - (a + b + c)
-        d = np.prod(gt.shape) * (np.prod(gt.shape) - 1) / 2 - (a + b + c)
-        num = a + b
-        den = a + b + c + d
-        if den != 0:
-            metric_value = num / den
-    elif metric == 'ARI':
-        metric_value = 0.
-        a = 0.5 * ((tp * (tp - 1)) + (fp * (fp - 1)) + (tn * (tn - 1)) + (fn * (fn - 1)))
-        b = 0.5 * ((math.pow(tp + fn, 2) + math.pow(tn + fp, 2)) - (math.pow(tp, 2) + math.pow(tn, 2) + math.pow(fp, 2) + math.pow(fn, 2)))
-        c = 0.5 * ((math.pow(tp + fp, 2) + math.pow(tn + fn, 2)) - (math.pow(tp, 2) + math.pow(tn, 2) + math.pow(fp, 2) + math.pow(fn, 2)))
-        # d = np.prod(gt_ni_header.get_data_shape()[0:3]) * (np.prod(gt_ni_header.get_data_shape()[0:3]) - 1) / 2 - (a + b + c)
-        d = np.prod(gt.shape) * (np.prod(gt.shape) - 1) / 2 - (a + b + c)
-        num = 2 * (a * d - b * c)
-        den = math.pow(c, 2) + math.pow(b, 2) + 2 * a * d + (a + d) * (c + b)
-        if den != 0:
-            metric_value = num / den
-    elif metric == 'VOI':
-        fn_tp = fn + tp
-        fp_tp = fp + tp
-        # total = np.prod(gt_ni_header.get_data_shape()[0:3])
-        total = np.prod(gt.shape)
+            den = (2 * tp) + fp + fn
+            if den != 0:
+                metric_value = 1 - ((abs(fn - fp)) / ((2 * tp) + fp + fn))
+        elif metric == 'GCE':
+            if (tp + fn) != 0 and (tn + fp) != 0 and (tp + fp) != 0 and (tn + fn) != 0:
+                param11 = (fn * (fn + (2 * tp))) / (tp + fn)
+                param12 = (fp * (fp + (2 * tn))) / (tn + fp)
+                param21 = (fp * (fp + (2 * tp))) / (tp + fp)
+                param22 = (fn * (fn + (2 * tn))) / (tn + fn)
+                # metric_value = (1 / np.prod(gt_ni_header.get_data_shape()[0:3])) * min(param11 + param12, param21 + param22)
+                metric_value = (1 / np.prod(gt.shape)) * min(param11 + param12, param21 + param22)
+            else:
+                metric_value = math.inf
+        elif metric == 'MI':
+            metric_value = normalized_mutual_info_score(gt.flatten(), detection.flatten())
+        elif metric == 'RI':
+            metric_value = 0.
+            a = 0.5 * ((tp * (tp - 1)) + (fp * (fp - 1)) + (tn * (tn - 1)) + (fn * (fn - 1)))
+            b = 0.5 * ((math.pow(tp + fn, 2) + math.pow(tn + fp, 2)) - (math.pow(tp, 2) + math.pow(tn, 2) + math.pow(fp, 2) + math.pow(fn, 2)))
+            c = 0.5 * ((math.pow(tp + fp, 2) + math.pow(tn + fn, 2)) - (math.pow(tp, 2) + math.pow(tn, 2) + math.pow(fp, 2) + math.pow(fn, 2)))
+            # d = np.prod(gt_ni_header.get_data_shape()[0:3]) * (np.prod(gt_ni_header.get_data_shape()[0:3]) - 1) / 2 - (a + b + c)
+            d = np.prod(gt.shape) * (np.prod(gt.shape) - 1) / 2 - (a + b + c)
+            num = a + b
+            den = a + b + c + d
+            if den != 0:
+                metric_value = num / den
+        elif metric == 'ARI':
+            metric_value = 0.
+            a = 0.5 * ((tp * (tp - 1)) + (fp * (fp - 1)) + (tn * (tn - 1)) + (fn * (fn - 1)))
+            b = 0.5 * ((math.pow(tp + fn, 2) + math.pow(tn + fp, 2)) - (math.pow(tp, 2) + math.pow(tn, 2) + math.pow(fp, 2) + math.pow(fn, 2)))
+            c = 0.5 * ((math.pow(tp + fp, 2) + math.pow(tn + fn, 2)) - (math.pow(tp, 2) + math.pow(tn, 2) + math.pow(fp, 2) + math.pow(fn, 2)))
+            # d = np.prod(gt_ni_header.get_data_shape()[0:3]) * (np.prod(gt_ni_header.get_data_shape()[0:3]) - 1) / 2 - (a + b + c)
+            d = np.prod(gt.shape) * (np.prod(gt.shape) - 1) / 2 - (a + b + c)
+            num = 2 * (a * d - b * c)
+            den = math.pow(c, 2) + math.pow(b, 2) + 2 * a * d + (a + d) * (c + b)
+            if den != 0:
+                metric_value = num / den
+        elif metric == 'VOI':
+            fn_tp = fn + tp
+            fp_tp = fp + tp
+            # total = np.prod(gt_ni_header.get_data_shape()[0:3])
+            total = np.prod(gt.shape)
 
-        if fn_tp == 0 or (fn_tp / total) == 1 or fp_tp == 0 or (fp_tp / total) == 1:
+            if fn_tp == 0 or (fn_tp / total) == 1 or fp_tp == 0 or (fp_tp / total) == 1:
+                metric_value = math.inf
+            else:
+                h1 = -((fn_tp / total) * math.log2(fn_tp / total) + (1 - fn_tp / total) * math.log2(1 - fn_tp / total))
+                h2 = -((fp_tp / total) * math.log2(fp_tp / total) + (1 - fp_tp / total) * math.log2(1 - fp_tp / total))
+
+                p00 = 1 if tn == 0 else (tn / total)
+                p01 = 1 if fn == 0 else (fn / total)
+                p10 = 1 if fp == 0 else (fp / total)
+                p11 = 1 if tp == 0 else (tp / total)
+
+                h12 = -((tn / total) * math.log2(p00) + (fn / total) * math.log2(p01) + (fp / total) * math.log2(p10) + (tp / total) * math.log2(p11))
+                mi = h1 + h2 - h12
+                metric_value = h1 + h2 - (2 * mi)
+        elif metric == 'Jaccard':
+            metric_value = jaccard_score(gt.flatten(), detection.flatten())
+        elif metric == 'IOU':
             metric_value = math.inf
+            intersection = (gt == 1) & (detection == 1)
+            union = (gt == 1) | (detection == 1)
+            if np.count_nonzero(union) != 0:
+                metric_value = np.count_nonzero(intersection) / np.count_nonzero(union)
+        elif metric == 'TPR':
+            metric_value = math.inf
+            if (tp + fn) != 0:
+                metric_value = tp / (tp + fn)
+        elif metric == 'TNR':
+            metric_value = math.inf
+            if (tn + fp) != 0:
+                metric_value = tn / (tn + fp)
+        elif metric == 'FPR':
+            metric_value = math.inf
+            if (fp + tn) != 0:
+                metric_value = fp / (fp + tn)
+        elif metric == 'FNR':
+            metric_value = math.inf
+            if (fn + tp) != 0:
+                metric_value = fn / (fn + tp)
+        elif metric == 'PPV':
+            metric_value = math.inf
+            if (tp + fp) != 0:
+                metric_value = tp / (tp + fp)
+        elif metric == 'AUC':
+            metric_value = math.inf
+            if len(np.unique(gt)) > 1:  # ROC AUC score is not defined if only class is present in y_true
+                metric_value = roc_auc_score(gt.flatten(), detection.flatten())
+        elif metric == 'MCC':
+            metric_value = math.inf
+            num = (tp * tn) - (fp * fn)
+            den = math.sqrt((tp + fp) * (tp + fn) * (tn + fp) * (tn + fn))
+            if den != 0:
+                metric_value = num / den
+        elif metric == 'CKS':
+            metric_value = cohen_kappa_score(gt.flatten(), detection.flatten())
+        elif metric == 'HD95':
+            metric_value = math.inf
+            if np.max(gt) == 1 and np.max(detection) == 1:  # Computation does not work if no binary object in the array
+                metric_value = compute_hd95(detection, gt, voxelspacing=det_spacing, connectivity=1)
+        elif metric == 'ASSD':
+            metric_value = math.inf
+            if np.max(gt) == 1 and np.max(detection) == 1:  # Computation does not work if no binary object in the array
+                metric_value = compute_assd(detection, gt, voxel_spacing=det_spacing)
+        elif metric == 'OASSD':
+            metric_value = math.inf
+            if np.max(gt) == 1 and np.max(detection) == 1:  # Computation does not work if no binary object in the array
+                metric_value = compute_object_assd(detection, gt, voxel_spacing=det_spacing)
+        elif metric == 'RAVD':
+            metric_value = math.inf
+            if np.max(gt) == 1 and np.max(detection) == 1:  # Computation does not work if no binary object in the array
+                metric_value = compute_ravd(detection, gt)
+        elif metric == 'VC':
+            metric_value = math.inf
+            if np.max(gt) == 1 and np.max(detection) == 1:  # Computation does not work if no binary object in the array
+                metric_value, pval = compute_volume_correlation(detection, gt)
+        elif metric == 'MahaD':
+            metric_value = math.inf
+            gt_n = np.count_nonzero(detection)
+            seg_n = np.count_nonzero(gt)
+
+            if gt_n != 0 and seg_n != 0:
+                gt_indices = np.flip(np.where(gt == 1), axis=0)
+                gt_mean = gt_indices.mean(axis=1)
+                gt_cov = np.cov(gt_indices)
+
+                seg_indices = np.flip(np.where(detection == 1), axis=0)
+                seg_mean = seg_indices.mean(axis=1)
+                seg_cov = np.cov(seg_indices)
+
+                # calculate common covariance matrix
+                common_cov = (gt_n * gt_cov + seg_n * seg_cov) / (gt_n + seg_n)
+                common_cov_inv = np.linalg.inv(common_cov)
+
+                mean = gt_mean - seg_mean
+                metric_value = math.sqrt(mean.dot(common_cov_inv).dot(mean.T))
+        elif metric == 'ProbD':
+            # metric_value = -1.
+            metric_value = math.inf
+            gt_flat = gt.flatten().astype(np.int8)
+            det_flat = detection.flatten().astype(np.int8)
+
+            probability_difference = np.absolute(gt_flat - det_flat).sum()
+            probability_joint = (gt_flat * det_flat).sum()
+
+            if probability_joint != 0:
+                metric_value = probability_difference / (2. * probability_joint)
         else:
-            h1 = -((fn_tp / total) * math.log2(fn_tp / total) + (1 - fn_tp / total) * math.log2(1 - fn_tp / total))
-            h2 = -((fp_tp / total) * math.log2(fp_tp / total) + (1 - fp_tp / total) * math.log2(1 - fp_tp / total))
-
-            p00 = 1 if tn == 0 else (tn / total)
-            p01 = 1 if fn == 0 else (fn / total)
-            p10 = 1 if fp == 0 else (fp / total)
-            p11 = 1 if tp == 0 else (tp / total)
-
-            h12 = -((tn / total) * math.log2(p00) + (fn / total) * math.log2(p01) + (fp / total) * math.log2(p10) + (tp / total) * math.log2(p11))
-            mi = h1 + h2 - h12
-            metric_value = h1 + h2 - (2 * mi)
-    elif metric == 'Jaccard':
-        metric_value = jaccard_score(gt.flatten(), detection.flatten())
-    elif metric == 'IOU':
-        metric_value = math.inf
-        intersection = (gt == 1) & (detection == 1)
-        union = (gt == 1) | (detection == 1)
-        if np.count_nonzero(union) != 0:
-            metric_value = np.count_nonzero(intersection) / np.count_nonzero(union)
-    elif metric == 'TPR':
-        metric_value = math.inf
-        if (tp + fn) != 0:
-            metric_value = tp / (tp + fn)
-    elif metric == 'TNR':
-        metric_value = math.inf
-        if (tn + fp) != 0:
-            metric_value = tn / (tn + fp)
-    elif metric == 'FPR':
-        metric_value = math.inf
-        if (fp + tn) != 0:
-            metric_value = fp / (fp + tn)
-    elif metric == 'FNR':
-        metric_value = math.inf
-        if (fn + tp) != 0:
-            metric_value = fn / (fn + tp)
-    elif metric == 'PPV':
-        metric_value = math.inf
-        if (tp + fp) != 0:
-            metric_value = tp / (tp + fp)
-    elif metric == 'AUC':
-        metric_value = math.inf
-        if len(np.unique(gt)) > 1:  # ROC AUC score is not defined if only class is present in y_true
-            metric_value = roc_auc_score(gt.flatten(), detection.flatten())
-    elif metric == 'MCC':
-        metric_value = math.inf
-        num = (tp * tn) - (fp * fn)
-        den = math.sqrt((tp + fp) * (tp + fn) * (tn + fp) * (tn + fn))
-        if den != 0:
-            metric_value = num / den
-    elif metric == 'CKS':
-        metric_value = cohen_kappa_score(gt.flatten(), detection.flatten())
-    elif metric == 'HD95':
-        metric_value = math.inf
-        if np.max(gt) == 1 and np.max(detection) == 1:  # Computation does not work if no binary object in the array
-            metric_value = compute_hd95(detection, gt, voxelspacing=det_spacing, connectivity=1)
-    elif metric == 'ASSD':
-        metric_value = math.inf
-        if np.max(gt) == 1 and np.max(detection) == 1:  # Computation does not work if no binary object in the array
-            metric_value = compute_assd(detection, gt, voxel_spacing=det_spacing)
-    elif metric == 'OASSD':
-        metric_value = math.inf
-        if np.max(gt) == 1 and np.max(detection) == 1:  # Computation does not work if no binary object in the array
-            metric_value = compute_object_assd(detection, gt, voxel_spacing=det_spacing)
-    elif metric == 'RAVD':
-        metric_value = math.inf
-        if np.max(gt) == 1 and np.max(detection) == 1:  # Computation does not work if no binary object in the array
-            metric_value = compute_ravd(detection, gt)
-    elif metric == 'VC':
-        metric_value = math.inf
-        if np.max(gt) == 1 and np.max(detection) == 1:  # Computation does not work if no binary object in the array
-            metric_value, pval = compute_volume_correlation(detection, gt)
-    elif metric == 'MahaD':
-        metric_value = math.inf
-        gt_n = np.count_nonzero(detection)
-        seg_n = np.count_nonzero(gt)
-
-        if gt_n != 0 and seg_n != 0:
-            gt_indices = np.flip(np.where(gt == 1), axis=0)
-            gt_mean = gt_indices.mean(axis=1)
-            gt_cov = np.cov(gt_indices)
-
-            seg_indices = np.flip(np.where(detection == 1), axis=0)
-            seg_mean = seg_indices.mean(axis=1)
-            seg_cov = np.cov(seg_indices)
-
-            # calculate common covariance matrix
-            common_cov = (gt_n * gt_cov + seg_n * seg_cov) / (gt_n + seg_n)
-            common_cov_inv = np.linalg.inv(common_cov)
-
-            mean = gt_mean - seg_mean
-            metric_value = math.sqrt(mean.dot(common_cov_inv).dot(mean.T))
-    elif metric == 'ProbD':
-        # metric_value = -1.
-        metric_value = math.inf
-        gt_flat = gt.flatten().astype(np.int8)
-        det_flat = detection.flatten().astype(np.int8)
-
-        probability_difference = np.absolute(gt_flat - det_flat).sum()
-        probability_joint = (gt_flat * det_flat).sum()
-
-        if probability_joint != 0:
-            metric_value = probability_difference / (2. * probability_joint)
-    else:
-        logging.warning("Metric with name {} has not been implemented!".format(metric))
-    return metric_value
-
+            logging.warning("Metric with name {} has not been implemented!".format(metric))
+        return metric_value
+    except Exception as e:
+        raise ValueError(f"Computing {metric} failed with {e}") from e
 
 def compute_overall_metrics_correlation(input_folder, output_folder, data=None, class_name=None,
                                         best_threshold=0.5, best_overlap=0.0, suffix=None):

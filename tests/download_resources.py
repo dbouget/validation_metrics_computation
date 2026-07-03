@@ -23,7 +23,7 @@ def download_resources(test_dir: str):
                     f.write(chunk)
         with zipfile.ZipFile(archive_dl_dest, 'r') as zip_ref:
             zip_ref.extractall(dest_dir)
-
+        os.remove(archive_dl_dest)
     except Exception as e:
         logging.error(f"Error during input data download with: {e} \n {traceback.format_exc()}\n")
         if os.path.exists(dest_dir):
