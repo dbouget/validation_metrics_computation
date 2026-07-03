@@ -494,7 +494,7 @@ class ModelValidation:
         classes = SharedResources.getInstance().validation_class_names
         for c in classes:
             optimal_values = class_optimal[c]['All']
-            if len(SharedResources.getInstance().validation_metric_names) < 10:
+            if len(SharedResources.getInstance().validation_metric_names) < 10 and SharedResources.getInstance().number_processes != 1:
                 batch_results =[] 
                 args_list = [(p, self.patients_metrics[p], c, classes, optimal_values, SharedResources.getInstance().validation_metric_names) for p in self.patients_metrics]
                 with ProcessPoolExecutor(max_workers=SharedResources.getInstance().number_processes) as executor:
@@ -535,10 +535,14 @@ class ModelValidation:
                         continue
                     finally:
                         if recomputation:
+                            logging.debug("Updating the database with extra metrics results patient-wise")
                             self.conn.commit()
+                        else:
+                            logging.debug("Skipping extra metrics recomputation")
 
     def __update_database(self, batch_results):
         try:
+            logging.debug("Updating the database with extra metrics results batch-wise")
             cursor = self.conn.cursor()
             for results in batch_results:
                 p = results[0]
