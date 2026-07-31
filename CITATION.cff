@@ -1,0 +1,106 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite both of the following references."
+title: "Raidionics backend for validation and metrics computation"
+type: software
+url: "https://github.com/dbouget/validation_metrics_computation"
+license: BSD-2-Clause
+authors:
+  - family-names: Bouget
+    given-names: David
+  - family-names: Pedersen
+    given-names: André
+  - family-names: Solheim
+    given-names: Ole
+  - family-names: Reinertsen
+    given-names: Ingerid
+preferred-citation:
+  type: article
+  title: "Preoperative Brain Tumor Imaging: Models and Software for Segmentation and Standardized Reporting"
+  authors:
+    - family-names: Bouget
+      given-names: David
+    - family-names: Pedersen
+      given-names: André
+    - family-names: Jakola
+      given-names: "Asgeir S."
+    - family-names: Kavouridis
+      given-names: Vasileios
+    - family-names: Emblem
+      given-names: "Kyrre E."
+    - family-names: Eijgelaar
+      given-names: "Roelant S."
+    - family-names: Kommers
+      given-names: Ivar
+    - family-names: Ardon
+      given-names: Hilko
+    - family-names: Barkhof
+      given-names: Frederik
+    - family-names: Bello
+      given-names: Lorenzo
+    - family-names: Berger
+      given-names: "Mitchel S."
+    - family-names: Conti Nibali
+      given-names: Marco
+    - family-names: Furtner
+      given-names: Julia
+    - family-names: Hervey-Jumper
+      given-names: Shawn
+    - family-names: Idema
+      given-names: "Albert J. S."
+    - family-names: Kiesel
+      given-names: Barbara
+    - family-names: Kloet
+      given-names: Alfred
+    - family-names: Mandonnet
+      given-names: Emmanuel
+    - family-names: Müller
+      given-names: "Domenique M. J."
+    - family-names: Robe
+      given-names: "Pierre A."
+    - family-names: Rossi
+      given-names: Marco
+    - family-names: Sciortino
+      given-names: Tommaso
+    - family-names: Van den Brink
+      given-names: "Wimar A."
+    - family-names: Wagemakers
+      given-names: Michiel
+    - family-names: Widhalm
+      given-names: Georg
+    - family-names: Witte
+      given-names: "Marnix G."
+    - family-names: Zwinderman
+      given-names: "Aeilko H."
+    - family-names: De Witt Hamer
+      given-names: "Philip C."
+    - family-names: Solheim
+      given-names: Ole
+    - family-names: Reinertsen
+      given-names: Ingerid
+  journal: "Frontiers in Neurology"
+  volume: 13
+  year: 2022
+  doi: "10.3389/fneur.2022.932219"
+  issn: "1664-2295"
+references:
+  - type: article
+    title: "Raidionics: an open software for pre-and postoperative central nervous system tumor segmentation and standardized reporting"
+    authors:
+      - family-names: Bouget
+        given-names: David
+      - family-names: Alsinan
+        given-names: Demah
+      - family-names: Gaitan
+        given-names: Valeria
+      - family-names: Holden Helland
+        given-names: Ragnhild
+      - family-names: Pedersen
+        given-names: André
+      - family-names: Solheim
+        given-names: Ole
+      - family-names: Reinertsen
+        given-names: Ingerid
+    journal: "Scientific Reports"
+    volume: 13
+    year: 2023
+    doi: "10.1038/s41598-023-42048-7"
