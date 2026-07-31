@@ -221,6 +221,9 @@ class InstanceSegmentationValidation:
                     dice_matrix[g, d] = 0.
         cost_matrix = -dice_matrix
         gt_inds, pred_inds = linear_sum_assignment(cost_matrix)
+        # @TODO. The 0.1 threshold here should be linked to the config file parameter (detection_overlap_thresholds).
+        # Performing such decoupling would require either enforing a single threshold per run, or extending the results with an extra column
+        # and save all OW results per threshold.
         matches = [(i, j) for i, j in zip(gt_inds, pred_inds) if dice_matrix[i, j] > 0.1]
         for m in matches:
             self.matching_results.append([m[0] + 1, m[1] + 1, dice_matrix[m[0], m[1]]])

@@ -2,13 +2,14 @@ import multiprocessing
 import itertools
 import logging
 import os.path
-import time
 import traceback
-
+import sqlite3
+import csv
 import pandas as pd
 from math import ceil
-
+from functools import partial
 from tqdm import tqdm
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 
 from ..Computation.dice_computation_instance import separate_dice_computation
 from ..Validation.instance_segmentation_validation import *
@@ -54,13 +55,24 @@ class ModelValidation:
         if len(SharedResources.getInstance().validation_metric_names) != 0:
             logging.info("Computing extra metrics for cohort.")
             self.__compute_extra_metrics(class_optimal=class_optimal)
+            logging.info("Re-exporting results to CSV with extra metrics...")
+            self.__sqlite_to_csv("total_results", self.dice_output_filename)
+            for c in SharedResources.getInstance().validation_class_names:
+                self.__sqlite_to_csv(f"class_{c}", self.class_dice_output_filenames[c])
+                
+        # Read all extra metric columns actually present in the CSV, not just the ones from the current config.        
+        tmp = pd.read_csv(self.dice_output_filename)
+        all_extra_metric_names = [col for col in tmp.columns if col not in self.results_df_fixed_columns]
+            
         logging.info("Computing average metrics for the cohort.")
         # All
-        compute_fold_average(self.output_folder, class_optimal=class_optimal, metrics=self.metric_names, condition='All')
+        compute_fold_average(self.output_folder, class_optimal=class_optimal, metrics=all_extra_metric_names, condition='All')
         # Positive, based on given ground truth volume limit
-        compute_fold_average(self.output_folder, class_optimal=class_optimal, metrics=self.metric_names, condition='Positive')
+        compute_fold_average(self.output_folder, class_optimal=class_optimal, metrics=all_extra_metric_names, condition='Positive')
         # True positive, based on given detection_overlap_thresholds
-        compute_fold_average(self.output_folder, class_optimal=class_optimal, metrics=self.metric_names, condition='TP')
+        compute_fold_average(self.output_folder, class_optimal=class_optimal, metrics=all_extra_metric_names, condition='TP')
+
+        self.conn.close()
 
     def __compute_metrics(self):
         """
@@ -71,54 +83,86 @@ class ModelValidation:
         :return:
         """
         cross_validation_description_file = os.path.join(self.input_folder, 'cross_validation_folds.txt')
-        self.results_df = []
-        self.class_results_df = {}
         self.dice_output_filename = os.path.join(self.output_folder, 'all_dice_scores.csv')
         self.class_dice_output_filenames = {}
         for c in SharedResources.getInstance().validation_class_names:
             self.class_dice_output_filenames[c] = os.path.join(self.output_folder, c + '_dice_scores.csv')
-            self.class_results_df[c] = []
-        self.results_df_base_columns = ['Fold', 'Patient', 'Threshold']
-        self.results_df_base_columns.extend(["PiW Dice", "PiW Recall", "PiW Precision", "PiW F1"])
+
+        # Define the column schema shared by all result tables
+        self.results_df_fixed_columns = ['Fold', 'Patient', 'Threshold']
+        self.results_df_fixed_columns.extend(["PiW Dice", "PiW Recall", "PiW Precision", "PiW F1"])
         # self.results_df_base_columns.extend(["PaW Dice", "PaW Recall", "PaW Precision", "PaW F1"])
-        self.results_df_base_columns.extend(["GT volume (ml)", "True Positive", "Detection volume (ml)"])
-        self.results_df_base_columns.extend(["OW Global Recall", "OW Global Precision", "OW Global F1", "OW Dice",
+        self.results_df_fixed_columns.extend(["GT volume (ml)", "True Positive", "Detection volume (ml)"])
+        self.results_df_fixed_columns.extend(["OW Global Recall", "OW Global Precision", "OW Global F1", "OW Dice",
                                              "OW Dice (std)", "OW Recall", "OW Recall (std)", "OW Precision",
                                              "OW Precision (std)", "OW F1", "OW F1 (std)", '#GT', '#Det'])
-        # For each extra metric, adding a pixelwise (PiW) and objectwise (OW) version of it!
-        # extra_metrics = []
-        # for m in SharedResources.getInstance().validation_metric_names:
-        #     extra_metrics.extend([f'PiW {m}', f'OW {m}'])
-        self.results_df_base_columns.extend(self.metric_names)
-        # self.results_df_base_columns.extend(SharedResources.getInstance().validation_metric_names)
+        self.results_df_base_columns = self.results_df_fixed_columns + self.metric_names
 
-        if not os.path.exists(self.dice_output_filename):
-            self.results_df = pd.DataFrame(columns=self.results_df_base_columns)
-        else:
-            self.results_df = pd.read_csv(self.dice_output_filename)
-            if self.results_df.columns[0] != 'Fold':
-                self.results_df = pd.read_csv(self.dice_output_filename, index_col=0)
-            missing_metrics = [x for x in SharedResources.getInstance().validation_metric_names if
-                               not x in list(self.results_df.columns)[1:]]
-            for m in missing_metrics:
-                self.results_df[m] = None
+        # Connect to SQLite database
+        # WAL mode ensures crash-safe writes
+        self.db_path = os.path.join(self.output_folder, "results.db")
+        self.conn = sqlite3.connect(self.db_path)
+        self.conn.execute("PRAGMA journal_mode=WAL;")
+        cursor = self.conn.cursor()
 
-        for c in SharedResources.getInstance().validation_class_names:
-            if not os.path.exists(self.class_dice_output_filenames[c]):
-                self.class_results_df[c] = pd.DataFrame(columns=self.results_df_base_columns)
-            else:
-                self.class_results_df[c] = pd.read_csv(self.class_dice_output_filenames[c])
-                if self.class_results_df[c].columns[0] != 'Fold':
-                    self.class_results_df[c] = pd.read_csv(self.class_dice_output_filenames[c], index_col=0)
+        # Initialize or resume the total_results table
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='total_results'")
+        if cursor.fetchone() is None:
+            # First run: seed from existing CSV if available, otherwise start empty
+            if os.path.exists(self.dice_output_filename):
+                results_df = pd.read_csv(self.dice_output_filename)
+                if results_df.columns[0] != 'Fold':
+                    results_df = pd.read_csv(self.dice_output_filename, index_col=0)
                 missing_metrics = [x for x in self.metric_names if
-                                   not x in list(self.class_results_df[c].columns)[1:]]
+                                not x in list(results_df.columns)[1:]]
                 for m in missing_metrics:
-                    self.class_results_df[c][m] = None
+                    results_df[m] = None
+            else:
+                results_df = pd.DataFrame(columns=self.results_df_base_columns)
+                
+            results_df.to_sql("total_results", self.conn, if_exists="replace", index=False)
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_total_search ON total_results ([Patient], [Fold], [Threshold]);")
+            self.conn.commit()
+        else:
+            logging.info("Existing database found, resuming from SQL...")
+            if not os.path.exists(self.dice_output_filename):
+                self.__sqlite_to_csv("total_results", self.dice_output_filename)
 
-        self.results_df['Patient'] = self.results_df.Patient.astype(str)
+        # Initialize or resume per-class tables
         for c in SharedResources.getInstance().validation_class_names:
-            self.class_results_df[c]['Patient'] = self.class_results_df[c].Patient.astype(str)
+            table_name = f"class_{c}"
+            cursor.execute(f"SELECT name FROM sqlite_master WHERE type='table' AND name='{table_name}'")
 
+            if cursor.fetchone() is None:
+                if not os.path.exists(self.class_dice_output_filenames[c]):
+                    class_df = pd.DataFrame(columns=self.results_df_base_columns)
+                else:
+                    class_df = pd.read_csv(self.class_dice_output_filenames[c])
+                    if class_df.columns[0] != 'Fold':
+                        class_df = pd.read_csv(self.class_dice_output_filenames[c], index_col=0)
+                    missing_metrics = [x for x in self.metric_names if
+                                    x not in list(class_df.columns)[1:]]
+                    for m in missing_metrics:
+                        class_df[m] = None
+                    
+                class_df.to_sql(table_name, self.conn, if_exists="replace", index=False)
+                cursor.execute(f"CREATE INDEX IF NOT EXISTS idx_class_{c} ON [{table_name}] ([Patient], [Fold], [Threshold]);")
+                self.conn.commit()
+            else:
+                logging.info(f"Existing table found for class {c}, resuming from SQL...")
+                if not os.path.exists(self.class_dice_output_filenames[c]):
+                    self.__sqlite_to_csv(f"class_{c}", self.class_dice_output_filenames[c])
+
+        # Add any missing extra metric columns to all tables (e.g. when new metrics are added after initial run)
+        for metric_name in self.metric_names:
+            for table in ["total_results"] + [f"class_{c}" for c in SharedResources.getInstance().validation_class_names]:
+                try:
+                    cursor.execute(f"ALTER TABLE [{table}] ADD COLUMN [{metric_name}] REAL")
+                    self.conn.commit()
+                except sqlite3.OperationalError:
+                    pass  # Column already exists
+
+        # Process each fold
         results_per_folds = []
         for fold in range(0, self.fold_number):
             logging.info(f'\nProcessing fold {fold+1}/{self.fold_number}.\n')
@@ -129,9 +173,15 @@ class ModelValidation:
             results = self.__compute_metrics_for_fold(data_list=test_set, fold_number=fold)
             results_per_folds.append(results)
 
+        logging.info("Exporting results to CSV...")
+        self.__sqlite_to_csv("total_results", self.dice_output_filename)
+        for c in SharedResources.getInstance().validation_class_names:
+            self.__sqlite_to_csv(f"class_{c}", self.class_dice_output_filenames[c])
+
     def __compute_metrics_for_fold(self, data_list, fold_number):
         if not os.path.exists(os.path.join(SharedResources.getInstance().validation_input_folder, "predictions", str(fold_number))):
             logging.warning(f"No predictions folder for fold {fold_number} -- Skipping!")
+            print(f"No predictions folder for fold {fold_number} -- Skipping!")
             return 0
 
         for i, patient in enumerate(tqdm(data_list)):
@@ -151,18 +201,19 @@ class ModelValidation:
                 # Placeholder for holding all metrics for the current patient
                 patient_metrics = PatientMetrics(id=uid, patient_id=pid, fold_number=fold_number,
                                                  class_names=SharedResources.getInstance().validation_class_names)
-                patient_metrics.init_from_file(self.output_folder)
-
+                
+                # Load any previously computed metrics from the database
+                patient_metrics.init_from_db(self.conn)
                 success = self.__identify_patient_files(patient_metrics, sub_folder_index, fold_number)
                 self.patients_metrics[uid] = patient_metrics
-
+                
                 # Checking if values have already been computed for the current patient to skip it if so.
                 if patient_metrics.is_complete():
                     continue
                 if not success:
                     print('Input files not found for patient {}\n'.format(uid))
                     continue
-
+                
                 self.__generate_dice_scores_for_patient(patient_metrics, fold_number)
             except Exception as e:
                 print('Issue processing patient {}\n'.format(uid))
@@ -320,25 +371,23 @@ class ModelValidation:
         uid = patient_metrics.patient_id
         classes = SharedResources.getInstance().validation_class_names
         nb_classes = len(classes)
-        patient_filenames = {}
         thr_range = np.arange(0.1, 1.1, 0.1)
+        cursor = self.conn.cursor()
 
         # Iterating over all classes, where independent files are expected
         for c in range(nb_classes):
             gt_filename, det_filename = patient_metrics.get_class_filenames(c)
-            # ground_truth_ni = nib.load(gt_filename)
-            # gt = ground_truth_ni.get_fdata()
-            # detection_ni = nib.load(det_filename)
             gt, _, gt_specs = open_image_file(gt_filename)
             detection, _, det_specs = open_image_file(det_filename)
             gt[gt >= 1] = 1
 
             class_tp_threshold = SharedResources.getInstance().validation_true_positive_volume_thresholds[c]
-            # gt_volume = np.count_nonzero(gt) * np.prod(ground_truth_ni.header.get_zooms()) * 1e-3
             gt_volume = np.count_nonzero(gt) * np.prod(det_specs[1]) * 1e-3
             tp_state = True if gt_volume > class_tp_threshold else False
             extra = [np.round(gt_volume, 4), tp_state, det_specs[1]]
             pat_results = []
+
+            # Compute Dice scores across all thresholds, using multiprocessing if configured
             if SharedResources.getInstance().number_processes > 1:
                 pool = multiprocessing.Pool(processes=SharedResources.getInstance().number_processes)
                 pat_results = pool.map(separate_dice_computation, zip(thr_range,
@@ -357,29 +406,37 @@ class ModelValidation:
                     pat_results.append(thr_res)
 
             patient_metrics.set_class_regular_metrics(classes[c], pat_results)
-            # Filling in the csv files on disk for faster resume
-            class_results_filename = self.class_dice_output_filenames[classes[c]]
+
+            # Write per-class results to the database
+            table_name = f"class_{classes[c]}"
+            columns = list(self.results_df_base_columns)
+
             for ind, th in enumerate(thr_range):
                 th = np.round(th, 2)
-                sub_df = self.class_results_df[classes[c]].loc[
-                    (self.class_results_df[classes[c]]['Patient'] == uid) & (self.class_results_df[classes[c]]['Fold'] == fold_number) & (
-                            self.class_results_df[classes[c]]['Threshold'] == th)]
-                # ind_values = np.asarray(pat_results[ind])
-                # buff_df = pd.DataFrame(ind_values.reshape(1, len(self.results_df_base_columns)),
-                #                        columns=list(self.results_df_base_columns))
-                if len(sub_df) == 0:
+
+                query = f"SELECT * from [{table_name}] where [Patient] = ? AND [Fold] = ? AND [Threshold] = ?"
+                cursor.execute(query, (str(uid), fold_number, th))
+                row = cursor.fetchone()
+
+                pat_res_tmp =[float(x) if isinstance(x, np.float32) else x for x in pat_results[ind][0]]
+                if row is None:
                     extra_metrics = [None] * 2 * len(SharedResources.getInstance().validation_metric_names)
-                    ind_values = np.asarray(pat_results[ind][0] + extra_metrics)
-                    buff_df = pd.DataFrame(ind_values.reshape(1, len(self.results_df_base_columns)),
-                                           columns=list(self.results_df_base_columns))
-                    # self.class_results_df[classes[c]] = self.class_results_df[classes[c]].append(buff_df,
-                    #                                                                              ignore_index=True)
-                    self.class_results_df[classes[c]] = pd.concat([self.class_results_df[classes[c]], buff_df],
-                                                                  ignore_index=True)
+                    ind_values = np.asarray(pat_res_tmp + extra_metrics)
+
+                    column_names_str = ", ".join([f"[{col}]" for col in columns])
+                    placeholders = ", ".join(["?"] * len(columns))
+
+                    insert_query = f"INSERT INTO {table_name} ({column_names_str}) VALUES ({placeholders})"
+                    cursor.execute(insert_query, tuple(ind_values))
+
                 else:
-                    ind_values = pat_results[ind][0] + list(self.class_results_df[classes[c]].loc[sub_df.index.values[0], :].values[len(pat_results[ind][0]):])
-                    self.class_results_df[classes[c]].loc[sub_df.index.values[0], :] = ind_values
-            self.class_results_df[classes[c]].to_csv(class_results_filename, index=False)
+                    ind_values = pat_res_tmp + list(row[len(pat_results[ind][0]):])
+                    set_clause = ", ".join([f"[{col}] = ?" for col in columns])
+                    update_query = f"UPDATE {table_name} SET {set_clause} WHERE [Patient] = ? AND [Fold] = ? AND [Threshold] = ?"
+                    cursor.execute(update_query, tuple(ind_values) + (uid, fold_number, th))
+                    
+            self.conn.commit()
+            
 
         # Should compute the class macro-average results if multiple classes
         class_averaged_results = None
@@ -391,49 +448,151 @@ class ModelValidation:
             if len(SharedResources.getInstance().validation_metric_names) != 0:
                 final_pat_class_res = [pat_class_results[x] + pat_class_extra_metrics[x] for x in range(len(thr_range))]
             class_results.append(final_pat_class_res)
-        class_averaged_results = np.average(np.asarray(class_results).astype('float32')[:, :, 1:], axis=0)
+        class_averaged_results = np.average(np.asarray(class_results).astype('float32')[:, :, 1:], axis=0).astype(float)
+        current_columns = pd.read_sql_query(f"SELECT * FROM {'total_results'} LIMIT 0", self.conn).columns.tolist()
 
-        # Filling in the csv files on disk for faster resume
         for ind, th in enumerate(thr_range):
             th = np.round(th, 2)
-            sub_df = self.results_df.loc[
-                (self.results_df['Patient'] == uid) & (self.results_df['Fold'] == fold_number) & (
-                            self.results_df['Threshold'] == th)]
-            # ind_values = np.asarray([fold_number, uid, np.round(th, 2)] + list(class_averaged_results[ind]))
-            # buff_df = pd.DataFrame(ind_values.reshape(1, len(self.results_df_base_columns)),
-            #                        columns=list(self.results_df_base_columns))
-            if len(sub_df) == 0:
-                ind_values = np.asarray([fold_number, uid, np.round(th, 2)] + list(class_averaged_results[ind]))
-                buff_df = pd.DataFrame(ind_values.reshape(1, len(self.results_df_base_columns)),
-                                       columns=list(self.results_df_base_columns))
-                # self.results_df = self.results_df.append(buff_df, ignore_index=True)
-                self.results_df = pd.concat([self.results_df, buff_df], ignore_index=True)
-            else:
-                ind_values = [fold_number, uid, np.round(th, 2)] + list(class_averaged_results[ind])
-                self.results_df.loc[sub_df.index.values[0], :] = ind_values
-        self.results_df.to_csv(self.dice_output_filename, index=False)
 
+            query = f"SELECT * from {'total_results'} where [Patient] = ? AND [Fold] = ? AND [Threshold] = ?"
+            cursor.execute(query, (str(uid), fold_number, th))
+
+            row = cursor.fetchone()
+
+            if row is None:
+                ind_values = [fold_number, uid, np.round(th, 2)] + list(class_averaged_results[ind])
+                # Pad with None if fewer values than columns (e.g. when extra metrics are missing)
+                if len(ind_values) < len(current_columns):
+                    ind_values += [None] * (len(current_columns) - len(ind_values))
+
+                column_names_str = ", ".join([f"[{col}]" for col in current_columns])
+                placeholders = ", ".join(["?"] * len(current_columns))
+                insert_query = f"INSERT INTO {'total_results'} ({column_names_str}) VALUES ({placeholders})"
+                cursor.execute(insert_query, tuple(ind_values))
+            else:
+                row_dict = dict(zip(current_columns, row))
+                new_values = [fold_number, uid, th] + list(class_averaged_results[ind])
+
+                for i, val in enumerate(new_values):
+                    if i < len(current_columns):
+                        row_dict[current_columns[i]] = float(val) if isinstance(val, np.float32) else val
+
+                ind_values = [row_dict.get(col, None) for col in current_columns]
+                set_clause = ", ".join([f"[{col}] = ?" for col in current_columns])
+
+                update_query = f"UPDATE {'total_results'} SET {set_clause} WHERE [Patient] = ? AND [Fold] = ? AND [Threshold] = ?"
+                cursor.execute(update_query, tuple(ind_values) + (str(uid), fold_number, np.round(th, 2)))
+
+        self.conn.commit()
+    
     def __compute_extra_metrics(self, class_optimal: dict = {}):
         """
-
+        Computes additional metrics at the optimal threshold for each class.
+        Results are written to both the per-class table and total_results in SQLite.
+        @TODO. Would need to properly compute metrics average over the different classes to fill in the total_results table (or just skip it).
         """
         classes = SharedResources.getInstance().validation_class_names
         for c in classes:
             optimal_values = class_optimal[c]['All']
-            for p in tqdm(self.patients_metrics):
-                try:
-                    # Initializing/completing the list which will hold the extra metrics
-                    self.patients_metrics[p].setup_extra_metrics(self.metric_names)
-                    pat_metrics = compute_patient_extra_metrics(self.patients_metrics[p], classes.index(c), optimal_values[1],
-                                                                SharedResources.getInstance().validation_metric_names)
-                    self.patients_metrics[p].set_optimal_class_extra_metrics(classes.index(c), optimal_values[1], pat_metrics)
+            if len(SharedResources.getInstance().validation_metric_names) < 10 and SharedResources.getInstance().number_processes != 1:
+                batch_results =[] 
+                args_list = [(p, self.patients_metrics[p], c, classes, optimal_values, SharedResources.getInstance().validation_metric_names) for p in self.patients_metrics]
+                with ProcessPoolExecutor(max_workers=SharedResources.getInstance().number_processes) as executor:
+                    for result in tqdm(executor.map(patient_metrics_computation_worker, args_list), total=len(args_list)):
+                        if result is not None:
+                            batch_results.append(result)
+                            if len(batch_results) >= SharedResources.getInstance().number_processes:
+                                self.__update_database(batch_results)
+                                batch_results.clear()
 
-                    # Filling in the overall dataframe and dumping results to csv after each patient
+                if batch_results:  # flush remainder
+                    self.__update_database(batch_results)
+                    batch_results.clear()
+            else:
+                for p in tqdm(self.patients_metrics):
+                    recomputation = False
+                    try:
+                        # Initializing/completing the list which will hold the extra metrics
+                        self.patients_metrics[p].setup_extra_metrics(self.metric_names)
+                        pat_metrics, recomputation = compute_patient_extra_metrics(self.patients_metrics[p], classes.index(c), optimal_values[1],
+                                                                    SharedResources.getInstance().validation_metric_names)
+                        if recomputation:
+                            self.patients_metrics[p].set_optimal_class_extra_metrics(classes.index(c), optimal_values[1], pat_metrics)
+                            cursor = self.conn.cursor()
+                            for pm in pat_metrics:
+                                metric_name = pm[0]
+                                metric_value = pm[1]
+
+                                thr_to_match = float(np.round(optimal_values[1], 2))
+
+                                update_query = f"UPDATE [class_{c}] SET [{metric_name}] = ? WHERE [Patient] = ? AND [Threshold] = ?"
+                                cursor.execute(update_query, (metric_value, str(self.patients_metrics[p].patient_id), thr_to_match))
+                            
+                                update_query = f"UPDATE total_results SET [{metric_name}] = ? WHERE [Patient] = ? AND [Threshold] = ?"                        
+                                cursor.execute(update_query, (metric_value, str(self.patients_metrics[p].patient_id), thr_to_match))
+                    except Exception as e:
+                        logging.error(f"Computing extra metrics for patient {self.patients_metrics[p].patient_id} failed with: {e}.\n{traceback.format_exc()}")
+                        continue
+                    finally:
+                        if recomputation:
+                            logging.debug("Updating the database with extra metrics results patient-wise")
+                            self.conn.commit()
+                        else:
+                            logging.debug("Skipping extra metrics recomputation")
+
+    def __update_database(self, batch_results):
+        try:
+            logging.debug("Updating the database with extra metrics results batch-wise")
+            cursor = self.conn.cursor()
+            for results in batch_results:
+                p = results[0]
+                c = results[1]
+                thr_to_match  = results[2]
+                pat_metrics = results[3]
+                recompute = results[4]
+                if recompute:
                     for pm in pat_metrics:
                         metric_name = pm[0]
                         metric_value = pm[1]
-                        self.class_results_df[c].at[self.class_results_df[c].loc[(self.class_results_df[c]['Patient'] == self.patients_metrics[p].patient_id) & (self.class_results_df[c]['Threshold'] == optimal_values[1])].index.values[0], metric_name] = metric_value
-                    self.class_results_df[c].to_csv(self.class_dice_output_filenames[c], index=False)
-                except Exception as e:
-                    logging.error(f"Computing extra metrics for patient {self.patients_metrics[p].patient_id} failed with: {e}.\n{traceback.format_exc()}")
-                    continue
+
+                        update_query = f"UPDATE [class_{c}] SET [{metric_name}] = ? WHERE [Patient] = ? AND [Threshold] = ?"
+                        cursor.execute(update_query, (metric_value, str(self.patients_metrics[p].patient_id), thr_to_match))
+                    
+                        update_query = f"UPDATE total_results SET [{metric_name}] = ? WHERE [Patient] = ? AND [Threshold] = ?"                        
+                        cursor.execute(update_query, (metric_value, str(self.patients_metrics[p].patient_id), thr_to_match))
+                self.conn.commit()
+        except Exception as e:
+            logging.error(f"Commiting to the database after parallel metrics computation failed with {e}")
+
+    def __sqlite_to_csv(self, table_name, csv_path):
+        """
+        Exports a full SQLite table to a CSV file using a streaming cursor
+        to avoid loading the entire table into memory.
+        """
+        cursor = self.conn.cursor()
+        cursor.execute(f"SELECT * FROM [{table_name}]")
+        headers = [description[0] for description in cursor.description]
+        
+        with open(csv_path, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+            writer.writerow(headers)
+            writer.writerows(cursor)
+
+def patient_metrics_computation_worker(args):
+    p, metrics, c, classes, optimal_values, metric_names = args
+    recomputation = False
+    result = None
+    try:
+        # Initializing/completing the list which will hold the extra metrics
+        thr_to_match = float(np.round(optimal_values[1], 2))
+        metrics.setup_extra_metrics(metric_names)
+        pat_metrics, recomputation = compute_patient_extra_metrics(metrics, classes.index(c), optimal_values[1],
+                                                    SharedResources.getInstance().validation_metric_names)
+        if recomputation:
+            metrics.set_optimal_class_extra_metrics(classes.index(c), optimal_values[1], pat_metrics)
+
+        result = [p, c, thr_to_match, pat_metrics, recomputation] 
+    except Exception as e:
+        logging.error(f"Computing extra metrics for patient {metrics.patient_id} failed with: {e}.\n{traceback.format_exc()}")
+    finally:
+        return result

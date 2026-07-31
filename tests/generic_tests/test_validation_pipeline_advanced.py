@@ -61,8 +61,8 @@ def test_validation_pipeline_metrics_space(test_dir):
         assert round(gt_df['OW Recall (Mean)'][0], 2) == round(results_df['OW Recall (Mean)'][0],2), "OW Recall (Mean) values do not match"
     except Exception as e:
         logging.error(f"Error during k-fold cross-validation unit test with: {e} \n {traceback.format_exc()}.\n")
-        if os.path.exists(output_folder):
-            shutil.rmtree(output_folder)
+        # if os.path.exists(output_folder):
+        #     shutil.rmtree(output_folder)
         raise ValueError("Error during k-fold cross-validation unit test with.\n")
 
     logging.info("k-fold cross-validation unit test succeeded.\n")
@@ -121,8 +121,8 @@ def test_validation_pipeline_extra_metrics(test_dir):
         assert round(gt_df['OW MI (Std)'][0], 2) == round(results_df['OW MI (Std)'][0],2), "OW MI (Std) values do not match"
     except Exception as e:
         logging.error(f"Error during test with: {e} \n {traceback.format_exc()}.\n")
-        if os.path.exists(output_folder):
-            shutil.rmtree(output_folder)
+        # if os.path.exists(output_folder):
+        #     shutil.rmtree(output_folder)
         raise ValueError(f"{e}.\n")
 
     if os.path.exists(output_folder):

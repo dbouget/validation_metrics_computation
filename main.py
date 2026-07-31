@@ -42,4 +42,6 @@ def main(argv):
 
 
 if __name__ == "__main__":
+    import matplotlib
+    matplotlib.use("Agg")
     main(sys.argv[1:])
